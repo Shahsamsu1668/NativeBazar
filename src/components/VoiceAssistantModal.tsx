@@ -161,10 +161,6 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
         onSwitchRole?.('expert');
         onClose();
         break;
-      case 'SWITCH_ROLE_ADMIN':
-        onSwitchRole?.('admin');
-        onClose();
-        break;
       case 'SWITCH_LANG_BN':
       case 'SWITCH_LANG_EN':
       case 'TOGGLE_LANGUAGE':

@@ -1,12 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { UserRole, Language, User, ActiveView } from '../types';
-import { NotificationStore } from '../data/store';
+import { UserRole, Language, User, ActiveView, Theme } from '../types';
 import {
   Sprout, Briefcase, Store, ShoppingCart, Microscope, ShieldCheck,
   FileText, Mic, Stethoscope, Globe, MapPin, TrendingUp,
   Bell, LogOut, ChevronDown, Menu, X,
-  Cloud, Package, Wallet, CheckCircle2,
+  Cloud, Package, Wallet, CheckCircle2, Sun, Moon, User as UserIcon,
+  Users, MessageSquare, PhoneCall,
 } from 'lucide-react';
+import { NotificationStore, MessageStore } from '../data/store';
 
 interface HeaderProps {
   currentUser: User;
@@ -20,6 +21,9 @@ interface HeaderProps {
   onViewChange: (view: ActiveView) => void;
   cartCount: number;
   onLogout: () => void;
+  onOpenProfile?: () => void;
+  theme?: Theme;
+  onThemeToggle?: () => void;
 }
 
 const ROLE_CONFIG: Record<UserRole, { icon: React.ReactNode; color: string; labelEn: string; labelBn: string; badgeBg: string }> = {
@@ -35,9 +39,9 @@ const NAV_ITEMS: Array<{ id: ActiveView; icon: React.ReactNode; labelEn: string;
   { id: 'dashboard',    icon: <Sprout className="w-4 h-4" />,    labelEn: 'Dashboard',    labelBn: 'ড্যাশবোর্ড' },
   { id: 'market_rates', icon: <TrendingUp className="w-4 h-4" />,labelEn: 'Market Rates', labelBn: 'বাজার দর' },
   { id: 'weather',      icon: <Cloud className="w-4 h-4" />,     labelEn: 'Weather',      labelBn: 'আবহাওয়া' },
-  { id: 'orders',       icon: <Package className="w-4 h-4" />,   labelEn: 'Orders',       labelBn: 'অর্ডার', roles: ['customer', 'farmer', 'businessman'] },
+  { id: 'orders',       icon: <Package className="w-4 h-4" />,   labelEn: 'Orders & Settlements', labelBn: 'অর্ডার ও লেনদেন', roles: ['customer', 'farmer', 'businessman', 'supplier'] },
+  { id: 'contacts',     icon: <Users className="w-4 h-4" />,      labelEn: 'Contacts & Network', labelBn: 'যোগাযোগ ও নেটওয়ার্ক' },
   { id: 'ledger',       icon: <Wallet className="w-4 h-4" />,    labelEn: 'Ledger',       labelBn: 'লেজার', roles: ['farmer'] },
-  { id: 'blueprint',    icon: <FileText className="w-4 h-4" />,  labelEn: 'Blueprint',    labelBn: 'ব্লুপ্রিন্ট' },
 ];
 
 export const Header: React.FC<HeaderProps> = ({
@@ -45,6 +49,7 @@ export const Header: React.FC<HeaderProps> = ({
   selectedDistrict, onDistrictChange,
   onOpenCropDoctor, onOpenVoiceAssistant,
   activeView, onViewChange, cartCount, onLogout,
+  onOpenProfile, theme = 'light', onThemeToggle,
 }) => {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifs, setShowNotifs] = useState(false);
@@ -156,6 +161,16 @@ export const Header: React.FC<HeaderProps> = ({
               </select>
             </div>
 
+            {/* Dark / Light Theme Toggle */}
+            <button
+              onClick={onThemeToggle}
+              className="flex items-center justify-center w-8 h-8 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-700 transition-colors border border-stone-200"
+              title={theme === 'dark' ? t('Switch to Light Mode', 'লাইট মোড চালু করুন') : t('Switch to Dark Mode', 'ডার্ক মোড চালু করুন')}
+              aria-label={t('Toggle theme', 'থিম পরিবর্তন')}
+            >
+              {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-500" /> : <Moon className="w-4 h-4 text-stone-600" />}
+            </button>
+
             {/* Language Switcher */}
             <button
               onClick={onLanguageToggle}
@@ -213,6 +228,25 @@ export const Header: React.FC<HeaderProps> = ({
               )}
             </div>
 
+            {/* Quick Direct Messages / Contacts Button */}
+            <button
+              onClick={() => onViewChange('contacts')}
+              className={`relative w-8 h-8 flex items-center justify-center rounded-lg transition-colors border ${
+                activeView === 'contacts'
+                  ? 'bg-emerald-700 text-white border-emerald-800'
+                  : 'bg-stone-100 hover:bg-stone-200 text-stone-700 border-stone-200'
+              }`}
+              title={t('Messages & Contacts', 'বার্তা ও যোগাযোগ')}
+              aria-label={t('Messages & Contacts', 'বার্তা ও যোগাযোগ')}
+            >
+              <MessageSquare className="w-4 h-4" />
+              {MessageStore.getUnreadCount(currentUser.id) > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-600 text-white text-[9px] font-black rounded-full flex items-center justify-center border border-white animate-pulse">
+                  {MessageStore.getUnreadCount(currentUser.id) > 9 ? '9+' : MessageStore.getUnreadCount(currentUser.id)}
+                </span>
+              )}
+            </button>
+
             {/* Cart Badge */}
             {role === 'customer' && cartCount > 0 && (
               <button
@@ -252,13 +286,23 @@ export const Header: React.FC<HeaderProps> = ({
                       {t(config.labelEn, config.labelBn)}
                     </span>
                   </div>
-                  <div className="p-1.5">
+                  <div className="p-1.5 space-y-0.5">
+                    <button
+                      onClick={() => {
+                        if (onOpenProfile) onOpenProfile();
+                        setShowUserMenu(false);
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-stone-700 hover:bg-stone-50 rounded-lg text-xs font-semibold transition-colors"
+                    >
+                      <UserIcon className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>{t('View & Edit Profile', 'প্রোফাইল দেখুন')}</span>
+                    </button>
                     <button
                       onClick={() => { onLogout(); setShowUserMenu(false); }}
                       className="w-full flex items-center gap-2 px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg text-xs font-semibold transition-colors"
                     >
                       <LogOut className="w-3.5 h-3.5" />
-                      {t('Sign Out', 'লগআউট')}
+                      <span>{t('Sign Out', 'লগআউট')}</span>
                     </button>
                   </div>
                 </div>

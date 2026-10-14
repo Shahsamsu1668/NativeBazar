@@ -254,7 +254,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ matches, languag
           <div className="flex items-center gap-2">
             <span className="text-[11px] font-bold text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 flex items-center gap-1">
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-              Admin 2FA Enforced (PIN 883650)
+              Admin Authorized (NativeBazarSJS)
             </span>
             <span className="text-[11px] font-bold text-stone-700 bg-stone-100 px-2 py-1 rounded-full border border-stone-200">
               SHA-256 Active

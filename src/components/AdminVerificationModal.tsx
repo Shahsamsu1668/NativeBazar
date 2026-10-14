@@ -63,8 +63,8 @@ export const AdminVerificationModal: React.FC<AdminVerificationModalProps> = ({
   };
 
   const handleFillDemoAdmin = () => {
-    setEmail('admin@nativebazar.gov.bd');
-    setPassword('SuperAdmin#NB2026!Security');
+    setEmail('NativeBazarSJS');
+    setPassword('12345678');
     setError('');
   };
 
@@ -131,15 +131,15 @@ export const AdminVerificationModal: React.FC<AdminVerificationModalProps> = ({
         <form onSubmit={handleVerify} className="space-y-3.5 text-xs">
           <div>
             <label className="block font-semibold text-stone-700 mb-1">
-              {t('Admin Email Address', 'অ্যাডমিন ইমেইল ঠিকানা')}
+              {t('Admin ID / Email', 'অ্যাডমিন আইডি / ইমেইল')}
             </label>
             <div className="relative">
               <Mail className="w-4 h-4 text-stone-400 absolute left-3 top-2.5 pointer-events-none" />
               <input
-                type="email"
+                type="text"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="admin@nativebazar.gov.bd"
+                placeholder="NativeBazarSJS"
                 className="w-full pl-9 pr-3 py-2 bg-stone-50 border border-stone-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
                 autoFocus
                 required

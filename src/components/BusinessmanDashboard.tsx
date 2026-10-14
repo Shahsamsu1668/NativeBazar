@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { BusinessDemand, CropListing, Language, User, AIMatchItem, NegotiationOffer } from '../types';
-import { DemandStore, CropStore, MatchStore, NegotiationStore, NotificationStore } from '../data/store';
+import { BusinessDemand, CropListing, Language, User, AIMatchItem, NegotiationOffer, TradeOrder } from '../types';
+import { DemandStore, CropStore, MatchStore, NegotiationStore, NotificationStore, TradeOrderStore } from '../data/store';
 import {
   Briefcase, PlusCircle, TrendingUp, AlertCircle, Calendar, Sparkles,
   ShieldCheck, Phone, MapPin, ChevronDown, ChevronUp, X, RefreshCw,
@@ -395,13 +395,67 @@ export const BusinessmanDashboard: React.FC<BusinessmanDashboardProps> = ({ curr
                   <a href={`tel:${listing.farmerPhone}`} className="flex items-center gap-1 text-xs text-stone-600 hover:text-blue-700 font-medium">
                     <Phone className="w-3 h-3" />{listing.farmerPhone}
                   </a>
-                  <button
-                    onClick={() => { setShowNegModal(listing.id); setNegForm({ offeredPrice: listing.expectedPricePerKg, quantityKg: Math.min(listing.quantityKg, 500), message: '' }); }}
-                    className="ml-auto flex items-center gap-1 px-3 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-lg border border-blue-200 transition-colors"
-                  >
-                    <MessageSquare className="w-3 h-3" />
-                    {t('Make Offer', 'প্রস্তাব দিন')}
-                  </button>
+                  <div className="ml-auto flex items-center gap-1.5">
+                    <button
+                      onClick={() => { setShowNegModal(listing.id); setNegForm({ offeredPrice: listing.expectedPricePerKg, quantityKg: Math.min(listing.quantityKg, 500), message: '' }); }}
+                      className="flex items-center gap-1 px-3 py-1 bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold rounded-lg border border-stone-200 transition-colors"
+                    >
+                      <MessageSquare className="w-3 h-3" />
+                      {t('Make Offer', 'প্রস্তাব')}
+                    </button>
+                    <button
+                      onClick={() => {
+                        const newOrder: TradeOrder = {
+                          id: `ORD-TRD-${Date.now().toString().slice(-4)}`,
+                          orderType: 'b2b_trade',
+                          buyerId: currentUser.id,
+                          buyerName: currentUser.businessName || currentUser.name,
+                          buyerPhone: currentUser.phone,
+                          buyerEmail: currentUser.email,
+                          buyerRole: 'businessman',
+                          sellerId: listing.farmerId,
+                          sellerName: listing.farmerName,
+                          sellerPhone: listing.farmerPhone,
+                          sellerRole: 'farmer',
+                          title: `${listing.cropName} Harvest Trade`,
+                          titleBn: `${listing.cropBangla} পাইকারি ক্রয়াদেশ`,
+                          items: [
+                            {
+                              itemId: listing.id,
+                              itemName: listing.cropName,
+                              itemBangla: listing.cropBangla,
+                              unitPrice: listing.expectedPricePerKg,
+                              unit: 'kg',
+                              quantity: Math.min(listing.quantityKg, 500),
+                              subtotal: listing.expectedPricePerKg * Math.min(listing.quantityKg, 500),
+                            },
+                          ],
+                          totalBDT: listing.expectedPricePerKg * Math.min(listing.quantityKg, 500),
+                          paymentMethod: 'Escrow Guarantee',
+                          deliveryAddress: `${listing.upazila}, ${listing.district}`,
+                          district: listing.district,
+                          upazila: listing.upazila,
+                          status: 'Confirmed',
+                          createdAt: new Date().toISOString(),
+                        };
+                        TradeOrderStore.add(newOrder);
+                        NotificationStore.addSystemNotif(
+                          currentUser.id,
+                          t('Trade Order Confirmed!', 'বাণিজ্যিক ক্রয়াদেশ নিশ্চিত!'),
+                          t(
+                            `B2B Trade order placed with ${listing.farmerName} for ${listing.cropName}.`,
+                            `${listing.farmerName}-এর সাথে ${listing.cropBangla} ক্রয়াদেশ নিশ্চিত হয়েছে।`
+                          ),
+                          'success'
+                        );
+                        alert(t(`✓ Trade Order successfully placed with farmer ${listing.farmerName}! View in Orders & Settlements tab.`, `✓ কৃষক ${listing.farmerName}-এর সাথে পাইকারি ক্রয়াদেশ সফল হয়েছে! অর্ডার ও লেনদেন ট্যাবে দেখুন।`));
+                      }}
+                      className="flex items-center gap-1 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-xs transition-colors"
+                    >
+                      <Briefcase className="w-3 h-3" />
+                      {t('Buy Harvest', 'ক্রয়াদেশ দিন')}
+                    </button>
+                  </div>
                 </div>
               </div>
 

@@ -11,6 +11,10 @@ import {
   CustomerProduct,
   CartItem,
   CustomerOrder,
+  TradeOrder,
+  TradeOrderType,
+  MarketRate,
+  Theme,
   AgroAdvisory,
   AIMatchItem,
   User,
@@ -20,6 +24,9 @@ import {
   Notification,
   LoginAuditLog,
   Language,
+  UserConnection,
+  DirectMessage,
+  CallLog,
 } from '../types';
 
 import {
@@ -28,9 +35,11 @@ import {
   INITIAL_SUPPLIER_PRODUCTS,
   INITIAL_CUSTOMER_PRODUCTS,
   INITIAL_MARKET_RATES,
+  INITIAL_TRADE_ORDERS,
   INITIAL_AGRO_ADVISORIES,
   INITIAL_AI_MATCHES,
   INITIAL_USERS,
+  BANGLADESH_LOCATIONS,
 } from './mockData';
 
 // ─── STORAGE KEYS ─────────────────────────────────────────────────────
@@ -42,17 +51,23 @@ const KEYS = {
   SUPPLIER_PRODUCTS:'nb_supplier_products',
   CUSTOMER_PRODUCTS:'nb_customer_products',
   ORDERS:          'nb_orders',
+  TRADE_ORDERS:    'nb_trade_orders_v5',
+  MARKET_RATES:    'nb_market_rates_v5',
   CART:            'nb_cart',
   ADVISORIES:      'nb_advisories',
   AI_MATCHES:      'nb_ai_matches',
   EXPENSE_LEDGER:  'nb_expense_ledger',
   NEGOTIATIONS:    'nb_negotiations',
   NOTIFICATIONS:   'nb_notifications',
+  CONNECTIONS:     'nb_connections_v1',
+  MESSAGES:        'nb_messages_v1',
+  CALLS:           'nb_call_logs_v1',
   LOGIN_AUDIT:     'nb_login_audit_logs',
   FAILED_ATTEMPTS: 'nb_failed_attempts',
   INITIALIZED:     'nb_initialized',
   LANGUAGE:        'nb_language',
   DISTRICT:        'nb_district',
+  THEME:           'nb_theme',
   EVALUATION_MODE: 'nb_evaluation_mode',
 };
 
@@ -129,9 +144,10 @@ function setItem<T>(key: string, value: T): void {
   }
 }
 
-// ─── INITIALIZE (runs once to seed demo data) ─────────────────────────
+// ─── INITIALIZE (runs once to seed data) ────────────────────────────
 export function initializeStore(): void {
-  if (localStorage.getItem(KEYS.INITIALIZED) === 'v4_secure') return;
+  // Always re-run if key changes (bump version to force re-init)
+  if (localStorage.getItem(KEYS.INITIALIZED) === 'v8_admin_nativebazarsjs') return;
 
   // Compute passwordHash for all initial users
   const securedUsers = INITIAL_USERS.map((u) => ({
@@ -140,13 +156,16 @@ export function initializeStore(): void {
   }));
 
   setItem(KEYS.USERS,            securedUsers);
-  setItem(KEYS.CROP_LISTINGS,    INITIAL_CROP_LISTINGS);
-  setItem(KEYS.BUSINESS_DEMANDS, INITIAL_BUSINESS_DEMANDS);
-  setItem(KEYS.SUPPLIER_PRODUCTS,INITIAL_SUPPLIER_PRODUCTS);
-  setItem(KEYS.CUSTOMER_PRODUCTS,INITIAL_CUSTOMER_PRODUCTS);
-  setItem(KEYS.ADVISORIES,       INITIAL_AGRO_ADVISORIES);
-  setItem(KEYS.AI_MATCHES,       INITIAL_AI_MATCHES);
-  setItem(KEYS.LOGIN_AUDIT,      INITIAL_LOGIN_AUDIT_LOGS);
+  // Start with empty data — no demo transactions
+  setItem(KEYS.CROP_LISTINGS,    []);
+  setItem(KEYS.BUSINESS_DEMANDS, []);
+  setItem(KEYS.SUPPLIER_PRODUCTS,[]);
+  setItem(KEYS.CUSTOMER_PRODUCTS,[]);
+  setItem(KEYS.MARKET_RATES,     INITIAL_MARKET_RATES);
+  setItem(KEYS.TRADE_ORDERS,     []);
+  setItem(KEYS.ADVISORIES,       []);
+  setItem(KEYS.AI_MATCHES,       []);
+  setItem(KEYS.LOGIN_AUDIT,      []);
   setItem(KEYS.FAILED_ATTEMPTS,  {});
   setItem(KEYS.ORDERS,           []);
   setItem(KEYS.CART,             []);
@@ -154,7 +173,7 @@ export function initializeStore(): void {
   setItem(KEYS.NEGOTIATIONS,     []);
   setItem(KEYS.NOTIFICATIONS,    []);
 
-  localStorage.setItem(KEYS.INITIALIZED, 'v4_secure');
+  localStorage.setItem(KEYS.INITIALIZED, 'v8_admin_nativebazarsjs');
 }
 
 export interface LoginResult {
@@ -170,9 +189,37 @@ export interface LoginResult {
 // ─── AUTH & SECURITY ENGINE ───────────────────────────────────────────
 export const AuthStore = {
   getUsers: (): User[] => {
-    const users = getItem<User[]>(KEYS.USERS, INITIAL_USERS);
-    // Ensure all users have passwordHash computed
-    return users.map((u) => (u.passwordHash ? u : { ...u, passwordHash: hashPassword(u.password) }));
+    let users = getItem<User[]>(KEYS.USERS, INITIAL_USERS);
+    let hasAdmin = false;
+    users = users.map((u) => {
+      if (u.role === 'admin') {
+        hasAdmin = true;
+        return {
+          ...u,
+          phone: 'NativeBazarSJS',
+          email: 'NativeBazarSJS',
+          password: '12345678',
+          passwordHash: hashPassword('12345678'),
+          twoFactorEnabled: false,
+        };
+      }
+      return u.passwordHash ? u : { ...u, passwordHash: hashPassword(u.password) };
+    });
+
+    if (!hasAdmin) {
+      const adminInit = INITIAL_USERS.find((u) => u.role === 'admin');
+      if (adminInit) {
+        users.push({
+          ...adminInit,
+          phone: 'NativeBazarSJS',
+          email: 'NativeBazarSJS',
+          password: '12345678',
+          passwordHash: hashPassword('12345678'),
+          twoFactorEnabled: false,
+        });
+      }
+    }
+    return users;
   },
 
   getCurrentUser: (): User | null => {
@@ -187,7 +234,7 @@ export const AuthStore = {
   },
 
   getAuditLogs: (): LoginAuditLog[] =>
-    getItem<LoginAuditLog[]>(KEYS.LOGIN_AUDIT, INITIAL_LOGIN_AUDIT_LOGS),
+    getItem<LoginAuditLog[]>(KEYS.LOGIN_AUDIT, []),
 
   addAuditLog(entry: Omit<LoginAuditLog, 'id'>): void {
     const logs = this.getAuditLogs();
@@ -238,9 +285,36 @@ export const AuthStore = {
     setItem(KEYS.FAILED_ATTEMPTS, map);
   },
 
-  login(phone: string, password: string, securityPin?: string): LoginResult {
-    const cleanPhone = phone.trim().replace(/\D/g, '');
-    const attempts = this.getFailedAttempts(cleanPhone);
+  getUserAccounts(identifier: string): User[] {
+    const raw = (identifier || '').trim();
+    if (!raw) return [];
+    const isEmail = raw.includes('@');
+    const isAdminId = raw.toLowerCase() === 'nativebazarsjs';
+    const cleanPhone = raw.replace(/\D/g, '');
+    const cleanEmail = raw.toLowerCase();
+    return this.getUsers().filter((u) =>
+      (isAdminId && u.role === 'admin') ||
+      (isEmail && u.email && u.email.toLowerCase() === cleanEmail) ||
+      (!isEmail && cleanPhone && u.phone && u.phone.replace(/\D/g, '') === cleanPhone) ||
+      (u.email && u.email.toLowerCase() === cleanEmail) ||
+      (cleanPhone && u.phone && u.phone.replace(/\D/g, '') === cleanPhone)
+    );
+  },
+
+  hasRoleAccount(identifier: string, role: UserRole): boolean {
+    return this.getUserAccounts(identifier).some((u) => u.role === role);
+  },
+
+  getRoleAccount(identifier: string, role: UserRole): User | undefined {
+    return this.getUserAccounts(identifier).find((u) => u.role === role);
+  },
+
+  login(identifier: string, password: string, securityPin?: string, targetRole?: UserRole): LoginResult {
+    const raw = (identifier || '').trim();
+    const isEmail = raw.includes('@');
+    const isAdminId = raw.toLowerCase() === 'nativebazarsjs';
+    const normalizedKey = isAdminId ? 'nativebazarsjs' : (isEmail ? raw.toLowerCase() : (raw.replace(/\D/g, '') || raw.toLowerCase()));
+    const attempts = this.getFailedAttempts(normalizedKey);
 
     // 1. Check if account is locked
     if (attempts.lockedUntil && attempts.lockedUntil > Date.now()) {
@@ -255,19 +329,27 @@ export const AuthStore = {
     }
 
     const users = this.getUsers();
-    const user = users.find(
-      (u) =>
-        u.phone.replace(/\D/g, '') === cleanPhone ||
-        (u.email && u.email.toLowerCase() === phone.trim().toLowerCase())
-    );
+    // Match candidate users by email, phone, or admin ID, and if targetRole is given, filter by that role
+    const candidates = users.filter((u) => {
+      if (targetRole && u.role !== targetRole) return false;
+      if (isAdminId && u.role === 'admin') return true;
+      if (u.email && u.email.toLowerCase() === raw.toLowerCase()) return true;
+      if (u.phone && u.phone.toLowerCase() === raw.toLowerCase()) return true;
+      if (isEmail && u.email && u.email.toLowerCase() === normalizedKey) return true;
+      const cleanPhone = raw.replace(/\D/g, '');
+      if (!isEmail && cleanPhone && u.phone && u.phone.replace(/\D/g, '') === cleanPhone) return true;
+      return false;
+    });
+
+    const user = candidates[0];
 
     // 2. Validate user existence
     if (!user) {
-      this.recordFailedAttempt(cleanPhone);
+      this.recordFailedAttempt(normalizedKey);
       this.addAuditLog({
         timestamp: new Date().toISOString(),
-        phone: cleanPhone || phone,
-        role: 'customer',
+        phone: raw,
+        role: targetRole || 'customer',
         status: 'FAILED_PASSWORD',
         ip: '192.168.1.10 (Bogura Node)',
         device: 'Web Client',
@@ -276,19 +358,21 @@ export const AuthStore = {
       return {
         success: false,
         error: 'INVALID_CREDENTIALS',
-        message: 'Invalid phone number or credentials.',
+        message: 'Invalid ID, email/phone or password credentials.',
       };
     }
+
+    const cleanPhone = user.phone || (isEmail ? raw : raw.replace(/\D/g, ''));
 
     // 3. Validate password (supports both plaintext demo match and salted hash match)
     const computedHash = hashPassword(password);
     const passwordValid = user.password === password || user.passwordHash === computedHash;
 
     if (!passwordValid) {
-      const { locked, remainingSeconds } = this.recordFailedAttempt(cleanPhone, user.role);
+      const { locked, remainingSeconds } = this.recordFailedAttempt(normalizedKey, user.role);
       this.addAuditLog({
         timestamp: new Date().toISOString(),
-        phone: cleanPhone,
+        phone: user.phone || raw,
         role: user.role,
         status: locked ? 'LOCKED' : 'FAILED_PASSWORD',
         ip: '192.168.1.10 (Bogura Node)',
@@ -313,8 +397,8 @@ export const AuthStore = {
       };
     }
 
-    // 4. Elevated Admin Two-Factor Authentication (2FA) Requirement
-    if (user.role === 'admin') {
+    // 4. Elevated Admin Two-Factor Authentication (2FA) Requirement (only if 2FA is explicitly enabled)
+    if (user.role === 'admin' && user.twoFactorEnabled) {
       const expectedPin = user.securityPin || '883650';
       if (!securityPin || securityPin.trim() === '') {
         // Prompt for 2FA PIN
@@ -369,7 +453,7 @@ export const AuthStore = {
       role: user.role,
       status: 'SUCCESS',
       ip: user.role === 'admin' ? '192.168.1.10 (Admin Root)' : '103.205.180.45 (Local Node)',
-      device: navigator.userAgent.includes('Mobile') ? 'Mobile Client' : 'Desktop Browser',
+      device: typeof navigator !== 'undefined' && navigator.userAgent && navigator.userAgent.includes('Mobile') ? 'Mobile Client' : 'Desktop Browser',
       details:
         user.role === 'admin'
           ? 'Level-4 Admin 2FA Token Verified • Session Granted'
@@ -384,10 +468,12 @@ export const AuthStore = {
 
   register(data: Omit<User, 'id' | 'createdAt'>): User {
     const users = this.getUsers();
-    const cleanPhone = data.phone.replace(/\D/g, '');
+    const cleanPhone = (data.phone || '').replace(/\D/g, '') || `017${Math.floor(10000000 + Math.random() * 90000000)}`;
+    const cleanEmail = (data.email || '').trim().toLowerCase();
     const newUser: User = {
       ...data,
       phone: cleanPhone,
+      email: cleanEmail,
       id: `user-${Date.now()}`,
       createdAt: new Date().toISOString(),
       passwordHash: hashPassword(data.password),
@@ -412,7 +498,64 @@ export const AuthStore = {
       status: 'SUCCESS',
       ip: '103.205.180.45 (Bogura Gateway)',
       device: 'Web Client',
-      details: 'New user registration and instant session issued',
+      details: `New ${newUser.role} registered (${newUser.email || newUser.phone}) and session granted`,
+    });
+
+    return safeUser;
+  },
+
+  createRoleAccount(
+    primaryUser: User,
+    targetRole: UserRole,
+    roleData: Partial<User> = {}
+  ): User {
+    const users = this.getUsers();
+    const cleanPhone = (primaryUser.phone || '').replace(/\D/g, '') || `017${Math.floor(10000000 + Math.random() * 90000000)}`;
+    const cleanEmail = (primaryUser.email || '').trim().toLowerCase();
+
+    // Check if account already exists for this role
+    const existing = users.find(
+      (u) =>
+        ((u.email && u.email.toLowerCase() === cleanEmail) ||
+         (u.phone && u.phone.replace(/\D/g, '') === cleanPhone)) &&
+        u.role === targetRole
+    );
+    if (existing) {
+      return existing;
+    }
+
+    const pwd = roleData.password || primaryUser.password || 'Krishi#2026';
+    const newUser: User = {
+      ...primaryUser,
+      ...roleData,
+      id: `user-${Date.now()}-${targetRole}`,
+      role: targetRole,
+      createdAt: new Date().toISOString(),
+      password: pwd,
+      passwordHash: hashPassword(pwd),
+      verified: true,
+      twoFactorEnabled: targetRole === 'admin',
+    };
+
+    users.push(newUser);
+    setItem(KEYS.USERS, users);
+
+    const safeUser: User = {
+      ...newUser,
+      password: '***',
+      sessionToken: `nb_sec_${Date.now()}_switch`,
+      sessionExpiresAt: new Date(Date.now() + 43200000).toISOString(),
+    };
+    setItem(KEYS.CURRENT_USER, safeUser);
+
+    this.addAuditLog({
+      timestamp: new Date().toISOString(),
+      phone: cleanPhone,
+      role: targetRole,
+      status: 'SUCCESS',
+      ip: '103.205.180.45 (Bogura Gateway)',
+      device: 'Web Client',
+      details: `New ${targetRole} multi-role account created and linked for ${primaryUser.name} (${cleanEmail || cleanPhone})`,
     });
 
     return safeUser;
@@ -453,8 +596,10 @@ export const AuthStore = {
     const admin = users.find(
       (u) =>
         u.role === 'admin' &&
-        ((u.email && u.email.toLowerCase() === cleanEmail) ||
-          u.phone === cleanEmail.replace(/\D/g, ''))
+        (cleanEmail === 'nativebazarsjs' ||
+          (u.email && u.email.toLowerCase() === cleanEmail) ||
+          (u.phone && u.phone.toLowerCase() === cleanEmail) ||
+          (cleanEmail.replace(/\D/g, '') && u.phone === cleanEmail.replace(/\D/g, '')))
     );
 
     if (!admin) {
@@ -693,6 +838,92 @@ export const OrderStore = {
   },
 };
 
+// ─── TWO-WAY TRADE & SUPPLIER ORDER STORE ──────────────────────────────
+export const TradeOrderStore = {
+  getAll: (): TradeOrder[] => getItem<TradeOrder[]>(KEYS.TRADE_ORDERS, INITIAL_TRADE_ORDERS),
+
+  getById: (id: string): TradeOrder | undefined => {
+    return TradeOrderStore.getAll().find((o) => o.id === id);
+  },
+
+  getByUser: (userId: string): TradeOrder[] => {
+    return TradeOrderStore.getAll().filter((o) => o.buyerId === userId || o.sellerId === userId);
+  },
+
+  getByType: (type: TradeOrderType): TradeOrder[] => {
+    return TradeOrderStore.getAll().filter((o) => o.orderType === type);
+  },
+
+  add: (order: TradeOrder): void => {
+    const all = TradeOrderStore.getAll();
+    setItem(KEYS.TRADE_ORDERS, [order, ...all]);
+  },
+
+  update: (id: string, updates: Partial<TradeOrder>): void => {
+    const all = TradeOrderStore.getAll().map((o) => (o.id === id ? { ...o, ...updates } : o));
+    setItem(KEYS.TRADE_ORDERS, all);
+  },
+
+  delete: (id: string): void => {
+    setItem(KEYS.TRADE_ORDERS, TradeOrderStore.getAll().filter((o) => o.id !== id));
+  },
+};
+
+// ─── DAILY MARKET RATES STORE ──────────────────────────────────────────
+export const MarketRateStore = {
+  getAll: (): MarketRate[] => getItem<MarketRate[]>(KEYS.MARKET_RATES, INITIAL_MARKET_RATES),
+
+  getByDistrict: (district: string): MarketRate[] => {
+    const all = MarketRateStore.getAll();
+    const query = (district || '').trim().toLowerCase();
+    const filtered = all.filter((r) => r.district.toLowerCase() === query);
+    return filtered.length > 0 ? filtered : all.filter((r) => r.district.toLowerCase() === 'bogura');
+  },
+
+  update: (id: string, updates: Partial<MarketRate>): void => {
+    const all = MarketRateStore.getAll().map((r) => (r.id === id ? { ...r, ...updates } : r));
+    setItem(KEYS.MARKET_RATES, all);
+  },
+};
+
+// ─── THEME STORE (DARK / LIGHT MODE) ───────────────────────────────────
+export const ThemeStore = {
+  get: (): Theme => {
+    const saved = localStorage.getItem(KEYS.THEME) as Theme | null;
+    if (saved === 'dark' || saved === 'light') return saved;
+    if (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      return 'dark';
+    }
+    return 'light';
+  },
+
+  set: (theme: Theme): void => {
+    try {
+      localStorage.setItem(KEYS.THEME, theme);
+      if (typeof document !== 'undefined') {
+        if (theme === 'dark') {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
+      }
+    } catch {}
+  },
+
+  init: (): Theme => {
+    const theme = ThemeStore.get();
+    ThemeStore.set(theme);
+    return theme;
+  },
+
+  toggle: (): Theme => {
+    const current = ThemeStore.get();
+    const next: Theme = current === 'dark' ? 'light' : 'dark';
+    ThemeStore.set(next);
+    return next;
+  },
+};
+
 // ─── ADVISORIES ────────────────────────────────────────────────────────
 export const AdvisoryStore = {
   getAll: (): AgroAdvisory[] => getItem<AgroAdvisory[]>(KEYS.ADVISORIES, INITIAL_AGRO_ADVISORIES),
@@ -838,6 +1069,184 @@ export const NotificationStore = {
       read:      false,
       createdAt: new Date().toISOString(),
     });
+  },
+};
+
+// ─── USER CONNECTIONS & NETWORKING ─────────────────────────────────────
+export const ConnectionStore = {
+  getAll: (): UserConnection[] => getItem<UserConnection[]>(KEYS.CONNECTIONS, []),
+
+  getByUser: (userId: string): UserConnection[] => {
+    return ConnectionStore.getAll().filter(
+      (c) => c.requesterId === userId || c.recipientId === userId
+    );
+  },
+
+  getStatus: (userId1: string, userId2: string): 'none' | 'pending_sent' | 'pending_received' | 'accepted' => {
+    const conn = ConnectionStore.getAll().find(
+      (c) =>
+        (c.requesterId === userId1 && c.recipientId === userId2) ||
+        (c.requesterId === userId2 && c.recipientId === userId1)
+    );
+    if (!conn) return 'none';
+    if (conn.status === 'accepted') return 'accepted';
+    if (conn.requesterId === userId1) return 'pending_sent';
+    return 'pending_received';
+  },
+
+  sendRequest: (requester: User, recipient: User): UserConnection => {
+    const conns = ConnectionStore.getAll();
+    const existingIndex = conns.findIndex(
+      (c) =>
+        (c.requesterId === requester.id && c.recipientId === recipient.id) ||
+        (c.requesterId === recipient.id && c.recipientId === requester.id)
+    );
+    const newConn: UserConnection = {
+      id: `conn-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      requesterId: requester.id,
+      requesterName: requester.name,
+      requesterRole: requester.role,
+      requesterPhone: requester.phone,
+      requesterDistrict: requester.district,
+      recipientId: recipient.id,
+      recipientName: recipient.name,
+      recipientRole: recipient.role,
+      recipientPhone: recipient.phone,
+      recipientDistrict: recipient.district,
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+    };
+
+    if (existingIndex >= 0) {
+      conns[existingIndex] = newConn;
+      setItem(KEYS.CONNECTIONS, conns);
+    } else {
+      setItem(KEYS.CONNECTIONS, [newConn, ...conns]);
+    }
+
+    // Live notification for recipient
+    NotificationStore.addSystemNotif(
+      recipient.id,
+      'নতুন সংযোগের অনুরোধ / New Connection Request',
+      `${requester.name} (${requester.role.toUpperCase()}) আপনার সাথে যুক্ত হতে অনুরোধ পাঠিয়েছেন।`,
+      'info'
+    );
+
+    return newConn;
+  },
+
+  accept: (connectionId: string): void => {
+    const conns = ConnectionStore.getAll();
+    const conn = conns.find((c) => c.id === connectionId);
+    if (!conn) return;
+    conn.status = 'accepted';
+    conn.updatedAt = new Date().toISOString();
+    setItem(KEYS.CONNECTIONS, conns);
+
+    // Live notification for requester
+    NotificationStore.addSystemNotif(
+      conn.requesterId,
+      'সংযোগ গৃহীত হয়েছে / Connection Accepted',
+      `${conn.recipientName} আপনার সংযোগ অনুরোধ গ্রহণ করেছেন। এখন সরাসরি বার্তা বা কল করতে পারেন।`,
+      'success'
+    );
+  },
+
+  reject: (connectionId: string): void => {
+    const conns = ConnectionStore.getAll().filter((c) => c.id !== connectionId);
+    setItem(KEYS.CONNECTIONS, conns);
+  },
+
+  remove: (userId1: string, userId2: string): void => {
+    const conns = ConnectionStore.getAll().filter(
+      (c) =>
+        !(
+          (c.requesterId === userId1 && c.recipientId === userId2) ||
+          (c.requesterId === userId2 && c.recipientId === userId1)
+        )
+    );
+    setItem(KEYS.CONNECTIONS, conns);
+  },
+};
+
+// ─── DIRECT MESSAGING ──────────────────────────────────────────────────
+export const MessageStore = {
+  getAll: (): DirectMessage[] => getItem<DirectMessage[]>(KEYS.MESSAGES, []),
+
+  getConversation: (userA: string, userB: string): DirectMessage[] => {
+    return MessageStore.getAll()
+      .filter(
+        (m) =>
+          (m.senderId === userA && m.recipientId === userB) ||
+          (m.senderId === userB && m.recipientId === userA)
+      )
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  },
+
+  sendMessage: (data: Omit<DirectMessage, 'id' | 'createdAt' | 'read'>): DirectMessage => {
+    const messages = MessageStore.getAll();
+    const newMsg: DirectMessage = {
+      ...data,
+      id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      createdAt: new Date().toISOString(),
+      read: false,
+    };
+    setItem(KEYS.MESSAGES, [...messages, newMsg]);
+
+    // Live notification for recipient
+    NotificationStore.addSystemNotif(
+      data.recipientId,
+      `নতুন বার্তা: ${data.senderName}`,
+      data.content.length > 60 ? `${data.content.slice(0, 60)}…` : data.content,
+      'info'
+    );
+
+    return newMsg;
+  },
+
+  markRead: (recipientId: string, senderId: string): void => {
+    const messages = MessageStore.getAll().map((m) =>
+      m.recipientId === recipientId && m.senderId === senderId
+        ? { ...m, read: true }
+        : m
+    );
+    setItem(KEYS.MESSAGES, messages);
+  },
+
+  getUnreadCount: (userId: string): number => {
+    return MessageStore.getAll().filter((m) => m.recipientId === userId && !m.read).length;
+  },
+};
+
+// ─── CALL STORE ────────────────────────────────────────────────────────
+export const CallStore = {
+  getAll: (): CallLog[] => getItem<CallLog[]>(KEYS.CALLS, []),
+
+  getByUser: (userId: string): CallLog[] => {
+    return CallStore.getAll()
+      .filter((c) => c.callerId === userId || c.receiverId === userId)
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  },
+
+  add: (log: Omit<CallLog, 'id' | 'timestamp'>): CallLog => {
+    const logs = CallStore.getAll();
+    const newLog: CallLog = {
+      ...log,
+      id: `call-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      timestamp: new Date().toISOString(),
+    };
+    setItem(KEYS.CALLS, [newLog, ...logs].slice(0, 100));
+
+    if (log.status === 'missed') {
+      NotificationStore.addSystemNotif(
+        log.receiverId,
+        'মিসড কল / Missed Call',
+        `${log.callerName} (${log.callerRole.toUpperCase()}) থেকে কল এসেছিল।`,
+        'warning'
+      );
+    }
+
+    return newLog;
   },
 };
 

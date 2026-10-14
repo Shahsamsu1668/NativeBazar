@@ -2,6 +2,7 @@
 
 export type UserRole = 'farmer' | 'businessman' | 'supplier' | 'customer' | 'expert' | 'admin';
 export type Language = 'en' | 'bn';
+export type Theme = 'light' | 'dark';
 
 // ─── USER / AUTH ────────────────────────────────────────────────────────
 export interface User {
@@ -11,9 +12,10 @@ export interface User {
   nameBn?: string;
   phone: string;
   password: string; // stored hashed in production, plain here for demo
-  email?: string;
+  email: string; // Required for all registered users
   district: string;
   upazila?: string;
+  education?: string; // Academic/Training qualification
   profileImageUrl?: string;
   verified: boolean;
   createdAt: string;
@@ -34,6 +36,7 @@ export interface User {
   businessType?: BusinessDemand['businessType'];
   // Supplier extras
   shopName?: string;
+  licenseNumber?: string;
   // Expert extras
   designation?: string;
   institution?: string;
@@ -114,16 +117,20 @@ export interface SupplierProduct {
 // ─── MARKET RATES ────────────────────────────────────────────────────────
 export interface MarketRate {
   id: string;
+  district: string;
+  marketName: string;
+  marketNameBn: string;
   cropName: string;
   banglaName: string;
-  category: 'Vegetables' | 'Tubers' | 'Grains' | 'Spices';
-  wholesaleBogura: number;
-  wholesaleDhaka: number;
-  retailBogura: number;
-  unit: string;
+  category: 'Vegetables' | 'Tubers' | 'Grains' | 'Spices' | 'Fruits';
+  wholesalePrice: number; // Local district wholesale
+  wholesaleDhaka: number; // Dhaka capital wholesale
+  retailPrice: number;    // Local retail
+  unit: string;           // 'kg' | 'maund' | 'piece' | 'crate'
   change24h: number;
   trend: 'up' | 'down' | 'stable';
-  lastUpdated?: string;
+  source: string;         // 'Department of Agricultural Marketing (DAM)'
+  lastUpdated: string;
 }
 
 // ─── CUSTOMER PRODUCT ────────────────────────────────────────────────────
@@ -167,6 +174,46 @@ export interface CustomerOrder {
   trackingCode?: string;
   rating?: number;
   review?: string;
+}
+
+// ─── TWO-WAY TRADING & SUPPLIER ORDER MANAGEMENT ──────────────────────────
+export type TradeOrderType = 'supplier_input' | 'b2b_trade' | 'consumer_retail';
+
+export interface TradeOrderItem {
+  itemId: string;
+  itemName: string;
+  itemBangla?: string;
+  category?: string;
+  unitPrice: number;
+  unit: string;
+  quantity: number;
+  subtotal: number;
+}
+
+export interface TradeOrder {
+  id: string; // e.g. "ORD-SUP-1002" or "ORD-TRD-2005"
+  orderType: TradeOrderType;
+  buyerId: string;
+  buyerName: string;
+  buyerPhone: string;
+  buyerEmail?: string;
+  buyerRole: UserRole;
+  sellerId: string;
+  sellerName: string;
+  sellerPhone?: string;
+  sellerRole: UserRole;
+  title: string;
+  titleBn?: string;
+  items: TradeOrderItem[];
+  totalBDT: number;
+  paymentMethod: 'bKash' | 'Nagad' | 'Bank Transfer' | 'Cash on Delivery' | 'Escrow Guarantee';
+  deliveryAddress: string;
+  district: string;
+  upazila?: string;
+  status: 'Pending' | 'Confirmed' | 'Dispatched' | 'Delivered' | 'Cancelled';
+  createdAt: string;
+  deliveredAt?: string;
+  notes?: string;
 }
 
 // ─── CROP DIAGNOSIS ──────────────────────────────────────────────────────
@@ -299,8 +346,56 @@ export interface CropWeatherAlert {
   severity: 'low' | 'medium' | 'high';
 }
 
-// ─── VIEW TYPES ──────────────────────────────────────────────────────────
-export type ActiveView = 'dashboard' | 'market_rates' | 'blueprint' | 'weather' | 'orders' | 'ledger' | 'notifications';
+// ─── VIEW TYPES ─────────────────────────────────────────────────────────
+export type ActiveView = 'dashboard' | 'market_rates' | 'weather' | 'orders' | 'ledger' | 'profile' | 'notifications' | 'contacts';
+
+// ─── CONNECTIONS & NETWORKING ───────────────────────────────────────────
+export interface UserConnection {
+  id: string;
+  requesterId: string;
+  requesterName: string;
+  requesterRole: UserRole;
+  requesterPhone?: string;
+  requesterDistrict?: string;
+  recipientId: string;
+  recipientName: string;
+  recipientRole: UserRole;
+  recipientPhone?: string;
+  recipientDistrict?: string;
+  status: 'pending' | 'accepted' | 'rejected';
+  createdAt: string;
+  updatedAt?: string;
+}
+
+// ─── DIRECT MESSAGING ───────────────────────────────────────────────────
+export interface DirectMessage {
+  id: string;
+  senderId: string;
+  senderName: string;
+  senderRole: UserRole;
+  recipientId: string;
+  recipientName: string;
+  recipientRole: UserRole;
+  content: string;
+  createdAt: string;
+  read: boolean;
+  messageType?: 'text' | 'price_offer' | 'order_inquiry' | 'advisory';
+}
+
+// ─── CALL LOGS ──────────────────────────────────────────────────────────
+export interface CallLog {
+  id: string;
+  callerId: string;
+  callerName: string;
+  callerRole: UserRole;
+  receiverId: string;
+  receiverName: string;
+  receiverRole: UserRole;
+  receiverPhone: string;
+  status: 'completed' | 'missed' | 'cancelled';
+  durationSeconds: number;
+  timestamp: string;
+}
 
 // ─── SECURITY & AUDIT ───────────────────────────────────────────────────
 export interface LoginAuditLog {
@@ -313,3 +408,4 @@ export interface LoginAuditLog {
   device: string;
   details?: string;
 }
+

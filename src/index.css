@@ -710,3 +710,224 @@ input:checked + .toggle-track::before { transform: translateX(18px); }
   .no-print { display: none !important; }
   .hero-banner { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+/* ─── DARK THEME TOKENS & OVERRIDES ────────────────────────────────── */
+.dark {
+  --bg-base:       #0d1117;
+  --bg-surface:    #161b22;
+  --bg-muted:      #21262d;
+  --border-soft:   #30363d;
+  --border-medium: #3d444d;
+
+  --text-primary:  #e6edf3;
+  --text-secondary:#8b949e;
+  --text-muted:    #6e7681;
+
+  color-scheme: dark;
+}
+
+/* ── Global body ─────────────────────────────────────────────────────── */
+.dark body {
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+}
+
+/* ── Header & top bar ────────────────────────────────────────────────── */
+.dark header {
+  background-color: #161b22 !important;
+  border-bottom-color: #30363d !important;
+}
+
+/* Top attribution bar */
+.dark header > div:first-child {
+  background-color: #0d1117 !important;
+  border-color: #21262d !important;
+}
+
+/* Main header row */
+.dark header .bg-white {
+  background-color: #161b22 !important;
+}
+
+/* ── Navigation bar (below header) ──────────────────────────────────── */
+.dark nav[aria-label="Main Navigation"] {
+  background-color: #161b22 !important;
+  border-top-color: #30363d !important;
+}
+
+.dark nav[aria-label="Main Navigation"] button {
+  color: #8b949e !important;
+}
+
+.dark nav[aria-label="Main Navigation"] button:hover {
+  background-color: #21262d !important;
+  color: #e6edf3 !important;
+}
+
+.dark nav[aria-label="Main Navigation"] button[aria-current="page"] {
+  background-color: #238636 !important;
+  color: #ffffff !important;
+}
+
+/* ── Role switcher bar ───────────────────────────────────────────────── */
+.dark .bg-white.border-b {
+  background-color: #161b22 !important;
+  border-color: #30363d !important;
+}
+
+/* Role switcher buttons */
+.dark .bg-stone-100 {
+  background-color: #21262d !important;
+  border-color: #30363d !important;
+  color: #8b949e !important;
+}
+
+.dark .bg-stone-100:hover {
+  background-color: #2d333b !important;
+}
+
+/* Active role button */
+.dark .bg-stone-900.text-white {
+  background-color: #238636 !important;
+  color: #ffffff !important;
+}
+
+/* ── All bg-white surface cards ─────────────────────────────────────── */
+.dark .bg-white {
+  background-color: #161b22 !important;
+  color: #e6edf3 !important;
+}
+
+.dark .bg-stone-50 {
+  background-color: #21262d !important;
+}
+
+.dark .bg-stone-100\/70,
+.dark .bg-stone-100 {
+  background-color: #21262d !important;
+}
+
+.dark .bg-stone-50\/70 {
+  background-color: #1c2128 !important;
+}
+
+/* ── Borders ─────────────────────────────────────────────────────────── */
+.dark .border-stone-100,
+.dark .border-stone-200,
+.dark .border-stone-300 {
+  border-color: #30363d !important;
+}
+
+/* ── Text ────────────────────────────────────────────────────────────── */
+.dark .text-stone-900,
+.dark .text-stone-800 {
+  color: #e6edf3 !important;
+}
+
+.dark .text-stone-700,
+.dark .text-stone-600 {
+  color: #8b949e !important;
+}
+
+.dark .text-stone-500 {
+  color: #6e7681 !important;
+}
+
+.dark .text-stone-400 {
+  color: #4d5566 !important;
+}
+
+/* ── Header brand text & icon ────────────────────────────────────────── */
+.dark header .text-stone-900 {
+  color: #e6edf3 !important;
+}
+
+.dark header .text-stone-500 {
+  color: #8b949e !important;
+}
+
+/* ── Header action buttons (language, theme, district) ──────────────── */
+.dark header .bg-stone-100.border-stone-200,
+.dark header .bg-stone-100 {
+  background-color: #21262d !important;
+  border-color: #30363d !important;
+  color: #c9d1d9 !important;
+}
+
+.dark header .bg-stone-100:hover {
+  background-color: #2d333b !important;
+}
+
+/* ── Header select (district) ────────────────────────────────────────── */
+.dark header select {
+  background-color: transparent !important;
+  color: #c9d1d9 !important;
+}
+
+/* ── Notification & user menu dropdowns ─────────────────────────────── */
+.dark .absolute.bg-white.rounded-xl.shadow-xl {
+  background-color: #21262d !important;
+  border-color: #30363d !important;
+}
+
+.dark .absolute.bg-white.rounded-xl .bg-stone-50 {
+  background-color: #161b22 !important;
+}
+
+.dark .absolute.bg-white.rounded-xl .border-stone-200 {
+  border-color: #30363d !important;
+}
+
+.dark .absolute.bg-white.rounded-xl button:hover,
+.dark .absolute.bg-white.rounded-xl div.cursor-pointer:hover {
+  background-color: #2d333b !important;
+}
+
+/* ── Cards and stat cards ────────────────────────────────────────────── */
+.dark .card,
+.dark .stat-card {
+  background: var(--bg-surface);
+  border-color: var(--border-soft);
+}
+
+/* ── Inputs, selects, textareas ─────────────────────────────────────── */
+.dark input,
+.dark select,
+.dark textarea {
+  background-color: #21262d !important;
+  color: #e6edf3 !important;
+  border-color: #30363d !important;
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: #4d5566 !important;
+}
+
+/* ── Footer ──────────────────────────────────────────────────────────── */
+.dark footer {
+  background-color: #161b22 !important;
+  border-color: #30363d !important;
+}
+
+/* ── Mobile drawer ───────────────────────────────────────────────────── */
+.dark header .md\:hidden.bg-white {
+  background-color: #161b22 !important;
+  border-color: #30363d !important;
+}
+
+/* ── Toast ───────────────────────────────────────────────────────────── */
+.dark .bg-stone-900.text-white {
+  background-color: #238636 !important;
+  border-color: #2ea043 !important;
+}
+
+/* ── Page background ─────────────────────────────────────────────────── */
+.dark .min-h-screen {
+  background-color: #0d1117 !important;
+}
+
+.dark .bg-stone-100\/70 {
+  background-color: #0d1117 !important;
+}
+

@@ -18,7 +18,7 @@ const VIEW_TITLES: Record<ActiveView, { en: string; bn: string }> = {
   weather:      { en: 'Weather Advisory', bn: 'আবহাওয়া বুলেটিন' },
   orders:       { en: 'Orders & Settlements', bn: 'অর্ডার ও লেনদেন' },
   ledger:       { en: 'Expense Ledger', bn: 'হিসাব খাতা' },
-  blueprint:    { en: 'Project Blueprint', bn: 'প্রজেক্ট ব্লুপ্রিন্ট' },
+  profile:      { en: 'My Profile', bn: 'আমার প্রোফাইল' },
   notifications:{ en: 'Notifications', bn: 'বিজ্ঞপ্তি' },
 };
 

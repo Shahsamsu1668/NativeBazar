@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { CropListing, SupplierProduct, Language, User, ExpenseLedgerEntry, NegotiationOffer } from '../types';
-import { CropStore, DemandStore, ExpenseStore, NegotiationStore, NotificationStore, MatchStore } from '../data/store';
+import { CropListing, SupplierProduct, Language, User, ExpenseLedgerEntry, NegotiationOffer, TradeOrder } from '../types';
+import { CropStore, DemandStore, ExpenseStore, NegotiationStore, NotificationStore, MatchStore, TradeOrderStore } from '../data/store';
 import {
   Sprout, PlusCircle, TrendingUp, Store, CheckCircle2, AlertCircle,
   Calendar, Sparkles, ShieldCheck, Phone, MapPin, Stethoscope, Mic,
@@ -429,6 +429,63 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
                 <a href={`tel:${sup.phone}`} className="flex items-center gap-1 text-stone-700 hover:text-emerald-700 font-semibold">
                   <Phone className="w-3 h-3" />{sup.phone}
                 </a>
+              </div>
+              <div className="mt-2.5 pt-2 border-t border-stone-100 flex items-center justify-between">
+                <span className="text-[11px] text-stone-500">{t('Direct Dealer Dispatch', 'সরাসরি ডিলার ডেলিভারি')}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const newOrder: TradeOrder = {
+                      id: `ORD-SUP-${Date.now().toString().slice(-4)}`,
+                      orderType: 'supplier_input',
+                      buyerId: currentUser.id,
+                      buyerName: currentUser.name,
+                      buyerPhone: currentUser.phone,
+                      buyerEmail: currentUser.email,
+                      buyerRole: 'farmer',
+                      sellerId: sup.supplierId || 'sup-1',
+                      sellerName: sup.shopName,
+                      sellerPhone: sup.phone,
+                      sellerRole: 'supplier',
+                      title: sup.name,
+                      titleBn: sup.banglaName,
+                      items: [
+                        {
+                          itemId: sup.id,
+                          itemName: sup.name,
+                          itemBangla: sup.banglaName,
+                          category: sup.category,
+                          unitPrice: sup.unitPriceBDT,
+                          unit: sup.unit,
+                          quantity: 2,
+                          subtotal: sup.unitPriceBDT * 2,
+                        },
+                      ],
+                      totalBDT: sup.unitPriceBDT * 2,
+                      paymentMethod: 'bKash',
+                      deliveryAddress: `${currentUser.upazila || 'Shibganj'}, ${currentUser.district || 'Bogura'}`,
+                      district: currentUser.district || 'Bogura',
+                      upazila: currentUser.upazila || 'Shibganj',
+                      status: 'Confirmed',
+                      createdAt: new Date().toISOString(),
+                    };
+                    TradeOrderStore.add(newOrder);
+                    NotificationStore.addSystemNotif(
+                      currentUser.id,
+                      t('Supplier Order Placed!', 'উপকরণ ক্রয়াদেশ পাঠানো হয়েছে!'),
+                      t(
+                        `Order placed for 2 ${sup.unit} of ${sup.name} from ${sup.shopName}. Check Orders tab.`,
+                        `${sup.shopName} থেকে ২ ${sup.unit} ${sup.banglaName} ক্রয়াদেশ সফল হয়েছে। অর্ডার ট্যাবে দেখুন।`
+                      ),
+                      'success'
+                    );
+                    alert(t(`✓ Order successfully placed for 2 ${sup.unit} of ${sup.name}! Track in Orders & Settlements tab.`, `✓ ${sup.banglaName}-এর ক্রয়াদেশ সফল হয়েছে! অর্ডার ও লেনদেন ট্যাবে ট্র্যাক করুন।`));
+                  }}
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5"
+                >
+                  <Store className="w-3.5 h-3.5" />
+                  <span>{t('Order from Supplier', 'ক্রয়াদেশ দিন')}</span>
+                </button>
               </div>
             </div>
           ))}

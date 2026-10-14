@@ -10,8 +10,9 @@ import {
   CustomerOrder,
   AgroAdvisory,
   AIMatchItem,
+  Theme,
 } from './types';
-import { INITIAL_MARKET_RATES, INITIAL_USERS } from './data/mockData';
+import { INITIAL_MARKET_RATES } from './data/mockData';
 import {
   initializeStore,
   AuthStore,
@@ -21,6 +22,8 @@ import {
   CustomerProductStore,
   AdvisoryStore,
   MatchStore,
+  ThemeStore,
+  NotificationStore,
 } from './data/store';
 
 import { Header } from './components/Header';
@@ -35,9 +38,14 @@ import { AdminDashboard } from './components/AdminDashboard';
 import { MarketRatesView } from './components/MarketRatesView';
 import { WeatherView } from './components/WeatherView';
 import { OrdersView } from './components/OrdersView';
-import { ProjectBlueprintLab } from './components/ProjectBlueprintLab';
+import { ProfileModal } from './components/ProfileModal';
+import { UserProfilePage } from './components/UserProfilePage';
 import { CropDoctorModal } from './components/CropDoctorModal';
 import { VoiceAssistantModal } from './components/VoiceAssistantModal';
+import { ContactsView } from './components/ContactsView';
+import { CallModal } from './components/CallModal';
+import { NoRoleAccountModal } from './components/NoRoleAccountModal';
+import { CreateRoleModal } from './components/CreateRoleModal';
 import {
   CheckCircle2,
   Sprout,
@@ -55,9 +63,11 @@ export default function App() {
     initializeStore();
   }, []);
 
+  const [theme, setTheme] = useState<Theme>(() => ThemeStore.init());
+
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     initializeStore();
-    return AuthStore.getCurrentUser() || INITIAL_USERS[0];
+    return AuthStore.getCurrentUser();
   });
 
   const [language, setLanguage] = useState<Language>('bn');
@@ -82,6 +92,24 @@ export default function App() {
   // Modals
   const [isCropDoctorOpen, setIsCropDoctorOpen] = useState(false);
   const [isVoiceAssistantOpen, setIsVoiceAssistantOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+
+  // Individual user profile page navigation
+  const [viewedUser, setViewedUser] = useState<import('./types').User | null>(null);
+
+  // Contact & Calling state
+  const [callingUser, setCallingUser] = useState<User | null>(null);
+  const [initialChatUserId, setInitialChatUserId] = useState<string | null>(null);
+
+  // Multi-role account modals
+  const [noRoleModalOpen, setNoRoleModalOpen] = useState(false);
+  const [createRoleModalOpen, setCreateRoleModalOpen] = useState(false);
+  const [roleToCreate, setRoleToCreate] = useState<UserRole | null>(null);
+
+  // Role-switch password gate
+  const [pendingRole, setPendingRole] = useState<UserRole | null>(null);
+  const [roleSwitchPwd, setRoleSwitchPwd] = useState('');
+  const [roleSwitchError, setRoleSwitchError] = useState('');
 
   // Admin verification modal for role switcher
   const [isAdminVerifyOpen, setIsAdminVerifyOpen] = useState(false);
@@ -96,41 +124,80 @@ export default function App() {
 
   const currentRole = currentUser?.role || 'farmer';
 
-  // Role switching utility — Admin requires email+password verification
+  // Role switching — checks if current user has an account for that role
   const switchRole = (newRole: UserRole) => {
-    if (newRole === 'admin' && currentUser?.role !== 'admin') {
-      setIsAdminVerifyOpen(true);
+    if (newRole === currentUser?.role) return; // already on this role
+
+    const identifier = currentUser?.email || currentUser?.phone || '';
+    const hasAccount = AuthStore.hasRoleAccount(identifier, newRole);
+
+    if (!hasAccount) {
+      // User doesn't have an account of this role: show NoRoleAccountModal!
+      setPendingRole(newRole);
+      setNoRoleModalOpen(true);
       return;
     }
 
-    const demoUser = INITIAL_USERS.find((u) => u.role === newRole) || {
-      id: `usr-${newRole}`,
-      role: newRole,
-      name: `Demo ${newRole.charAt(0).toUpperCase() + newRole.slice(1)}`,
-      phone: '01700000000',
-      password: '***',
-      district: selectedDistrict,
-      verified: true,
-      createdAt: new Date().toISOString(),
-    };
+    if (newRole === 'admin') {
+      return;
+    }
+
+    // User DOES have an account for this role: open password gate for that specific account!
+    setPendingRole(newRole);
+    setRoleSwitchPwd('');
+    setRoleSwitchError('');
+  };
+
+  const confirmRoleSwitch = () => {
+    if (!pendingRole || !currentUser) return;
+    const identifier = currentUser.email || currentUser.phone || '';
+    const targetUser = AuthStore.getRoleAccount(identifier, pendingRole);
+
+    if (!targetUser) {
+      setRoleSwitchError(
+        language === 'bn'
+          ? 'এই ভূমিকার আপনার কোনো অ্যাকাউন্ট নেই।'
+          : 'You do not have an account for this role.'
+      );
+      return;
+    }
+
+    const result = AuthStore.login(targetUser.email || targetUser.phone, roleSwitchPwd, undefined, pendingRole);
+    if (!result.success || !result.user) {
+      setRoleSwitchError(
+        result.locked
+          ? language === 'bn' ? 'অ্যাকাউন্ট সাময়িকভাবে লক হয়েছে। পরে চেষ্টা করুন।' : 'Account temporarily locked. Try again later.'
+          : language === 'bn' ? 'পাসওয়ার্ড ভুল। আবার চেষ্টা করুন।' : 'Incorrect password. Try again.'
+      );
+      return;
+    }
     const safeUser: User = {
-      ...demoUser,
+      ...result.user,
       password: '***',
       sessionToken: `nb_sec_${Date.now()}_switch`,
       sessionExpiresAt: new Date(Date.now() + 43200000).toISOString(),
     };
     setCurrentUser(safeUser);
     localStorage.setItem('nb_current_user', JSON.stringify(safeUser));
-    const roleLabelBn: Record<UserRole, string> = {
-      farmer: 'কৃষক', businessman: 'ব্যবসায়ী', supplier: 'সরবরাহকারী',
-      customer: 'ভোক্তা', expert: 'কৃষি বিশেষজ্ঞ', admin: 'অ্যাডমিন',
-    };
+    setPendingRole(null);
+    setRoleSwitchPwd('');
+    setRoleSwitchError('');
+    setViewedUser(null);
+    setActiveView('dashboard');
+    NotificationStore.addSystemNotif(
+      safeUser.id,
+      language === 'bn' ? 'ভূমিকা পরিবর্তন সফল' : 'Role Switched',
+      language === 'bn'
+        ? `আপনি সফলভাবে ${safeUser.name} (${pendingRole}) হিসেবে লগইন করেছেন।`
+        : `Logged in as ${safeUser.name} (${pendingRole}).`
+    );
     showToast(
       language === 'bn'
-        ? `ভূমিকা পরিবর্তন: ${roleLabelBn[newRole]}`
-        : `Switched to: ${newRole.toUpperCase()}`
+        ? `ভূমিকা পরিবর্তন সফল: ${safeUser.name} (${pendingRole})`
+        : `Switched to: ${safeUser.name} (${pendingRole.toUpperCase()})`
     );
   };
+
 
   const handleAdminVerifySuccess = (adminUser: User) => {
     const safeAdmin: User = {
@@ -216,6 +283,14 @@ export default function App() {
     OrderStore.add(created);
     CartStore.clear();
     setCart([]);
+    NotificationStore.addSystemNotif(
+      currentUser!.id,
+      language === 'bn' ? 'অর্ডার নিশ্চিত' : 'Order Confirmed',
+      language === 'bn'
+        ? `আপনার অর্ডার ${created.id} সফলভাবে গৃহীত হয়েছে। মোট: ৳${created.totalBDT}।`
+        : `Order ${created.id} confirmed. Total: ৳${created.totalBDT}. Delivery in progress.`,
+      'success'
+    );
     showToast(
       language === 'bn'
         ? 'অর্ডার সফলভাবে গ্রহণ করা হয়েছে! এসক্রো পেমেন্ট প্রক্রিয়াধীন।'
@@ -240,9 +315,18 @@ export default function App() {
     };
     AdvisoryStore.add(created);
     setAgroAdvisories(AdvisoryStore.getAll());
+    // Fire real notification
+    NotificationStore.addSystemNotif(
+      currentUser!.id,
+      language === 'bn' ? 'পরামর্শ প্রকাশিত' : 'Advisory Published',
+      language === 'bn'
+        ? `"নতুন পরামর্শ: ${created.title}" ${selectedDistrict}-এ প্রচার করা হয়েছে।`
+        : `Advisory "${created.title}" has been broadcast to ${selectedDistrict} district.`,
+      'info'
+    );
     showToast(
       language === 'bn'
-        ? 'কৃষি সতর্কতা সফলভাবে বগুড়া অঞ্চলের কৃষকদের ফোনে পাঠানো হয়েছে!'
+        ? 'কৃষি সতর্কতা সফলভাবে ফোনে পাঠানো হয়েছে!'
         : 'Advisory bulletin broadcasted across district!'
     );
   };
@@ -271,11 +355,10 @@ export default function App() {
     { role: 'supplier', icon: <Store className="w-3.5 h-3.5" />, labelEn: 'Supplier', labelBn: 'সরবরাহকারী', color: 'hover:bg-amber-50 text-amber-700' },
     { role: 'customer', icon: <ShoppingCart className="w-3.5 h-3.5" />, labelEn: 'Customer', labelBn: 'ভোক্তা', color: 'hover:bg-purple-50 text-purple-700' },
     { role: 'expert', icon: <Microscope className="w-3.5 h-3.5" />, labelEn: 'Agri Expert', labelBn: 'বিশেষজ্ঞ', color: 'hover:bg-teal-50 text-teal-700' },
-    { role: 'admin', icon: <ShieldCheck className="w-3.5 h-3.5" />, labelEn: 'Admin', labelBn: 'অ্যাডমিন', color: 'hover:bg-slate-50 text-slate-700' },
   ];
 
   return (
-    <div className="min-h-screen bg-stone-100/70 text-stone-900 flex flex-col font-sans">
+    <div className="min-h-screen bg-stone-100/70 text-stone-900 flex flex-col font-sans transition-colors">
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed bottom-6 right-6 z-50 bg-stone-900 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2.5 text-xs font-semibold border border-stone-700 animate-fade-in">
@@ -295,21 +378,29 @@ export default function App() {
         onOpenVoiceAssistant={() => setIsVoiceAssistantOpen(true)}
         activeView={activeView}
         onViewChange={(v) => {
-          setActiveView(v);
+          if (v === 'profile') {
+            setViewedUser(currentUser);
+          } else {
+            setViewedUser(null);
+            setActiveView(v);
+          }
         }}
         cartCount={cart.reduce((acc, c) => acc + c.quantityKg, 0)}
         onLogout={() => {
           AuthStore.logout();
           setCurrentUser(null);
         }}
+        onOpenProfile={() => setViewedUser(currentUser)}
+        theme={theme}
+        onThemeToggle={() => setTheme(ThemeStore.toggle())}
       />
 
-      {/* Quick Role Switcher Bar (Essential for Campus365 evaluation of all 6 roles) */}
+      {/* Quick Role Switcher Bar */}
       <div className="bg-white border-b border-stone-200 px-4 py-1.5 shadow-2xs">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-3 text-xs overflow-x-auto no-scrollbar">
           <div className="flex items-center gap-1.5 text-[11px] font-bold text-stone-500 whitespace-nowrap">
             <Zap className="w-3.5 h-3.5 text-amber-500" />
-            <span>{language === 'bn' ? '৬টি ভূমিকা তাৎক্ষণিক পরিবর্তন:' : 'Switch 6 Roles:'}</span>
+            <span>{language === 'bn' ? '৫টি ভূমিকা তাৎক্ষণিক পরিবর্তন:' : 'Switch 5 Roles:'}</span>
           </div>
 
           <div className="flex items-center gap-1">
@@ -339,41 +430,60 @@ export default function App() {
 
       {/* Main View Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-6">
-        {activeView === 'blueprint' && (
-          <ProjectBlueprintLab
-            language={language}
-            onSelectRole={(role) => {
-              switchRole(role);
-              setActiveView('dashboard');
-            }}
-          />
-        )}
-
-        {activeView === 'market_rates' && (
-          <MarketRatesView rates={INITIAL_MARKET_RATES} language={language} />
-        )}
-
-        {activeView === 'weather' && (
-          <WeatherView district={selectedDistrict} language={language} />
-        )}
-
-        {activeView === 'orders' && (
-          <OrdersView currentUser={currentUser} language={language} />
-        )}
-
-        {activeView === 'ledger' && (
-          <FarmerDashboard
+        {/* Individual User Profile Page (takes priority) */}
+        {viewedUser ? (
+          <UserProfilePage
+            user={viewedUser}
             currentUser={currentUser}
-            suppliers={supplierProducts}
             language={language}
-            onOpenCropDoctor={() => setIsCropDoctorOpen(true)}
-            onOpenVoiceAssistant={() => setIsVoiceAssistantOpen(true)}
+            onBack={() => setViewedUser(null)}
+            onUpdateUser={(updated) => {
+              setCurrentUser(updated);
+              setViewedUser(updated);
+              showToast(
+                language === 'bn'
+                  ? 'প্রোফাইলের তথ্য সফলভাবে হালনাগাদ করা হয়েছে!'
+                  : 'Profile updated successfully!'
+              );
+            }}
+            onViewUser={(u) => setViewedUser(u)}
+            onMessageUser={(u) => {
+              setInitialChatUserId(u.id);
+              setViewedUser(null);
+              setActiveView('contacts');
+            }}
+            onCallUser={(u) => setCallingUser(u)}
           />
-        )}
-
-        {activeView === 'dashboard' && (
+        ) : (
           <>
-            {currentRole === 'farmer' && (
+            {activeView === 'contacts' && (
+              <ContactsView
+                currentUser={currentUser}
+                language={language}
+                onViewUser={(u) => setViewedUser(u)}
+                onInitiateCall={(c) => setCallingUser(c)}
+                initialChatUserId={initialChatUserId}
+              />
+            )}
+
+            {activeView === 'market_rates' && (
+              <MarketRatesView
+                rates={INITIAL_MARKET_RATES}
+                language={language}
+                selectedDistrict={selectedDistrict}
+                onDistrictChange={setSelectedDistrict}
+              />
+            )}
+
+            {activeView === 'weather' && (
+              <WeatherView district={selectedDistrict} language={language} />
+            )}
+
+            {activeView === 'orders' && (
+              <OrdersView currentUser={currentUser} language={language} />
+            )}
+
+            {activeView === 'ledger' && (
               <FarmerDashboard
                 currentUser={currentUser}
                 suppliers={supplierProducts}
@@ -383,44 +493,76 @@ export default function App() {
               />
             )}
 
-            {currentRole === 'businessman' && (
-              <BusinessmanDashboard currentUser={currentUser} language={language} />
-            )}
+            {activeView === 'dashboard' && (
+              <>
+                {currentRole === 'farmer' && (
+                  <FarmerDashboard
+                    currentUser={currentUser}
+                    suppliers={supplierProducts}
+                    language={language}
+                    onOpenCropDoctor={() => setIsCropDoctorOpen(true)}
+                    onOpenVoiceAssistant={() => setIsVoiceAssistantOpen(true)}
+                  />
+                )}
 
-            {currentRole === 'supplier' && (
-              <SupplierDashboard
-                products={supplierProducts}
-                onAddProduct={handleAddSupplierProduct}
-                language={language}
-              />
-            )}
+                {currentRole === 'businessman' && (
+                  <BusinessmanDashboard currentUser={currentUser} language={language} />
+                )}
 
-            {currentRole === 'customer' && (
-              <CustomerMarketplace
-                products={customerProducts}
-                cart={cart}
-                onAddToCart={handleAddToCart}
-                onUpdateCartQty={handleUpdateCartQty}
-                onRemoveFromCart={handleRemoveFromCart}
-                onCheckout={handleCheckout}
-                language={language}
-              />
-            )}
+                {currentRole === 'supplier' && (
+                  <SupplierDashboard
+                    products={supplierProducts}
+                    onAddProduct={handleAddSupplierProduct}
+                    language={language}
+                  />
+                )}
 
-            {currentRole === 'expert' && (
-              <ExpertDashboard
-                advisories={agroAdvisories}
-                onAddAdvisory={handleAddAdvisory}
-                language={language}
-              />
-            )}
+                {currentRole === 'customer' && (
+                  <CustomerMarketplace
+                    products={customerProducts}
+                    cart={cart}
+                    onAddToCart={handleAddToCart}
+                    onUpdateCartQty={handleUpdateCartQty}
+                    onRemoveFromCart={handleRemoveFromCart}
+                    onCheckout={handleCheckout}
+                    language={language}
+                  />
+                )}
 
-            {currentRole === 'admin' && (
-              <AdminDashboard matches={aiMatches} language={language} />
+                {currentRole === 'expert' && (
+                  <ExpertDashboard
+                    advisories={agroAdvisories}
+                    onAddAdvisory={handleAddAdvisory}
+                    language={language}
+                  />
+                )}
+
+                {currentRole === 'admin' && (
+                  <AdminDashboard matches={aiMatches} language={language} />
+                )}
+              </>
             )}
           </>
         )}
       </main>
+
+      {/* Profile Modal (used only when viewedUser is null) */}
+      {!viewedUser && (
+        <ProfileModal
+          isOpen={isProfileOpen}
+          onClose={() => setIsProfileOpen(false)}
+          currentUser={currentUser}
+          onUpdateUser={(updated) => {
+            setCurrentUser(updated);
+            showToast(
+              language === 'bn'
+                ? 'প্রোফাইলের তথ্য সফলভাবে হালনাগাদ করা হয়েছে!'
+                : 'Profile updated successfully!'
+            );
+          }}
+          language={language}
+        />
+      )}
 
       {/* AI Crop Doctor Modal */}
       <CropDoctorModal
@@ -442,12 +584,135 @@ export default function App() {
         onToggleLanguage={() => setLanguage((prev) => (prev === 'bn' ? 'en' : 'bn'))}
       />
 
+
+      {/* Role Switch Password Gate (shown only when the user has an account for target role) */}
+      {pendingRole && !noRoleModalOpen && !createRoleModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-stone-200 w-full max-w-sm p-6 space-y-5 animate-slide-down">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center">
+                <ShieldCheck className="w-5 h-5 text-amber-700" />
+              </div>
+              <div>
+                <h2 className="font-extrabold text-stone-900 text-base leading-tight">
+                  {language === 'bn' ? 'ভূমিকা পরিবর্তনের যাচাই' : 'Role Switch Verification'}
+                </h2>
+                <p className="text-[11px] text-stone-500 mt-0.5">
+                  {language === 'bn'
+                    ? `"${pendingRole}" অ্যাকাউন্টের পাসওয়ার্ড দিন`
+                    : `Enter the password for the "${pendingRole}" account`}
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-800 font-medium">
+              {language === 'bn'
+                ? 'নিরাপত্তার জন্য প্রতিটি ভূমিকা পরিবর্তনে পাসওয়ার্ড যাচাই বাধ্যতামূলক।'
+                : 'Password verification is required before switching to another account role.'}
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-stone-500 uppercase mb-1.5">
+                {language === 'bn' ? 'পাসওয়ার্ড' : 'Password'}
+              </label>
+              <input
+                type="password"
+                value={roleSwitchPwd}
+                onChange={(e) => { setRoleSwitchPwd(e.target.value); setRoleSwitchError(''); }}
+                onKeyDown={(e) => e.key === 'Enter' && confirmRoleSwitch()}
+                placeholder={language === 'bn' ? 'পাসওয়ার্ড লিখুন…' : 'Enter password…'}
+                autoFocus
+                className="w-full px-3 py-2.5 text-sm border border-stone-200 rounded-xl bg-white text-stone-900 font-medium focus:outline-none focus:ring-2 focus:ring-amber-400 transition-all"
+              />
+              {roleSwitchError && (
+                <p className="text-red-600 text-[11px] font-bold mt-1.5 flex items-center gap-1">
+                  <span>⚠</span> {roleSwitchError}
+                </p>
+              )}
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={confirmRoleSwitch}
+                className="flex-1 bg-stone-900 text-white py-2.5 rounded-xl text-sm font-bold hover:bg-stone-800 transition-all"
+              >
+                {language === 'bn' ? 'যাচাই করুন' : 'Verify & Switch'}
+              </button>
+              <button
+                onClick={() => { setPendingRole(null); setRoleSwitchPwd(''); setRoleSwitchError(''); }}
+                className="px-4 py-2.5 bg-stone-100 text-stone-700 rounded-xl text-sm font-bold hover:bg-stone-200 transition-all"
+              >
+                {language === 'bn' ? 'বাতিল' : 'Cancel'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Admin Email+Password Verification Modal */}
       <AdminVerificationModal
         isOpen={isAdminVerifyOpen}
         onClose={() => setIsAdminVerifyOpen(false)}
         onSuccess={handleAdminVerifySuccess}
         language={language}
+      />
+
+      {/* Interactive VoIP Voice Call Modal */}
+      {callingUser && (
+        <CallModal
+          isOpen={!!callingUser}
+          onClose={() => setCallingUser(null)}
+          currentUser={currentUser}
+          contactUser={callingUser}
+          language={language}
+        />
+      )}
+
+      {/* No Role Account Modal */}
+      <NoRoleAccountModal
+        isOpen={noRoleModalOpen}
+        onClose={() => {
+          setNoRoleModalOpen(false);
+          setPendingRole(null);
+        }}
+        targetRole={pendingRole}
+        currentUser={currentUser}
+        language={language}
+        onCreateRoleAccount={(role) => {
+          setNoRoleModalOpen(false);
+          setRoleToCreate(role);
+          setCreateRoleModalOpen(true);
+        }}
+        onLoginDifferentAccount={() => {
+          setNoRoleModalOpen(false);
+          setPendingRole(null);
+          AuthStore.logout();
+          setCurrentUser(null);
+        }}
+      />
+
+      {/* Create Role Modal */}
+      <CreateRoleModal
+        isOpen={createRoleModalOpen}
+        onClose={() => {
+          setCreateRoleModalOpen(false);
+          setRoleToCreate(null);
+          setPendingRole(null);
+        }}
+        targetRole={roleToCreate}
+        currentUser={currentUser}
+        language={language}
+        onSuccess={(newRoleUser) => {
+          setCurrentUser(newRoleUser);
+          setPendingRole(null);
+          setRoleToCreate(null);
+          setActiveView('dashboard');
+          showToast(
+            language === 'bn'
+              ? `নতুন ${newRoleUser.role} অ্যাকাউন্ট সফলভাবে তৈরি ও সক্রিয় করা হয়েছে!`
+              : `New ${newRoleUser.role} account created and activated!`
+          );
+        }}
       />
 
       {/* Footer */}
