@@ -23,6 +23,8 @@ export interface VoiceAssistantResponse {
   executeAction?: string | null;
 }
 
+const API_BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+
 async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs = 15000): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -47,7 +49,7 @@ export async function requestCropDiagnosis(
   language: 'en' | 'bn' = 'bn'
 ): Promise<CropDiagnosisResult> {
   try {
-    const res = await fetchWithTimeout('/api/ai/diagnose-crop', {
+    const res = await fetchWithTimeout(`${API_BASE_URL}/api/ai/diagnose-crop`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ cropName, symptoms, imageBase64, imageMimeType, language }),
@@ -99,7 +101,7 @@ export async function requestMarketPrediction(
   language: 'en' | 'bn' = 'bn'
 ): Promise<MarketPredictionResult> {
   try {
-    const res = await fetchWithTimeout('/api/ai/predict-demand', {
+    const res = await fetchWithTimeout(`${API_BASE_URL}/api/ai/predict-demand`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ cropName, quantityKg, targetHarvestDate, district, language }),
@@ -142,7 +144,7 @@ export async function requestVoiceAssistant(
   language: 'en' | 'bn' = 'bn'
 ): Promise<VoiceAssistantResponse> {
   try {
-    const res = await fetchWithTimeout('/api/ai/voice-assistant', {
+    const res = await fetchWithTimeout(`${API_BASE_URL}/api/ai/voice-assistant`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query, role, userLocation: district, language }),
