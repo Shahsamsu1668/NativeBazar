@@ -479,7 +479,9 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
                                 {u.name}
                               </h3>
                               {u.verified && (
-                                <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" title="Verified Member" />
+                                <span title="Verified Member">
+                                  <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                                </span>
                               )}
                             </div>
                             <p className="text-[11px] text-stone-500 font-medium">

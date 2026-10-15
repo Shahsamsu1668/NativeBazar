@@ -193,6 +193,8 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({
   onBack,
   onUpdateUser,
   onViewUser,
+  onMessageUser,
+  onCallUser,
 }) => {
   const isOwnProfile = currentUser.id === user.id;
   const isAdmin = currentUser.role === 'admin';

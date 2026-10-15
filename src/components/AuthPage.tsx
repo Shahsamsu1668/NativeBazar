@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Language, UserRole, User } from '../types';
 import { AuthStore, LoginResult } from '../data/store';
 import { DEMO_CREDENTIALS, BANGLADESH_LOCATIONS } from '../data/mockData';
@@ -25,6 +25,10 @@ import {
   GraduationCap,
   MapPin,
   Building,
+  ImagePlus,
+  FileText,
+  CreditCard,
+  X,
 } from 'lucide-react';
 
 interface AuthPageProps {
@@ -76,6 +80,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   const [licenseNumber, setLicenseNumber] = useState('LIC-BOG-2026');
   const [designation, setDesignation] = useState('Assistant Agronomy Officer');
   const [institution, setInstitution] = useState('Department of Agricultural Extension (DAE)');
+  const [regCertPreview, setRegCertPreview] = useState<string | null>(null);
+  const [regNidPreview, setRegNidPreview] = useState<string | null>(null);
+  const certInputRef = useRef<HTMLInputElement>(null);
+  const nidInputRef = useRef<HTMLInputElement>(null);
 
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -113,9 +121,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     setError('');
 
     const cred = DEMO_CREDENTIALS[role];
-    if (cred) {
+    if (cred && cred.phone) {
       setLoginIdentifier(cred.phone);
       setLoginPassword(cred.password);
+    } else {
+      setLoginIdentifier('');
+      setLoginPassword('');
     }
   };
 
@@ -251,6 +262,21 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       return;
     }
 
+    if (selectedRole === 'expert') {
+      if (!institution.trim()) {
+        setError(t('Institute Name is required for Expert registration', 'বিশেষজ্ঞ নিবন্ধনের জন্য প্রতিষ্ঠানের নাম আবশ্যক'));
+        return;
+      }
+      if (!regCertPreview) {
+        setError(t('Certificate photo upload is required for Expert registration', 'বিশেষজ্ঞ নিবন্ধনের জন্য ডিগ্রি সনদপত্রের ছবি আপলোড আবশ্যক'));
+        return;
+      }
+      if (!regNidPreview) {
+        setError(t('National ID (NID) photo upload is required for Expert registration', 'বিশেষজ্ঞ নিবন্ধনের জন্য জাতীয় পরিচয়পত্র (NID) ছবি আপলোড আবশ্যক'));
+        return;
+      }
+    }
+
     setLoading(true);
     await new Promise((r) => setTimeout(r, 600));
 
@@ -292,6 +318,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       licenseNumber: selectedRole === 'supplier' ? licenseNumber : undefined,
       designation: selectedRole === 'expert' ? designation : undefined,
       institution: selectedRole === 'expert' ? institution : undefined,
+      certificatePhotoUrl: selectedRole === 'expert' ? (regCertPreview || undefined) : undefined,
+      nidPhotoUrl: selectedRole === 'expert' ? (regNidPreview || undefined) : undefined,
     });
 
     setLoading(false);
@@ -433,7 +461,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         </div>
 
         <div className="relative z-10 text-[11px] text-emerald-400/80 space-y-1">
-          <p>Campus365 Internship R&D • Bogura Pilot Node • Department of Agricultural Marketing (DAM)</p>
+          <p>NativeBazar • Bogura Pilot Node • Department of Agricultural Marketing (DAM)</p>
           <p className="text-[10px] text-emerald-400/60">Strictly zero-fabrication real agricultural telemetry.</p>
         </div>
       </div>
@@ -661,7 +689,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
               className="space-y-4 bg-white p-6 rounded-2xl border border-stone-200 shadow-sm"
             >
               {/* Demo quick credential helper chip */}
-              {demoCred && (
+              {demoCred && demoCred.phone ? (
                 <div className="p-3 bg-stone-50 border border-stone-200 rounded-xl flex items-center justify-between text-xs">
                   <div>
                     <span className="font-bold text-stone-700 block text-[11px]">
@@ -684,7 +712,25 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                     {t('Fill Demo', 'তথ্য বসান')}
                   </button>
                 </div>
-              )}
+              ) : selectedRole === 'expert' ? (
+                <div className="p-3 bg-teal-50 border border-teal-200 rounded-xl flex items-center justify-between text-xs">
+                  <div>
+                    <span className="font-bold text-teal-900 block text-[11px]">
+                      {t('No preloaded expert account', 'কোনো প্রিলোড করা বিশেষজ্ঞ অ্যাকাউন্ট নেই')}
+                    </span>
+                    <span className="text-teal-700 text-[10px]">
+                      {t('Register a new expert account to login with your profile.', 'আপনার প্রোফাইলে লগইন করতে নতুন বিশেষজ্ঞ হিসেবে নিবন্ধন করুন।')}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setMode('register')}
+                    className="px-2.5 py-1 bg-teal-700 hover:bg-teal-800 text-white rounded-lg text-[10px] font-bold transition-colors"
+                  >
+                    {t('Register', 'নিবন্ধন')}
+                  </button>
+                </div>
+              ) : null}
 
               {/* Login Identifier: Email, Phone, or Admin ID */}
               <div>
@@ -987,30 +1033,130 @@ export const AuthPage: React.FC<AuthPageProps> = ({
               )}
 
               {selectedRole === 'expert' && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-teal-50/50 rounded-xl border border-teal-200">
-                  <div>
-                    <label className="block font-bold text-stone-700 mb-1">
-                      {t('Official Designation', 'সরকারি পদবি')}
-                    </label>
-                    <input
-                      type="text"
-                      value={designation}
-                      onChange={(e) => setDesignation(e.target.value)}
-                      placeholder="e.g. Scientific Officer (BARI)"
-                      className="w-full p-2 bg-white border border-stone-300 rounded-lg"
-                    />
+                <div className="space-y-3 p-3.5 bg-teal-50/50 rounded-xl border border-teal-200">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-stone-700 mb-1">
+                        {t('Official Designation', 'সরকারি পদবি')}
+                      </label>
+                      <input
+                        type="text"
+                        value={designation}
+                        onChange={(e) => setDesignation(e.target.value)}
+                        placeholder="e.g. Scientific Officer (BARI)"
+                        className="w-full p-2 bg-white border border-stone-300 rounded-lg text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-stone-700 mb-1">
+                        {t('Institute Name (প্রতিষ্ঠান) *', 'প্রতিষ্ঠানের নাম *')}
+                      </label>
+                      <input
+                        type="text"
+                        value={institution}
+                        onChange={(e) => setInstitution(e.target.value)}
+                        placeholder="e.g. BARI / BAU / DAE / BRRI"
+                        className="w-full p-2 bg-white border border-stone-300 rounded-lg text-xs"
+                        required
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <label className="block font-bold text-stone-700 mb-1">
-                      {t('Institution / Department', 'প্রতিষ্ঠান')}
-                    </label>
-                    <input
-                      type="text"
-                      value={institution}
-                      onChange={(e) => setInstitution(e.target.value)}
-                      placeholder="e.g. DAE / BARI / BRRI"
-                      className="w-full p-2 bg-white border border-stone-300 rounded-lg"
-                    />
+
+                  {/* Document Uploads for Expert */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    {/* Certificate Upload */}
+                    <div>
+                      <label className="block font-bold text-stone-700 mb-1 flex items-center gap-1 text-[11px]">
+                        <FileText className="w-3.5 h-3.5 text-teal-600" />
+                        {t('Certificate Photo Upload *', 'ডিগ্রি সনদপত্রের ছবি *')}
+                      </label>
+                      {regCertPreview ? (
+                        <div className="relative rounded-lg border border-teal-300 bg-white p-2 flex items-center gap-2">
+                          <img src={regCertPreview} alt="Certificate" className="w-10 h-10 rounded object-cover border" />
+                          <span className="text-[10px] text-emerald-700 font-bold flex-1 truncate">✓ Certificate ready</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setRegCertPreview(null);
+                              if (certInputRef.current) certInputRef.current.value = '';
+                            }}
+                            className="text-stone-400 hover:text-red-600 p-1"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => certInputRef.current?.click()}
+                          className="w-full py-2 px-3 border border-dashed border-teal-300 rounded-lg bg-white hover:bg-teal-50/50 text-stone-600 text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                        >
+                          <ImagePlus className="w-3.5 h-3.5 text-teal-600" />
+                          <span>{t('Upload Certificate Photo', 'সনদপত্রের ছবি দিন')}</span>
+                        </button>
+                      )}
+                      <input
+                        ref={certInputRef}
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onload = (ev) => setRegCertPreview(ev.target?.result as string);
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                        className="hidden"
+                      />
+                    </div>
+
+                    {/* NID Upload */}
+                    <div>
+                      <label className="block font-bold text-stone-700 mb-1 flex items-center gap-1 text-[11px]">
+                        <CreditCard className="w-3.5 h-3.5 text-teal-600" />
+                        {t('National ID (NID) Photo Upload *', 'জাতীয় পরিচয়পত্র (NID) ছবি *')}
+                      </label>
+                      {regNidPreview ? (
+                        <div className="relative rounded-lg border border-teal-300 bg-white p-2 flex items-center gap-2">
+                          <img src={regNidPreview} alt="NID" className="w-10 h-10 rounded object-cover border" />
+                          <span className="text-[10px] text-emerald-700 font-bold flex-1 truncate">✓ NID ready</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setRegNidPreview(null);
+                              if (nidInputRef.current) nidInputRef.current.value = '';
+                            }}
+                            className="text-stone-400 hover:text-red-600 p-1"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => nidInputRef.current?.click()}
+                          className="w-full py-2 px-3 border border-dashed border-teal-300 rounded-lg bg-white hover:bg-teal-50/50 text-stone-600 text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                        >
+                          <CreditCard className="w-3.5 h-3.5 text-teal-600" />
+                          <span>{t('Upload NID Photo', 'NID কার্ডের ছবি দিন')}</span>
+                        </button>
+                      )}
+                      <input
+                        ref={nidInputRef}
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onload = (ev) => setRegNidPreview(ev.target?.result as string);
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                        className="hidden"
+                      />
+                    </div>
                   </div>
                 </div>
               )}

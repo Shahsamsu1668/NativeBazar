@@ -146,16 +146,43 @@ function setItem<T>(key: string, value: T): void {
 
 // ─── INITIALIZE (runs once to seed data) ────────────────────────────
 export function initializeStore(): void {
-  // Always re-run if key changes (bump version to force re-init)
-  if (localStorage.getItem(KEYS.INITIALIZED) === 'v8_admin_nativebazarsjs') return;
+  const STORE_VERSION = 'v12_no_hardcoded_experts';
+  // Check if current user is an old hardcoded expert and clear if so
+  const currentUserRaw = getItem<User | null>(KEYS.CURRENT_USER, null);
+  if (currentUserRaw && ['e-1', 'e-2', 'e-3', 'e-4'].includes(currentUserRaw.id)) {
+    localStorage.removeItem(KEYS.CURRENT_USER);
+  }
 
-  // Compute passwordHash for all initial users
+  // Always re-run if key changes (bump version to force re-init)
+  if (localStorage.getItem(KEYS.INITIALIZED) === STORE_VERSION) {
+    // Also ensure existing stored users do not contain hardcoded experts
+    const currentUsers = getItem<User[]>(KEYS.USERS, []);
+    const filteredUsers = currentUsers.filter((u) => !['e-1', 'e-2', 'e-3', 'e-4'].includes(u.id));
+    if (filteredUsers.length !== currentUsers.length) {
+      setItem(KEYS.USERS, filteredUsers);
+    }
+    return;
+  }
+
+  // Preserve legitimately registered users while purging hardcoded experts
+  const existingUsers = getItem<User[]>(KEYS.USERS, []);
+  const cleanExisting = existingUsers.filter((u) => !['e-1', 'e-2', 'e-3', 'e-4'].includes(u.id));
+
+  // Compute passwordHash for all initial users (which now contain 0 hardcoded experts)
   const securedUsers = INITIAL_USERS.map((u) => ({
     ...u,
     passwordHash: hashPassword(u.password),
   }));
 
-  setItem(KEYS.USERS,            securedUsers);
+  // Merge any newly registered users with secured initial users
+  const mergedUsers: User[] = [...securedUsers];
+  for (const existing of cleanExisting) {
+    if (!mergedUsers.some((u) => u.id === existing.id || u.phone === existing.phone || (u.email && u.email === existing.email))) {
+      mergedUsers.push(existing.passwordHash ? existing : { ...existing, passwordHash: hashPassword(existing.password) });
+    }
+  }
+
+  setItem(KEYS.USERS,            mergedUsers);
   // Start with empty data — no demo transactions
   setItem(KEYS.CROP_LISTINGS,    []);
   setItem(KEYS.BUSINESS_DEMANDS, []);
@@ -173,7 +200,7 @@ export function initializeStore(): void {
   setItem(KEYS.NEGOTIATIONS,     []);
   setItem(KEYS.NOTIFICATIONS,    []);
 
-  localStorage.setItem(KEYS.INITIALIZED, 'v8_admin_nativebazarsjs');
+  localStorage.setItem(KEYS.INITIALIZED, STORE_VERSION);
 }
 
 export interface LoginResult {
@@ -190,6 +217,9 @@ export interface LoginResult {
 export const AuthStore = {
   getUsers: (): User[] => {
     let users = getItem<User[]>(KEYS.USERS, INITIAL_USERS);
+    // Filter out any stale hardcoded expert accounts
+    users = users.filter((u) => !['e-1', 'e-2', 'e-3', 'e-4'].includes(u.id));
+
     let hasAdmin = false;
     users = users.map((u) => {
       if (u.role === 'admin') {
@@ -219,12 +249,18 @@ export const AuthStore = {
         });
       }
     }
+
     return users;
   },
 
   getCurrentUser: (): User | null => {
     const user = getItem<User | null>(KEYS.CURRENT_USER, null);
     if (!user) return null;
+    // Check if user is an old hardcoded expert
+    if (['e-1', 'e-2', 'e-3', 'e-4'].includes(user.id)) {
+      localStorage.removeItem(KEYS.CURRENT_USER);
+      return null;
+    }
     // Check session token expiration
     if (user.sessionExpiresAt && new Date(user.sessionExpiresAt).getTime() < Date.now()) {
       localStorage.removeItem(KEYS.CURRENT_USER);
@@ -952,48 +988,137 @@ export const MatchStore = {
   // Compute matches between available crop listings and open demands
   computeMatches(listings: CropListing[], demands: BusinessDemand[]): AIMatchItem[] {
     const matches: AIMatchItem[] = [];
-    listings.filter(l => l.status === 'Growing' || l.status === 'Ready to Harvest').forEach(listing => {
-      demands.filter(d => d.fulfilledKg < d.quantityKgNeeded).forEach(demand => {
-        const nameSimilarity = listing.cropName.toLowerCase().includes(demand.cropNeeded.toLowerCase().split(' ')[0])
-          || demand.cropNeeded.toLowerCase().includes(listing.cropName.toLowerCase().split(' ')[0]);
-        if (!nameSimilarity) return;
 
-        const priceDiff      = Math.abs(listing.expectedPricePerKg - demand.targetPricePerKg);
-        const priceScore     = Math.max(0, 40 - priceDiff * 4);
-        const qtyRatio       = Math.min(listing.quantityKg / demand.quantityKgNeeded, 1);
-        const qtyScore       = qtyRatio * 30;
-        const distKm         = Math.random() * 15 + 2;
-        const distScore      = Math.max(0, 30 - distKm);
-        const matchScore     = Math.round(priceScore + qtyScore + distScore);
+    // Agricultural crop family and synonym dictionary for bilingual matching
+    const CROP_FAMILIES: string[][] = [
+      ['tomato', 'tomatoes', 'টমেটো', 'পাকা টমেটো', 'বিজলি', 'bijli'],
+      ['potato', 'potatoes', 'আলু', 'ডায়মন্ড', 'diamond', 'গোল আলু', 'কার্ডিনাল'],
+      ['chili', 'chilies', 'chilli', 'মরিচ', 'কাঁচা মরিচ', 'বিন্দু', 'bindu'],
+      ['cauliflower', 'ফুলকপি', 'স্নোবল', 'snowball', 'কপি'],
+      ['cabbage', 'বাঁধাকপি', 'পাতাকপি'],
+      ['brinjal', 'eggplant', 'বেগুন', 'তালবেগুন'],
+      ['onion', 'পেঁয়াজ', 'পিয়াজ'],
+      ['garlic', 'রসুন'],
+      ['rice', 'paddy', 'ধান', 'চাল', 'ব্রি', 'brri'],
+      ['gourd', 'patal', 'পটল', 'লাউ', 'করলা', 'উচ্ছে'],
+      ['ginger', 'আদা'],
+      ['carrot', 'গাজর'],
+    ];
 
-        if (matchScore < 40) return;
+    const getKeywords = (text: string): string[] => {
+      return (text || '')
+        .toLowerCase()
+        .replace(/[(),.\-/#]/g, ' ')
+        .split(/\s+/)
+        .filter((w) => w.length >= 2);
+    };
 
-        const existing = matches.find(m =>
-          m.farmerName === listing.farmerName && m.buyerName === demand.businessName
+    const isCropMatch = (listing: CropListing, demand: BusinessDemand): { matched: boolean; similarityScore: number } => {
+      const listingTokens = [
+        ...getKeywords(listing.cropName),
+        ...getKeywords(listing.cropBangla),
+        ...getKeywords(listing.variety || ''),
+      ];
+      const demandTokens = [
+        ...getKeywords(demand.cropNeeded),
+        ...getKeywords(demand.cropBangla),
+      ];
+
+      // 1. Direct token overlap (e.g. potato, tomato, chili, etc.)
+      const sharedTokens = listingTokens.filter((lt) =>
+        demandTokens.some((dt) => lt === dt || (lt.length >= 3 && dt.includes(lt)) || (dt.length >= 3 && lt.includes(dt)))
+      );
+      if (sharedTokens.length > 0) {
+        return { matched: true, similarityScore: Math.min(40, 25 + sharedTokens.length * 8) };
+      }
+
+      // 2. Crop family dictionary matching
+      for (const family of CROP_FAMILIES) {
+        const listingInFamily = family.some((member) =>
+          listingTokens.some((t) => t.includes(member) || member.includes(t))
+        );
+        const demandInFamily = family.some((member) =>
+          demandTokens.some((t) => t.includes(member) || member.includes(t))
+        );
+        if (listingInFamily && demandInFamily) {
+          return { matched: true, similarityScore: 35 };
+        }
+      }
+
+      return { matched: false, similarityScore: 0 };
+    };
+
+    const availableListings = listings.filter((l) => l.status !== 'Sold');
+    const openDemands = demands.filter((d) => (d.fulfilledKg || 0) < d.quantityKgNeeded);
+
+    availableListings.forEach((listing) => {
+      openDemands.forEach((demand) => {
+        const { matched, similarityScore } = isCropMatch(listing, demand);
+        if (!matched) return;
+
+        // Price scoring (up to 35 points)
+        const diff = listing.expectedPricePerKg - demand.targetPricePerKg;
+        let priceScore = 20;
+        let marginText = '';
+
+        if (diff <= 0) {
+          // Farmer's asking price is at or below buyer's budget -> high match & cost savings
+          const savings = Math.abs(diff);
+          priceScore = Math.min(35, 28 + Math.round(savings * 1.5));
+          marginText = savings > 0 ? `+৳${savings.toFixed(1)}/kg (Buyer Savings)` : '৳0.00/kg (Exact Budget Match)';
+        } else {
+          // Farmer asks slightly more than buyer budget
+          const excessPct = diff / demand.targetPricePerKg;
+          if (excessPct <= 0.15) {
+            priceScore = Math.max(15, Math.round(25 - excessPct * 40));
+          } else if (excessPct <= 0.35) {
+            priceScore = Math.max(8, Math.round(18 - excessPct * 30));
+          } else {
+            priceScore = Math.max(4, Math.round(10 - excessPct * 20));
+          }
+          marginText = `৳${diff.toFixed(1)}/kg spread (Negotiable)`;
+        }
+
+        // Quantity fulfillment score (up to 20 points)
+        const qtyRatio = Math.min(1.5, listing.quantityKg / Math.max(1, demand.quantityKgNeeded));
+        const qtyScore = Math.round(Math.min(20, Math.max(8, qtyRatio * 18)));
+
+        // Proximity / distance scoring (up to 10 points)
+        const sameUpazila = listing.upazila && demand.district && demand.district.toLowerCase().includes(listing.upazila.toLowerCase());
+        const sameDistrict = listing.district && demand.district && demand.district.toLowerCase().includes(listing.district.toLowerCase());
+        const distKm = sameUpazila ? 4.5 : sameDistrict ? 11.2 : 28.5;
+        const distScore = sameUpazila ? 10 : sameDistrict ? 8 : 4;
+
+        const totalScore = Math.min(99, Math.max(45, Math.round(similarityScore + priceScore + qtyScore + distScore)));
+
+        const existing = matches.find(
+          (m) => m.farmerName === listing.farmerName && m.cropName === listing.cropName && m.buyerName === demand.businessName
         );
         if (!existing) {
           matches.push({
             id: `match-${listing.id}-${demand.id}`,
-            cropName:              listing.cropName,
-            farmerName:            listing.farmerName,
-            farmerLocation:        `${listing.upazila}, ${listing.district}`,
-            harvestQuantityKg:     listing.quantityKg,
-            readyInDays:           parseInt(listing.availableDate) || 7,
-            farmerExpectedPrice:   listing.expectedPricePerKg,
-            buyerName:             demand.businessName,
-            buyerType:             demand.businessType,
-            buyerDemandKg:         demand.quantityKgNeeded,
-            buyerBudgetPrice:      demand.targetPricePerKg,
-            matchScore:            Math.min(98, matchScore),
-            distanceKm:            parseFloat(distKm.toFixed(1)),
-            estimatedLogisticsCostPerKg: parseFloat((distKm * 0.15).toFixed(2)),
-            projectedProfitMargin: `+৳${(demand.targetPricePerKg - listing.expectedPricePerKg).toFixed(0)}/kg`,
-            status:                matchScore >= 85 ? 'Ready to Contract' : 'Draft',
+            cropName: listing.cropName,
+            farmerName: listing.farmerName,
+            farmerLocation: `${listing.upazila || 'Shibganj'}, ${listing.district || 'Bogura'}`,
+            harvestQuantityKg: listing.quantityKg,
+            readyInDays: parseInt(listing.availableDate) || (listing.status === 'Ready to Harvest' ? 0 : 7),
+            farmerExpectedPrice: listing.expectedPricePerKg,
+            buyerName: demand.businessName,
+            buyerType: demand.businessType,
+            buyerDemandKg: demand.quantityKgNeeded,
+            buyerBudgetPrice: demand.targetPricePerKg,
+            matchScore: totalScore,
+            distanceKm: parseFloat(distKm.toFixed(1)),
+            estimatedLogisticsCostPerKg: parseFloat((distKm * 0.12).toFixed(2)),
+            projectedProfitMargin: marginText,
+            status: totalScore >= 85 ? 'Ready to Contract' : 'Draft',
+            createdAt: new Date().toISOString(),
           });
         }
       });
     });
-    return matches.sort((a, b) => b.matchScore - a.matchScore).slice(0, 20);
+
+    return matches.sort((a, b) => b.matchScore - a.matchScore).slice(0, 30);
   },
 };
 

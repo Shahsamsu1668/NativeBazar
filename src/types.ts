@@ -41,6 +41,9 @@ export interface User {
   designation?: string;
   institution?: string;
   specialization?: string[];
+  certificatePhotoUrl?: string; // Certificate photo upload (base64 Data URL or image path)
+  nidPhotoUrl?: string;         // NID photo upload (base64 Data URL or image path)
+  nidNumber?: string;
 }
 
 // ─── CROP LISTING ────────────────────────────────────────────────────────
@@ -347,7 +350,7 @@ export interface CropWeatherAlert {
 }
 
 // ─── VIEW TYPES ─────────────────────────────────────────────────────────
-export type ActiveView = 'dashboard' | 'market_rates' | 'weather' | 'orders' | 'ledger' | 'profile' | 'notifications' | 'contacts';
+export type ActiveView = 'dashboard' | 'market_rates' | 'weather' | 'orders' | 'ledger' | 'profile' | 'notifications' | 'contacts' | 'bulletins';
 
 // ─── CONNECTIONS & NETWORKING ───────────────────────────────────────────
 export interface UserConnection {

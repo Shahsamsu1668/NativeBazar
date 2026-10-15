@@ -351,7 +351,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ matches, languag
         </div>
       </div>
 
-      {/* Economic Impact Metrics (For Campus365 Presentation) */}
+      {/* Economic Impact Metrics */}
       <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-stone-50 rounded-2xl border border-emerald-200 p-6">
         <h3 className="text-base font-bold text-stone-900 mb-2">
           {language === 'bn' ? 'সামাজিক ও অর্থনৈতিক প্রভাব সূচক (Impact Metrics)' : 'Demonstrated Pilot Economic Impact in Bogura'}

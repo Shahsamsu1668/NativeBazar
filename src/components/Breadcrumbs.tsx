@@ -13,22 +13,24 @@ interface BreadcrumbsProps {
 }
 
 const VIEW_TITLES: Record<ActiveView, { en: string; bn: string }> = {
-  dashboard:    { en: 'Dashboard', bn: 'ড্যাশবোর্ড' },
+  dashboard: { en: 'Dashboard', bn: 'ড্যাশবোর্ড' },
   market_rates: { en: 'Market Rates', bn: 'বাজার দর' },
-  weather:      { en: 'Weather Advisory', bn: 'আবহাওয়া বুলেটিন' },
-  orders:       { en: 'Orders & Settlements', bn: 'অর্ডার ও লেনদেন' },
-  ledger:       { en: 'Expense Ledger', bn: 'হিসাব খাতা' },
-  profile:      { en: 'My Profile', bn: 'আমার প্রোফাইল' },
-  notifications:{ en: 'Notifications', bn: 'বিজ্ঞপ্তি' },
+  weather: { en: 'Weather Advisory', bn: 'আবহাওয়া বুলেটিন' },
+  orders: { en: 'Orders & Settlements', bn: 'অর্ডার ও লেনদেন' },
+  ledger: { en: 'Expense Ledger', bn: 'হিসাব খাতা' },
+  profile: { en: 'My Profile', bn: 'আমার প্রোফাইল' },
+  notifications: { en: 'Notifications', bn: 'বিজ্ঞপ্তি' },
+  contacts: { en: 'Contacts & Messaging', bn: 'যোগাযোগ ও বার্তা' },
+  bulletins: { en: 'Agricultural Bulletins', bn: 'কৃষি বুলেটিন' },
 };
 
 const ROLE_TITLES: Record<UserRole, { en: string; bn: string }> = {
-  farmer:      { en: 'Farmer Hub', bn: 'কৃষক হাব' },
+  farmer: { en: 'Farmer Hub', bn: 'কৃষক হাব' },
   businessman: { en: 'Wholesale Buyer Hub', bn: 'পাইকারি ট্রেডার হাব' },
-  supplier:    { en: 'Agro Supplier Hub', bn: 'উপকরণ ডিলার হাব' },
-  customer:    { en: 'Fresh Marketplace', bn: 'ভোক্তা বাজার' },
-  expert:      { en: 'Agronomy Expert Hub', bn: 'কৃষি বিশেষজ্ঞ হাব' },
-  admin:       { en: 'Central Admin Telemetry', bn: 'প্রশাসন কন্ট্রোল সেন্টার' },
+  supplier: { en: 'Agro Supplier Hub', bn: 'উপকরণ ডিলার হাব' },
+  customer: { en: 'Fresh Marketplace', bn: 'ভোক্তা বাজার' },
+  expert: { en: 'Agronomy Expert Hub', bn: 'কৃষি বিশেষজ্ঞ হাব' },
+  admin: { en: 'Central Admin Telemetry', bn: 'প্রশাসন কন্ট্রোল সেন্টার' },
 };
 
 export const Breadcrumbs: React.FC<BreadcrumbsProps> = ({
@@ -56,11 +58,10 @@ export const Breadcrumbs: React.FC<BreadcrumbsProps> = ({
           <button
             onClick={onBack}
             disabled={!canGoBack}
-            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg font-semibold text-xs transition-colors shrink-0 ${
-              canGoBack
+            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg font-semibold text-xs transition-colors shrink-0 ${canGoBack
                 ? 'bg-stone-100 hover:bg-stone-200 text-stone-700 active:scale-95'
                 : 'text-stone-300 cursor-not-allowed bg-stone-50'
-            }`}
+              }`}
             title={t('Go back to previous page', 'পূর্ববর্তী পৃষ্ঠায় ফিরে যান')}
             aria-label={t('Go back', 'ফিরে যান')}
           >

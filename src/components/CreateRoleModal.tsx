@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { User, Language, UserRole } from '../types';
 import { AuthStore } from '../data/store';
 import { BANGLADESH_LOCATIONS } from '../data/mockData';
@@ -18,6 +18,9 @@ import {
   Phone,
   Mail,
   User as UserIcon,
+  ImagePlus,
+  FileText,
+  CreditCard,
 } from 'lucide-react';
 
 interface CreateRoleModalProps {
@@ -70,6 +73,10 @@ export const CreateRoleModal: React.FC<CreateRoleModalProps> = ({
   const [licenseNumber, setLicenseNumber] = useState('LIC-2026-BD');
   const [designation, setDesignation] = useState('Scientific Officer / Agronomist');
   const [institution, setInstitution] = useState('Department of Agricultural Extension');
+  const [certPreview, setCertPreview] = useState<string | null>(null);
+  const [nidPreview, setNidPreview] = useState<string | null>(null);
+  const certInputRef = useRef<HTMLInputElement>(null);
+  const nidInputRef = useRef<HTMLInputElement>(null);
 
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -94,6 +101,21 @@ export const CreateRoleModal: React.FC<CreateRoleModalProps> = ({
       return;
     }
 
+    if (targetRole === 'expert') {
+      if (!institution.trim()) {
+        setError(t('Institute Name is required for Expert role', 'বিশেষজ্ঞ অ্যাকাউন্টের জন্য প্রতিষ্ঠানের নাম আবশ্যক'));
+        return;
+      }
+      if (!certPreview) {
+        setError(t('Certificate photo upload is required for Expert role', 'বিশেষজ্ঞ অ্যাকাউন্টের জন্য ডিগ্রি সনদপত্রের ছবি আপলোড আবশ্যক'));
+        return;
+      }
+      if (!nidPreview) {
+        setError(t('National ID (NID) photo upload is required for Expert role', 'বিশেষজ্ঞ অ্যাকাউন্টের জন্য জাতীয় পরিচয়পত্র (NID) ছবি আপলোড আবশ্যক'));
+        return;
+      }
+    }
+
     setLoading(true);
 
     const roleData: Partial<User> = {
@@ -110,6 +132,8 @@ export const CreateRoleModal: React.FC<CreateRoleModalProps> = ({
       licenseNumber: targetRole === 'supplier' ? licenseNumber : undefined,
       designation: targetRole === 'expert' ? designation : undefined,
       institution: targetRole === 'expert' ? institution : undefined,
+      certificatePhotoUrl: targetRole === 'expert' ? (certPreview || undefined) : undefined,
+      nidPhotoUrl: targetRole === 'expert' ? (nidPreview || undefined) : undefined,
     };
 
     const newRoleUser = AuthStore.createRoleAccount(currentUser, targetRole, roleData);
@@ -296,28 +320,126 @@ export const CreateRoleModal: React.FC<CreateRoleModalProps> = ({
           )}
 
           {targetRole === 'expert' && (
-            <div className="grid grid-cols-2 gap-3 p-3 bg-stone-50 rounded-2xl border border-stone-200">
-              <div>
-                <label className="block text-[10px] font-bold text-stone-500 uppercase mb-1">
-                  {t('Designation', 'পদবি')}
-                </label>
-                <input
-                  type="text"
-                  value={designation}
-                  onChange={(e) => setDesignation(e.target.value)}
-                  className="w-full px-3 py-1.5 text-xs border border-stone-200 rounded-xl bg-white"
-                />
+            <div className="space-y-3 p-3 bg-teal-50/50 rounded-2xl border border-teal-200">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-stone-500 uppercase mb-1">
+                    {t('Designation', 'পদবি')}
+                  </label>
+                  <input
+                    type="text"
+                    value={designation}
+                    onChange={(e) => setDesignation(e.target.value)}
+                    className="w-full px-3 py-1.5 text-xs border border-stone-200 rounded-xl bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-stone-500 uppercase mb-1">
+                    {t('Institution *', 'কর্মরত প্রতিষ্ঠান *')}
+                  </label>
+                  <input
+                    type="text"
+                    value={institution}
+                    onChange={(e) => setInstitution(e.target.value)}
+                    className="w-full px-3 py-1.5 text-xs border border-stone-200 rounded-xl bg-white"
+                    required
+                  />
+                </div>
               </div>
-              <div>
-                <label className="block text-[10px] font-bold text-stone-500 uppercase mb-1">
-                  {t('Institution', 'কর্মরত প্রতিষ্ঠান')}
-                </label>
-                <input
-                  type="text"
-                  value={institution}
-                  onChange={(e) => setInstitution(e.target.value)}
-                  className="w-full px-3 py-1.5 text-xs border border-stone-200 rounded-xl bg-white"
-                />
+
+              {/* Certificate & NID photo uploads */}
+              <div className="grid grid-cols-2 gap-3 pt-1">
+                <div>
+                  <label className="block text-[10px] font-bold text-stone-600 uppercase mb-1 flex items-center gap-1">
+                    <FileText className="w-3 h-3 text-teal-600" />
+                    {t('Certificate Photo *', 'ডিগ্রি সনদপত্র *')}
+                  </label>
+                  {certPreview ? (
+                    <div className="flex items-center gap-2 p-1.5 bg-white border border-teal-300 rounded-lg">
+                      <img src={certPreview} alt="Certificate" className="w-8 h-8 rounded object-cover" />
+                      <span className="text-[10px] text-emerald-700 font-bold truncate flex-1">✓ Uploaded</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCertPreview(null);
+                          if (certInputRef.current) certInputRef.current.value = '';
+                        }}
+                        className="text-stone-400 hover:text-red-600 p-0.5"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => certInputRef.current?.click()}
+                      className="w-full py-1.5 px-2 bg-white border border-dashed border-teal-300 rounded-lg text-[10px] font-semibold text-stone-600 flex items-center justify-center gap-1 hover:bg-teal-50/50"
+                    >
+                      <ImagePlus className="w-3 h-3 text-teal-600" />
+                      <span>{t('Upload Cert', 'সনদপত্র')}</span>
+                    </button>
+                  )}
+                  <input
+                    ref={certInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (ev) => setCertPreview(ev.target?.result as string);
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                    className="hidden"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-stone-600 uppercase mb-1 flex items-center gap-1">
+                    <CreditCard className="w-3 h-3 text-teal-600" />
+                    {t('NID Photo *', 'NID ছবি *')}
+                  </label>
+                  {nidPreview ? (
+                    <div className="flex items-center gap-2 p-1.5 bg-white border border-teal-300 rounded-lg">
+                      <img src={nidPreview} alt="NID" className="w-8 h-8 rounded object-cover" />
+                      <span className="text-[10px] text-emerald-700 font-bold truncate flex-1">✓ Uploaded</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNidPreview(null);
+                          if (nidInputRef.current) nidInputRef.current.value = '';
+                        }}
+                        className="text-stone-400 hover:text-red-600 p-0.5"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => nidInputRef.current?.click()}
+                      className="w-full py-1.5 px-2 bg-white border border-dashed border-teal-300 rounded-lg text-[10px] font-semibold text-stone-600 flex items-center justify-center gap-1 hover:bg-teal-50/50"
+                    >
+                      <CreditCard className="w-3 h-3 text-teal-600" />
+                      <span>{t('Upload NID', 'NID কার্ড')}</span>
+                    </button>
+                  )}
+                  <input
+                    ref={nidInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (ev) => setNidPreview(ev.target?.result as string);
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                    className="hidden"
+                  />
+                </div>
               </div>
             </div>
           )}

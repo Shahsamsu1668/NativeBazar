@@ -41,6 +41,7 @@ const NAV_ITEMS: Array<{ id: ActiveView; icon: React.ReactNode; labelEn: string;
   { id: 'weather',      icon: <Cloud className="w-4 h-4" />,     labelEn: 'Weather',      labelBn: 'আবহাওয়া' },
   { id: 'orders',       icon: <Package className="w-4 h-4" />,   labelEn: 'Orders & Settlements', labelBn: 'অর্ডার ও লেনদেন', roles: ['customer', 'farmer', 'businessman', 'supplier'] },
   { id: 'contacts',     icon: <Users className="w-4 h-4" />,      labelEn: 'Contacts & Network', labelBn: 'যোগাযোগ ও নেটওয়ার্ক' },
+  { id: 'bulletins',    icon: <FileText className="w-4 h-4" />,   labelEn: 'Bulletins', labelBn: 'বুলেটিন', roles: ['farmer', 'customer', 'supplier', 'expert'] },
   { id: 'ledger',       icon: <Wallet className="w-4 h-4" />,    labelEn: 'Ledger',       labelBn: 'লেজার', roles: ['farmer'] },
 ];
 
@@ -77,19 +78,20 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <header className="sticky top-0 z-40 bg-white border-b border-stone-200 shadow-xs">
-      {/* Subtle Top Attribution Bar */}
+      {/* Subtle Top Info Bar */}
       <div className="bg-stone-900 text-stone-200 text-[11px] py-1 px-4 border-b border-stone-800">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <span className="bg-emerald-600 text-white font-bold text-[9px] px-1.5 py-0.5 rounded tracking-wide uppercase">
-              Campus365 R&D
+              LIVE
             </span>
             <span className="text-stone-300 font-medium">
               NativeBazar (নেটিভবাজার) • {t('Local Agricultural Supply-Demand Platform', 'স্থানীয় কৃষি ও সরবরাহ-চাহিদা প্ল্যাটফর্ম')}
             </span>
           </div>
           <div className="hidden md:flex items-center gap-1.5 text-stone-400 text-[10px]">
-            <span>Team: Shakib (2048) • Shadhin (2055) • Sumayya (2080)</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+            <span>{t('Bangladesh Agricultural Platform', 'বাংলাদেশ কৃষি প্ল্যাটফর্ম')}</span>
           </div>
         </div>
       </div>

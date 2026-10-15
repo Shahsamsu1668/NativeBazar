@@ -46,6 +46,7 @@ import { ContactsView } from './components/ContactsView';
 import { CallModal } from './components/CallModal';
 import { NoRoleAccountModal } from './components/NoRoleAccountModal';
 import { CreateRoleModal } from './components/CreateRoleModal';
+import { BulletinsPage } from './components/BulletinsPage';
 import {
   CheckCircle2,
   Sprout,
@@ -302,8 +303,8 @@ export default function App() {
   const handleAddAdvisory = (newAdvisory: Partial<AgroAdvisory>) => {
     const created: AgroAdvisory = {
       id: `adv-${Date.now()}`,
-      expertName: newAdvisory.expertName || currentUser?.name || 'Dr. Mohammad Akramuzzaman',
-      designation: newAdvisory.designation || 'Scientific Officer, BARI',
+      expertName: newAdvisory.expertName || currentUser?.name || 'Agricultural Specialist',
+      designation: newAdvisory.designation || currentUser?.designation || 'Agricultural Specialist',
       title: newAdvisory.title || 'Agro Alert',
       titleBn: newAdvisory.titleBn || 'কৃষি সতর্কতা',
       category: newAdvisory.category || 'Weather Alert',
@@ -483,6 +484,10 @@ export default function App() {
               <OrdersView currentUser={currentUser} language={language} />
             )}
 
+            {activeView === 'bulletins' && (
+              <BulletinsPage language={language} selectedDistrict={selectedDistrict} />
+            )}
+
             {activeView === 'ledger' && (
               <FarmerDashboard
                 currentUser={currentUser}
@@ -534,6 +539,7 @@ export default function App() {
                     advisories={agroAdvisories}
                     onAddAdvisory={handleAddAdvisory}
                     language={language}
+                    currentUser={currentUser}
                   />
                 )}
 
@@ -569,6 +575,32 @@ export default function App() {
         isOpen={isCropDoctorOpen}
         onClose={() => setIsCropDoctorOpen(false)}
         language={language}
+        currentUser={currentUser}
+        onSwitchUser={(user) => {
+          const safeUser: User = {
+            ...user,
+            password: '***',
+            sessionToken: `nb_sec_${Date.now()}_expert`,
+            sessionExpiresAt: new Date(Date.now() + 43200000).toISOString(),
+          };
+          setCurrentUser(safeUser);
+          localStorage.setItem('nb_current_user', JSON.stringify(safeUser));
+          showToast(
+            language === 'bn'
+              ? `স্বাগতম! আপনি ${safeUser.name} (কৃষি বিশেষজ্ঞ) হিসেবে প্রবেশ করেছেন।`
+              : `Logged in as ${safeUser.name} (Agricultural Expert).`
+          );
+        }}
+        onMessageExpert={(expert) => {
+          setIsCropDoctorOpen(false);
+          setInitialChatUserId(expert.id);
+          setViewedUser(null);
+          setActiveView('contacts');
+        }}
+        onCallExpert={(expert) => {
+          setIsCropDoctorOpen(false);
+          setCallingUser(expert);
+        }}
       />
 
       {/* Bangla Voice Assistant Modal */}
@@ -725,10 +757,7 @@ export default function App() {
           </div>
 
           <div className="text-center sm:text-right">
-            <span>
-              <strong>Campus365 Internship Team:</strong> Md. Shahriar Shakib (2048) • Jubayer
-              Bishwas Shadhin (2055) • Sumayya Islam (2080)
-            </span>
+            <span>Bangladesh Agricultural Platform • Bogura Pilot Node • Department of Agricultural Marketing (DAM)</span>
           </div>
         </div>
       </footer>

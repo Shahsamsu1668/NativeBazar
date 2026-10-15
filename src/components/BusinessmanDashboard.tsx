@@ -48,11 +48,18 @@ export const BusinessmanDashboard: React.FC<BusinessmanDashboardProps> = ({ curr
     const allDemands = DemandStore.getAll();
     const myDemands  = allDemands.filter(d => d.buyerId === currentUser.id || d.buyerId === 'b-1' || d.buyerId === 'b-2');
     const listings   = CropStore.getAvailable();
-    const computed   = MatchStore.computeMatches(listings, myDemands);
+    // Compute matches against current demands or all open demands
+    const allOpenDemands = allDemands.filter(d => (d.fulfilledKg || 0) < d.quantityKgNeeded);
+    const matchSource = myDemands.length > 0 ? myDemands : allOpenDemands;
+    const computed   = MatchStore.computeMatches(listings, matchSource);
     const stored     = MatchStore.getAll();
-    setDemands(myDemands);
+    setDemands(myDemands.length > 0 ? myDemands : allDemands.filter(d => d.buyerId === currentUser.id));
     setAvailable(listings);
-    setAiMatches([...computed.filter(c => !stored.find(s => s.id === c.id)), ...stored].slice(0, 20));
+    // Merge computed + stored, deduplicating by crop + farmer + buyer
+    const matchKey = (m: AIMatchItem) => `${m.cropName}-${m.farmerName}-${m.buyerName}`;
+    const seen = new Set(computed.map(matchKey));
+    const merged = [...computed, ...stored.filter(s => !seen.has(matchKey(s)))].slice(0, 30);
+    setAiMatches(merged);
   };
 
   useEffect(() => { loadData(); }, [currentUser.id]);
@@ -137,9 +144,18 @@ export const BusinessmanDashboard: React.FC<BusinessmanDashboardProps> = ({ curr
     { en: 'Brinjal (Eggplant)', bn: 'বেগুন' },
   ];
 
-  const filteredListings = availableListings.filter(l =>
-    !filterCrop || l.cropName.toLowerCase().includes(filterCrop.toLowerCase())
-  );
+  const filteredListings = availableListings.filter(l => {
+    if (!filterCrop) return true;
+    const q = filterCrop.toLowerCase().trim();
+    return (
+      l.cropName.toLowerCase().includes(q) ||
+      (l.cropBangla && l.cropBangla.includes(q)) ||
+      (l.variety && l.variety.toLowerCase().includes(q)) ||
+      (l.upazila && l.upazila.toLowerCase().includes(q)) ||
+      (l.district && l.district.toLowerCase().includes(q)) ||
+      (l.farmerName && l.farmerName.toLowerCase().includes(q))
+    );
+  });
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -196,8 +212,8 @@ export const BusinessmanDashboard: React.FC<BusinessmanDashboardProps> = ({ curr
       <div className="flex gap-1 bg-stone-100 p-1 rounded-xl w-fit">
         {([
           { id: 'demands',   label: t('My Demands', 'আমার চাহিদা'), count: demands.length },
-          { id: 'matches',   label: t('AI Matches', 'এআই ম্যাচ'), count: aiMatches.length },
-          { id: 'available', label: t('Browse Crops', 'ফসল খুঁজুন'), count: availableListings.length },
+          { id: 'matches',   label: t('AI Match', 'এআই ম্যাচ'), count: aiMatches.length },
+          { id: 'available', label: t('Find Crops', 'ফসল খুঁজুন'), count: filteredListings.length },
         ] as Array<{ id: TabId; label: string; count: number }>).map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
             className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
@@ -284,8 +300,32 @@ export const BusinessmanDashboard: React.FC<BusinessmanDashboardProps> = ({ curr
           {aiMatches.length === 0 ? (
             <div className="card empty-state">
               <div className="empty-state-icon"><Sparkles className="w-8 h-8" /></div>
-              <h3 className="font-bold text-stone-700">{t('No AI matches yet', 'এখনো কোনো এআই ম্যাচ নেই')}</h3>
-              <p className="text-sm text-stone-400">{t('Post a demand to start getting AI-matched farmers', 'চাহিদা পোস্ট করলে এআই ম্যাচিং শুরু হবে')}</p>
+              <h3 className="font-bold text-stone-700">{t('No AI Matches Available', 'কোনো এআই ম্যাচ নেই')}</h3>
+              <p className="text-sm text-stone-400 max-w-sm">
+                {availableListings.length === 0 && demands.length === 0
+                  ? t('No crop listings or demands exist yet. Post a demand and ask farmers to list their crops to start matching.', 'এখনো কোনো ফসলের তালিকা বা চাহিদা নেই। চাহিদা পোস্ট করুন এবং কৃষকদের ফসল তালিকা যুক্ত করতে বলুন।')
+                  : availableListings.length === 0
+                  ? t('No crop listings available yet. Farmers need to add their harvest listings first.', 'এখনো কোনো ফসলের তালিকা নেই। কৃষকদের প্রথমে ফসল তালিকা যুক্ত করতে হবে।')
+                  : demands.length === 0
+                  ? t('Post a procurement demand to enable AI crop matching.', 'এআই ম্যাচিং চালু করতে একটি চাহিদা পোস্ট করুন।')
+                  : t('No crop-demand matches found with enough similarity. Try adjusting your price range or crop type.', 'মূল্য বা ফসলের ধরন পরিবর্তন করে আবার চেষ্টা করুন।')}
+              </p>
+              <div className="flex gap-2 mt-4 flex-wrap justify-center">
+                <button onClick={() => setShowAddModal(true)} className="px-5 py-2.5 bg-blue-600 text-white text-sm font-bold rounded-xl hover:bg-blue-700 transition-colors flex items-center gap-2">
+                  <PlusCircle className="w-4 h-4" /> {t('Post Demand', 'চাহিদা পোস্ট করুন')}
+                </button>
+                <button onClick={() => setActiveTab('available')} className="px-5 py-2.5 bg-stone-100 text-stone-700 text-sm font-bold rounded-xl hover:bg-stone-200 transition-colors flex items-center gap-2">
+                  <Eye className="w-4 h-4" /> {t('Find Crops', 'ফসল খুঁজুন')}
+                </button>
+                <button onClick={loadData} className="px-5 py-2.5 bg-stone-100 text-stone-700 text-sm font-bold rounded-xl hover:bg-stone-200 transition-colors flex items-center gap-2">
+                  <RefreshCw className="w-4 h-4" /> {t('Refresh', 'রিফ্রেশ করুন')}
+                </button>
+              </div>
+              {availableListings.length > 0 && demands.length > 0 && (
+                <p className="text-xs text-stone-400 mt-3">
+                  {t(`${availableListings.length} crop listings available • ${demands.length} demands posted • Price similarity required for matching`, `${availableListings.length}টি ফসল তালিকা • ${demands.length}টি চাহিদা • মূল্য মিল প্রয়োজন`)}
+                </p>
+              )}
             </div>
           ) : aiMatches.map((match, i) => (
             <div key={match.id} className="card p-4 animate-slide-up" style={{ animationDelay: `${i * 0.05}s` }}>
@@ -346,21 +386,33 @@ export const BusinessmanDashboard: React.FC<BusinessmanDashboardProps> = ({ curr
         </div>
       )}
 
-      {/* ─── TAB: BROWSE CROPS ─── */}
+      {/* ─── TAB: FIND CROPS ─── */}
       {activeTab === 'available' && (
         <div className="space-y-4">
-          <div className="flex items-center gap-3">
-            <div className="relative flex-1 max-w-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="relative flex-1 max-w-md">
               <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-stone-400" />
               <input
                 type="text"
                 value={filterCrop}
                 onChange={e => setFilterCrop(e.target.value)}
-                placeholder={t('Filter by crop name...', 'ফসলের নাম দিয়ে খুঁজুন...')}
-                className="field-input pl-9 text-xs"
+                placeholder={t('Search crop, variety, farmer, or upazila...', 'ফসল, জাত, কৃষক বা উপজেলা দিয়ে খুঁজুন...')}
+                className="field-input pl-9 text-xs w-full"
               />
+              {filterCrop && (
+                <button
+                  onClick={() => setFilterCrop('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 text-xs"
+                >
+                  ✕
+                </button>
+              )}
             </div>
-            <span className="text-xs text-stone-500">{filteredListings.length} {t('listings', 'তালিকা')}</span>
+            <div className="flex items-center gap-2 text-xs text-stone-500">
+              <span className="font-bold text-blue-700 bg-blue-50 px-2 py-1 rounded-lg">
+                {filteredListings.length} {t('crops available', 'ফসল পাওয়া গেছে')}
+              </span>
+            </div>
           </div>
 
           {filteredListings.length === 0 ? (
