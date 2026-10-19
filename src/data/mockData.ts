@@ -68,198 +68,51 @@ export const BANGLADESH_LOCATIONS: Array<{
   },
 ];
 
-// ─── DEMO USERS (EACH WITH UNIQUE, STRONG, ROLE-SPECIFIC PASSWORDS) ─────
-export const INITIAL_USERS: User[] = [
-  {
-    id: 'f-1',
-    role: 'farmer',
-    name: 'Md. Rafiqul Islam',
-    nameBn: 'মো. রফিকুল ইসলাম',
-    phone: '01712458920',
-    email: 'rafiqul.farmer@nativebazar.com',
-    password: 'Krishi#2026!Rafiq',
-    education: 'Diploma in Agriculture (Bogura ATI)',
-    district: 'Bogura',
-    upazila: 'Shibganj',
-    verified: true,
-    createdAt: '2024-01-15T08:00:00.000Z',
-    twoFactorEnabled: false,
-    farmSizeAcres: 3.5,
-    primaryCrops: ['Tomato', 'Potato', 'Chili'],
-  },
-  {
-    id: 'f-2',
-    role: 'farmer',
-    name: 'Abul Kashem Mondol',
-    nameBn: 'আবুল কাশেম মন্ডল',
-    phone: '01823991204',
-    email: 'kashem.farmer@nativebazar.com',
-    password: 'Khamar#2026!Kashem',
-    education: 'Higher Secondary Certificate (HSC)',
-    district: 'Bogura',
-    upazila: 'Sherpur',
-    verified: true,
-    createdAt: '2024-02-10T08:00:00.000Z',
-    twoFactorEnabled: false,
-    farmSizeAcres: 5.0,
-    primaryCrops: ['Potato', 'Cauliflower'],
-  },
-  {
-    id: 'b-1',
-    role: 'businessman',
-    name: 'Haji Nurul Alam',
-    nameBn: 'হাজী নুরুল আলম',
-    phone: '01711209934',
-    email: 'nurul.alam@karwanbazar.com',
-    password: 'AratTrade$2026@Alam',
-    education: 'Bachelor of Business Administration (BBA) - Dhaka University',
-    district: 'Bogura',
-    upazila: 'Bogura Sadar',
-    verified: true,
-    createdAt: '2024-01-20T08:00:00.000Z',
-    twoFactorEnabled: false,
-    businessName: 'Karwan Bazar Wholesale Arat Syndicate',
-    businessType: 'Wholesaler',
-  },
-  {
-    id: 'b-2',
-    role: 'businessman',
-    name: 'Engr. Tanvir Ahmed',
-    nameBn: 'ইঞ্জি. তানভীর আহমেদ',
-    phone: '01755667788',
-    email: 'tanvir.ahmed@shwapno.com',
-    password: 'Shwapno#2026$Tanvir',
-    education: 'B.Sc in Agricultural Engineering - BAU Mymensingh',
-    district: 'Dhaka',
-    upazila: 'Tejgaon',
-    verified: true,
-    createdAt: '2024-02-05T08:00:00.000Z',
-    twoFactorEnabled: false,
-    businessName: 'Shwapno Agro Direct Sourcing Hub',
-    businessType: 'Supermarket',
-  },
-  {
-    id: 's-1',
-    role: 'supplier',
-    name: 'Meghna Fertilizer Manager',
-    nameBn: 'মেঘনা সার বিতান',
-    phone: '01715889900',
-    email: 'meghna.depot@nativebazar.com',
-    password: 'Fertilizer#9900!Depot',
-    education: 'B.Sc in Chemistry & Agro-Chemical Science',
-    district: 'Bogura',
-    upazila: 'Shibganj',
-    verified: true,
-    createdAt: '2024-01-10T08:00:00.000Z',
-    twoFactorEnabled: false,
-    shopName: 'যমুনা ও মেঘনা সার বিতান',
-    licenseNumber: 'BCIC-BGR-2024-889',
-  },
-  {
-    id: 'c-1',
-    role: 'customer',
-    name: 'Nasrin Akter',
-    nameBn: 'নাসরিন আক্তার',
-    phone: '01680123456',
-    email: 'nasrin.akter@gmail.com',
-    password: 'BazarShop*2026!Nasrin',
-    education: 'Master of Arts (MA) - Rajshahi University',
-    district: 'Bogura',
-    upazila: 'Bogura Sadar',
-    verified: true,
-    createdAt: '2024-03-01T08:00:00.000Z',
-    twoFactorEnabled: false,
-  },
-  {
-    id: 'a-1',
-    role: 'admin',
-    name: 'NativeBazar Central Admin',
-    nameBn: 'নেটিভবাজার সেন্ট্রাল অ্যাডমিন',
-    phone: 'NativeBazarSJS',
-    email: 'NativeBazarSJS',
-    password: '12345678',
-    education: 'M.Sc in Computer Science & Cyber Security (DU)',
-    district: 'Bogura',
-    upazila: 'Bogura Sadar',
-    verified: true,
-    twoFactorEnabled: false,
-    createdAt: '2024-01-01T08:00:00.000Z',
-  },
-];
+// ─── INITIAL USERS (Zero demo accounts: real registration required) ─────────
+export const INITIAL_USERS: User[] = [];
 
-// Reference credentials map for quick access and testing
-export const DEMO_CREDENTIALS: Record<UserRole, {
-  phone: string;
-  email: string;
-  password: string;
-  education: string;
-  pin?: string;
+// ─── ROLE LABELS & SECURITY DESCRIPTIONS (NO DEFAULT/DEMO PASSWORDS) ────────
+export const ROLE_METADATA: Record<string, {
   roleLabelEn: string;
   roleLabelBn: string;
   securityNoteEn: string;
   securityNoteBn: string;
 }> = {
   farmer: {
-    phone: '01712458920',
-    email: 'rafiqul.farmer@nativebazar.com',
-    password: 'Krishi#2026!Rafiq',
-    education: 'Diploma in Agriculture (Bogura ATI)',
-    roleLabelEn: 'Farmer (কৃষক)',
+    roleLabelEn: 'Farmer',
     roleLabelBn: 'কৃষক',
-    securityNoteEn: 'Pre-sales harvest lock, crop doctor pathology & localized market alerts.',
-    securityNoteBn: 'ফসল অগ্রিম বিক্রি, ফসলের রোগ নির্ণয় ও স্থানীয় বাজার দর আপডেট।',
+    securityNoteEn: 'List crops, review verified wholesale purchase offers, and access market intelligence.',
+    securityNoteBn: 'ফসল তালিকাভুক্তকরণ, যাচাইকৃত পাইকারি দরপ্রস্তাব ও বাজার তথ্য পর্যবেক্ষণ।',
   },
-  businessman: {
-    phone: '01711209934',
-    email: 'nurul.alam@karwanbazar.com',
-    password: 'AratTrade$2026@Alam',
-    education: 'Bachelor of Business Administration (BBA) - Dhaka University',
-    roleLabelEn: 'Businessman (পাইকার / আড়তদার)',
-    roleLabelBn: 'ব্যবসায়ী',
-    securityNoteEn: 'Forward procurement contract lock & bulk arat order tracking.',
-    securityNoteBn: 'ফরওয়ার্ড ক্রয়চুক্তি সম্পাদন ও আড়ত বাল্ক অর্ডার ট্র্যাকিং।',
+  wholesaler: {
+    roleLabelEn: 'Wholesaler',
+    roleLabelBn: 'পাইকার / আড়তদার',
+    securityNoteEn: 'Procure agricultural harvest directly from farmers and supply wholesale lots to retailers.',
+    securityNoteBn: 'কৃষকের কাছ থেকে সরাসরি ফসল ক্রয় ও খুচরা বিক্রেতাদের কাছে পাইকারি সরবরাহ।',
   },
-  supplier: {
-    phone: '01715889900',
-    email: 'meghna.depot@nativebazar.com',
-    password: 'Fertilizer#9900!Depot',
-    education: 'B.Sc in Chemistry & Agro-Chemical Science',
-    roleLabelEn: 'Agro Supplier (সার-বীজ ডিলার)',
-    roleLabelBn: 'সরবরাহকারী',
-    securityNoteEn: 'Certified fertilizer, seed inventory & farmer order fulfillment.',
-    securityNoteBn: 'অনুমোদিত সার-বীজ ক্যাটালগ ও কৃষক ইনপুট সরবরাহ অর্ডার ব্যবস্থাপনা।',
+  retailer: {
+    roleLabelEn: 'Retailer',
+    roleLabelBn: 'খুচরা বিক্রেতা',
+    securityNoteEn: 'Procure wholesale lots and sell fresh produce to consumers at retail prices.',
+    securityNoteBn: 'পাইকারি আড়ত থেকে পণ্য সংগ্রহ এবং ভোক্তাদের কাছে খুচরা মূল্যে বিক্রি।',
   },
-  customer: {
-    phone: '01680123456',
-    email: 'nasrin.akter@gmail.com',
-    password: 'BazarShop*2026!Nasrin',
-    education: 'Master of Arts (MA) - Rajshahi University',
-    roleLabelEn: 'Retail Customer (ভোক্তা)',
+  consumer: {
+    roleLabelEn: 'Consumer',
     roleLabelBn: 'ভোক্তা',
-    securityNoteEn: 'Direct farm-to-table consumer basket with bKash/Nagad checkout.',
-    securityNoteBn: 'সরাসরি ক্ষেত থেকে তাজা শাকসবজি ক্রয় ও হোম ডেলিভারি।',
-  },
-  expert: {
-    phone: '',
-    email: '',
-    password: '',
-    education: '',
-    roleLabelEn: 'Agri Expert (বিজ্ঞানী / কৃষি কর্মকর্তা)',
-    roleLabelBn: 'কৃষি বিশেষজ্ঞ',
-    securityNoteEn: 'BARI/DAE field advisories, disease warning bulletins & diagnosis.',
-    securityNoteBn: 'বারি/ডিএই মাঠ সতর্কতা বুলেটিন প্রচার ও রোগ বিশেষজ্ঞ মতামত।',
+    securityNoteEn: 'Fresh authentic agricultural products delivered directly with transparent traceability.',
+    securityNoteBn: 'নিরাপদ তাজা কৃষিপণ্য সরাসরি সংগ্রহ ও সরবরাহ যাচাইকরণ।',
   },
   admin: {
-    phone: 'NativeBazarSJS',
-    email: 'NativeBazarSJS',
-    password: '12345678',
-    education: 'M.Sc in Computer Science & Cyber Security (DU)',
-    roleLabelEn: 'Central Admin (প্ল্যাটফর্ম অ্যাডমিন)',
-    roleLabelBn: 'অ্যাডমিন',
-    securityNoteEn: 'Direct platform administrative governance control.',
-    securityNoteBn: 'প্ল্যাটফর্মের কেন্দ্রীয় মনিটরিং ও কন্ট্রোল প্যানেল।',
+    roleLabelEn: 'Central Admin',
+    roleLabelBn: 'সিস্টেম অ্যাডমিন',
+    securityNoteEn: 'Authorized platform governance and administrative controls only.',
+    securityNoteBn: 'অনুমোদিত কেন্দ্রীয় প্ল্যাটফর্ম প্রশাসন ও মনিটরিং ব্যবস্থা।',
   },
 };
+
+// Deprecated empty demo credentials for backwards compatibility
+export const DEMO_CREDENTIALS: Record<string, any> = {};
+
 
 // ─── CROP LISTINGS ────────────────────────────────────────────────────────
 export const INITIAL_CROP_LISTINGS: CropListing[] = [

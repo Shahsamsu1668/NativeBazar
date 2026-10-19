@@ -62,12 +62,6 @@ export const AdminVerificationModal: React.FC<AdminVerificationModalProps> = ({
     }, 400);
   };
 
-  const handleFillDemoAdmin = () => {
-    setEmail('NativeBazarSJS');
-    setPassword('12345678');
-    setError('');
-  };
-
   return (
     <div
       role="dialog"
@@ -99,27 +93,6 @@ export const AdminVerificationModal: React.FC<AdminVerificationModalProps> = ({
             <X className="w-4 h-4" />
           </button>
         </div>
-
-        {/* Demo Helper Banner */}
-        <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl text-xs flex items-center justify-between gap-2">
-          <div className="space-y-0.5">
-            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">
-              {t('Demo Admin Account', 'ডেমো অ্যাডমিন অ্যাকাউন্ট')}
-            </span>
-            <span className="text-[11px] text-slate-800 font-mono block">
-              admin@nativebazar.gov.bd
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={handleFillDemoAdmin}
-            className="px-2.5 py-1 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-[10px] font-bold transition-colors shrink-0"
-          >
-            {t('Fill Demo Credentials', 'ডেমো তথ্য পূরণ')}
-          </button>
-        </div>
-
-        {/* Error message */}
         {error && (
           <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center gap-2 animate-slide-up">
             <AlertTriangle className="w-4 h-4 shrink-0 text-red-600" />
@@ -139,7 +112,7 @@ export const AdminVerificationModal: React.FC<AdminVerificationModalProps> = ({
                 type="text"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="NativeBazarSJS"
+                placeholder="admin@nativebazar.gov.bd"
                 className="w-full pl-9 pr-3 py-2 bg-stone-50 border border-stone-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
                 autoFocus
                 required

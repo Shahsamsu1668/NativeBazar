@@ -146,44 +146,43 @@ function setItem<T>(key: string, value: T): void {
 
 // ─── INITIALIZE (runs once to seed data) ────────────────────────────
 export function initializeStore(): void {
-  const STORE_VERSION = 'v12_no_hardcoded_experts';
-  // Check if current user is an old hardcoded expert and clear if so
+  const STORE_VERSION = 'v15_zero_demo_users';
+
+  // Purge any stale demo user accounts from local storage
+  const DEMO_IDS = ['f-1', 'f-2', 'b-1', 'b-2', 's-1', 'c-1', 'a-1', 'e-1', 'e-2', 'e-3', 'e-4'];
   const currentUserRaw = getItem<User | null>(KEYS.CURRENT_USER, null);
-  if (currentUserRaw && ['e-1', 'e-2', 'e-3', 'e-4'].includes(currentUserRaw.id)) {
+  if (currentUserRaw && DEMO_IDS.includes(currentUserRaw.id)) {
     localStorage.removeItem(KEYS.CURRENT_USER);
   }
 
   // Always re-run if key changes (bump version to force re-init)
   if (localStorage.getItem(KEYS.INITIALIZED) === STORE_VERSION) {
-    // Also ensure existing stored users do not contain hardcoded experts
     const currentUsers = getItem<User[]>(KEYS.USERS, []);
-    const filteredUsers = currentUsers.filter((u) => !['e-1', 'e-2', 'e-3', 'e-4'].includes(u.id));
+    const filteredUsers = currentUsers.filter((u) => !DEMO_IDS.includes(u.id));
     if (filteredUsers.length !== currentUsers.length) {
       setItem(KEYS.USERS, filteredUsers);
     }
     return;
   }
 
-  // Preserve legitimately registered users while purging hardcoded experts
+  // Preserve legitimately registered users while purging demo accounts
   const existingUsers = getItem<User[]>(KEYS.USERS, []);
-  const cleanExisting = existingUsers.filter((u) => !['e-1', 'e-2', 'e-3', 'e-4'].includes(u.id));
+  const cleanExisting = existingUsers
+    .filter((u) => !DEMO_IDS.includes(u.id))
+    .map((u) => {
+      // Map legacy roles safely
+      let role = u.role;
+      if (role === 'businessman') role = 'wholesaler';
+      if (role === 'supplier') role = 'retailer';
+      if (role === 'customer') role = 'consumer';
+      return {
+        ...u,
+        role,
+        passwordHash: u.passwordHash || (u.password ? hashPassword(u.password) : undefined),
+      };
+    });
 
-  // Compute passwordHash for all initial users (which now contain 0 hardcoded experts)
-  const securedUsers = INITIAL_USERS.map((u) => ({
-    ...u,
-    passwordHash: hashPassword(u.password),
-  }));
-
-  // Merge any newly registered users with secured initial users
-  const mergedUsers: User[] = [...securedUsers];
-  for (const existing of cleanExisting) {
-    if (!mergedUsers.some((u) => u.id === existing.id || u.phone === existing.phone || (u.email && u.email === existing.email))) {
-      mergedUsers.push(existing.passwordHash ? existing : { ...existing, passwordHash: hashPassword(existing.password) });
-    }
-  }
-
-  setItem(KEYS.USERS,            mergedUsers);
-  // Start with empty data — no demo transactions
+  setItem(KEYS.USERS,            cleanExisting);
   setItem(KEYS.CROP_LISTINGS,    []);
   setItem(KEYS.BUSINESS_DEMANDS, []);
   setItem(KEYS.SUPPLIER_PRODUCTS,[]);
@@ -216,41 +215,21 @@ export interface LoginResult {
 // ─── AUTH & SECURITY ENGINE ───────────────────────────────────────────
 export const AuthStore = {
   getUsers: (): User[] => {
-    let users = getItem<User[]>(KEYS.USERS, INITIAL_USERS);
-    // Filter out any stale hardcoded expert accounts
-    users = users.filter((u) => !['e-1', 'e-2', 'e-3', 'e-4'].includes(u.id));
+    let users = getItem<User[]>(KEYS.USERS, []);
+    const DEMO_IDS = ['f-1', 'f-2', 'b-1', 'b-2', 's-1', 'c-1', 'a-1', 'e-1', 'e-2', 'e-3', 'e-4'];
+    users = users.filter((u) => !DEMO_IDS.includes(u.id));
 
-    let hasAdmin = false;
-    users = users.map((u) => {
-      if (u.role === 'admin') {
-        hasAdmin = true;
-        return {
-          ...u,
-          phone: 'NativeBazarSJS',
-          email: 'NativeBazarSJS',
-          password: '12345678',
-          passwordHash: hashPassword('12345678'),
-          twoFactorEnabled: false,
-        };
-      }
-      return u.passwordHash ? u : { ...u, passwordHash: hashPassword(u.password) };
+    return users.map((u) => {
+      let role = u.role;
+      if (role === 'businessman') role = 'wholesaler';
+      if (role === 'supplier') role = 'retailer';
+      if (role === 'customer') role = 'consumer';
+      return {
+        ...u,
+        role,
+        passwordHash: u.passwordHash || (u.password ? hashPassword(u.password) : undefined),
+      };
     });
-
-    if (!hasAdmin) {
-      const adminInit = INITIAL_USERS.find((u) => u.role === 'admin');
-      if (adminInit) {
-        users.push({
-          ...adminInit,
-          phone: 'NativeBazarSJS',
-          email: 'NativeBazarSJS',
-          password: '12345678',
-          passwordHash: hashPassword('12345678'),
-          twoFactorEnabled: false,
-        });
-      }
-    }
-
-    return users;
   },
 
   getCurrentUser: (): User | null => {
@@ -267,6 +246,23 @@ export const AuthStore = {
       return null;
     }
     return user;
+  },
+
+  setCurrentUser: (user: User | null): void => {
+    if (!user) {
+      localStorage.removeItem(KEYS.CURRENT_USER);
+    } else {
+      setItem(KEYS.CURRENT_USER, user);
+      // Ensure user is present in users array if not already present
+      const users = getItem<User[]>(KEYS.USERS, []);
+      const idx = users.findIndex((u) => u.id === user.id || u.phone === user.phone);
+      if (idx >= 0) {
+        users[idx] = { ...users[idx], ...user };
+        setItem(KEYS.USERS, users);
+      } else {
+        setItem(KEYS.USERS, [...users, user]);
+      }
+    }
   },
 
   getAuditLogs: (): LoginAuditLog[] =>
@@ -632,8 +628,7 @@ export const AuthStore = {
     const admin = users.find(
       (u) =>
         u.role === 'admin' &&
-        (cleanEmail === 'nativebazarsjs' ||
-          (u.email && u.email.toLowerCase() === cleanEmail) ||
+        ((u.email && u.email.toLowerCase() === cleanEmail) ||
           (u.phone && u.phone.toLowerCase() === cleanEmail) ||
           (cleanEmail.replace(/\D/g, '') && u.phone === cleanEmail.replace(/\D/g, '')))
     );

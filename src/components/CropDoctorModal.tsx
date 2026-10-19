@@ -3,7 +3,6 @@ import { CropDiagnosisResult, Language, User } from '../types';
 import { requestCropDiagnosis } from '../services/aiService';
 import { AuthStore } from '../data/store';
 import { BANGLADESH_LOCATIONS } from '../data/mockData';
-import { ExpertRegistrationModal } from './ExpertRegistrationModal';
 import {
   Stethoscope,
   Upload,
@@ -901,48 +900,26 @@ export const CropDoctorModal: React.FC<CropDoctorModalProps> = ({
                   )}
                 </div>
 
-                {/* Bottom Call to Action for Experts */}
+                {/* Expert Consultation Notice */}
                 <div className="p-4 bg-gradient-to-r from-stone-100 to-teal-50/50 border border-stone-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
                   <div>
                     <h5 className="font-extrabold text-stone-900 text-xs">
                       {language === 'bn'
-                        ? 'আপনি কি একজন কৃষি বৈজ্ঞানিক বা সম্প্রসারণ কর্মকর্তা?'
-                        : 'Are you an Agronomist, Researcher, or Extension Officer?'}
+                        ? 'কৃষি বৈজ্ঞানিক ও সম্প্রসারণ কর্মকর্তাদের পরামর্শ সেবা'
+                        : 'Agronomist & Extension Advisory Support'}
                     </h5>
                     <p className="text-stone-500 text-[11px] mt-0.5">
                       {language === 'bn'
-                        ? 'ডিগ্রি সনদ ও এনআইডি আপলোড করে নেটিভবাজারের অনুমোদিত বিশেষজ্ঞ হিসেবে যুক্ত হোন।'
-                        : 'Submit your certificate and National ID to consult farmers across Bangladesh.'}
+                        ? 'নেটিভবাজার এআই ফসলের ডাক্তার এবং সংশ্লিষ্ট জেলা কৃষি সম্প্রসারণ অধিদপ্তরের (DAE) তথ্যের ভিত্তিতে পরামর্শ প্রদান করা হয়।'
+                        : 'Advisories are backed by NativeBazar AI diagnostic engines and regional DAE agronomical guidelines.'}
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowExpertRegistration(true)}
-                    className="px-4 py-2 bg-teal-800 hover:bg-teal-900 text-white rounded-xl font-bold text-xs shrink-0 shadow-xs flex items-center justify-center gap-1.5"
-                  >
-                    <UserPlus className="w-3.5 h-3.5" />
-                    <span>{language === 'bn' ? 'বিশেষজ্ঞ নিবন্ধন ফর্ম' : 'Apply for Expert Flow'}</span>
-                  </button>
                 </div>
               </div>
             )}
           </div>
         </div>
       </div>
-
-      {/* Dedicated Expert Registration Flow Modal */}
-      <ExpertRegistrationModal
-        isOpen={showExpertRegistration}
-        onClose={() => setShowExpertRegistration(false)}
-        language={language}
-        onSuccess={handleExpertRegisteredSuccess}
-        onSwitchUser={(user) => {
-          if (onSwitchUser) {
-            onSwitchUser(user);
-          }
-          setShowExpertRegistration(false);
-        }}
-      />
 
       {/* Verified Document Preview Modal (Certificate / NID) */}
       {previewDoc && (

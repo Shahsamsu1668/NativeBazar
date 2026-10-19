@@ -1,6 +1,19 @@
 // ─── CORE TYPES ────────────────────────────────────────────────────────
 
-export type UserRole = 'farmer' | 'businessman' | 'supplier' | 'customer' | 'expert' | 'admin';
+export type CanonicalRole = 'farmer' | 'wholesaler' | 'retailer' | 'consumer' | 'admin';
+export type UserRole = CanonicalRole | 'businessman' | 'supplier' | 'customer' | 'expert';
+
+export function normalizeRole(role: UserRole | string | undefined | null): CanonicalRole {
+  if (!role) return 'consumer';
+  const r = role.toLowerCase().trim();
+  if (r === 'farmer') return 'farmer';
+  if (r === 'wholesaler' || r === 'businessman') return 'wholesaler';
+  if (r === 'retailer' || r === 'supplier') return 'retailer';
+  if (r === 'consumer' || r === 'customer') return 'consumer';
+  if (r === 'admin') return 'admin';
+  return 'consumer';
+}
+
 export type Language = 'en' | 'bn';
 export type Theme = 'light' | 'dark';
 
@@ -11,17 +24,20 @@ export interface User {
   name: string;
   nameBn?: string;
   phone: string;
-  password: string; // stored hashed in production, plain here for demo
-  email: string; // Required for all registered users
+  password: string;
+  email: string;
   district: string;
   upazila?: string;
-  education?: string; // Academic/Training qualification
+  address?: string;
+  deliveryAddress?: string;
+  education?: string;
+
   profileImageUrl?: string;
   verified: boolean;
   createdAt: string;
   // Security & Authentication
   passwordHash?: string;
-  securityPin?: string; // 2FA PIN for Admin
+  securityPin?: string;
   sessionToken?: string;
   sessionExpiresAt?: string;
   twoFactorEnabled?: boolean;
@@ -31,18 +47,19 @@ export interface User {
   // Farmer extras
   farmSizeAcres?: number;
   primaryCrops?: string[];
-  // Businessman extras
+  // Wholesaler / Businessman extras
   businessName?: string;
-  businessType?: BusinessDemand['businessType'];
-  // Supplier extras
+  businessType?: string;
+  // Retailer / Supplier extras
   shopName?: string;
   licenseNumber?: string;
-  // Expert extras
+  tradeAddress?: string;
+  // Legacy / Expert extras
   designation?: string;
   institution?: string;
   specialization?: string[];
-  certificatePhotoUrl?: string; // Certificate photo upload (base64 Data URL or image path)
-  nidPhotoUrl?: string;         // NID photo upload (base64 Data URL or image path)
+  certificatePhotoUrl?: string;
+  nidPhotoUrl?: string;
   nidNumber?: string;
 }
 
@@ -136,6 +153,97 @@ export interface MarketRate {
   lastUpdated: string;
 }
 
+// ─── UNIFIED MARKETPLACE PRODUCT ──────────────────────────────────────────
+export interface MarketplaceProduct {
+  id: string;
+  sellerId: string;
+  sellerName: string;
+  sellerPhone?: string;
+  sellerRole: 'farmer' | 'wholesaler' | 'retailer';
+  targetRole: 'wholesaler' | 'retailer' | 'consumer';
+  cropName: string;
+  banglaName: string;
+  category: 'Vegetables' | 'Tubers' | 'Grains' | 'Spices' | 'Fruits' | string;
+  variety?: string;
+  quantityKg: number;
+  availableKg: number;
+  minOrderKg?: number;
+  pricePerKg: number;
+  marketPricePerKg?: number;
+  qualityGrade: 'A' | 'B' | 'C';
+  district: string;
+  upazila?: string;
+  locationDetails?: string;
+  harvestStatus: string;
+  availableDate?: string;
+  organicCertified: boolean;
+  imageUrl: string;
+  description?: string;
+  traceability?: {
+    farmerOrigin?: string;
+    wholesalerArat?: string;
+    procurementDate?: string;
+    safetyNote?: string;
+  };
+  createdAt: string;
+}
+
+// ─── WHOLESALER PURCHASE OFFER / CROP BID (Farmer-Only Intelligence) ────
+export interface WholesalerOffer {
+  id: string;
+  wholesalerId: string;
+  wholesalerName: string;
+  wholesalerPhone: string;
+  businessName: string;
+  cropName: string;
+  cropBangla: string;
+  quantityKgNeeded: number;
+  fulfilledKg: number;
+  offeredPricePerKg: number;
+  district: string;
+  upazila?: string;
+  location: string;
+  deadline: string;
+  urgent: boolean;
+  verified: boolean;
+  notes?: string;
+  createdAt: string;
+}
+
+// ─── STRICT SUPPLY CHAIN ORDER ──────────────────────────────────────────
+export interface SupplyChainOrder {
+  id: string;
+  orderType: 'farmer_to_wholesaler' | 'wholesaler_to_retailer' | 'retailer_to_consumer';
+  buyerId?: string;
+  buyerName: string;
+  buyerPhone: string;
+  buyerEmail?: string;
+  buyerRole: 'wholesaler' | 'retailer' | 'consumer';
+  sellerId: string;
+  sellerName: string;
+  sellerPhone?: string;
+  sellerRole: 'farmer' | 'wholesaler' | 'retailer';
+  items: Array<{
+    productId: string;
+    cropName: string;
+    banglaName: string;
+    quantityKg: number;
+    unitPrice: number;
+    subtotal: number;
+  }>;
+  totalBDT: number;
+  paymentMethod: 'bKash' | 'Nagad' | 'Cash on Delivery' | 'Escrow Guarantee' | 'Bank Transfer';
+  paymentStatus: 'Pending' | 'Escrow Held' | 'Paid' | 'Refunded';
+  deliveryStatus: 'Confirmed' | 'Processing' | 'Dispatched' | 'Delivered' | 'Cancelled';
+  status?: 'Confirmed' | 'Processing' | 'Dispatched' | 'Delivered' | 'Cancelled' | 'Pending';
+  deliveryAddress: string;
+  district: string;
+  trackingCode: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
 // ─── CUSTOMER PRODUCT ────────────────────────────────────────────────────
 export interface CustomerProduct {
   id: string;
@@ -147,13 +255,23 @@ export interface CustomerProduct {
   pricePerKg: number;
   marketPricePerKg: number;
   availableKg: number;
-  harvestStatus: 'Harvested Today' | 'Pre-Order: Harvests in 3 Days' | 'Farm Fresh';
+  harvestStatus: 'Harvested Today' | 'Pre-Order: Harvests in 3 Days' | 'Farm Fresh' | string;
   imageUrl: string;
   organicCertified: boolean;
-  farmerCutPercent: number;
+  farmerCutPercent?: number;
   qualityGrade?: 'A' | 'B' | 'C';
   rating?: number;
   reviewCount?: number;
+  sellerRole?: 'farmer' | 'wholesaler' | 'retailer';
+  targetRole?: 'wholesaler' | 'retailer' | 'consumer';
+  category?: string;
+  description?: string;
+  traceability?: {
+    farmerOrigin?: string;
+    wholesalerArat?: string;
+    procurementDate?: string;
+    safetyNote?: string;
+  };
 }
 
 // ─── CART & ORDER ────────────────────────────────────────────────────────

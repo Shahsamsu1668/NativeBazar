@@ -10,7 +10,7 @@ import {
 import { NotificationStore, MessageStore } from '../data/store';
 
 interface HeaderProps {
-  currentUser: User;
+  currentUser: User | null;
   language: Language;
   onLanguageToggle: () => void;
   selectedDistrict: string;
@@ -22,27 +22,30 @@ interface HeaderProps {
   cartCount: number;
   onLogout: () => void;
   onOpenProfile?: () => void;
+  onOpenAuth?: () => void;
   theme?: Theme;
   onThemeToggle?: () => void;
 }
 
 const ROLE_CONFIG: Record<UserRole, { icon: React.ReactNode; color: string; labelEn: string; labelBn: string; badgeBg: string }> = {
   farmer:      { icon: <Sprout className="w-3.5 h-3.5" />,       color: 'text-emerald-700', labelEn: 'Farmer',      labelBn: 'কৃষক',          badgeBg: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
-  businessman: { icon: <Briefcase className="w-3.5 h-3.5" />,    color: 'text-blue-700',    labelEn: 'Trader/Buyer', labelBn: 'ব্যবসায়ী',      badgeBg: 'bg-blue-100 text-blue-800 border-blue-200' },
-  supplier:    { icon: <Store className="w-3.5 h-3.5" />,        color: 'text-amber-700',   labelEn: 'Supplier',    labelBn: 'সরবরাহকারী',    badgeBg: 'bg-amber-100 text-amber-800 border-amber-200' },
-  customer:    { icon: <ShoppingCart className="w-3.5 h-3.5" />, color: 'text-purple-700',  labelEn: 'Consumer',    labelBn: 'ভোক্তা',        badgeBg: 'bg-purple-100 text-purple-800 border-purple-200' },
+  wholesaler:  { icon: <Briefcase className="w-3.5 h-3.5" />,    color: 'text-blue-700',    labelEn: 'Wholesaler',   labelBn: 'পাইকার',        badgeBg: 'bg-blue-100 text-blue-800 border-blue-200' },
+  retailer:    { icon: <Store className="w-3.5 h-3.5" />,        color: 'text-amber-700',   labelEn: 'Retailer',     labelBn: 'খুচরা বিক্রেতা', badgeBg: 'bg-amber-100 text-amber-800 border-amber-200' },
+  consumer:    { icon: <ShoppingCart className="w-3.5 h-3.5" />, color: 'text-purple-700',  labelEn: 'Consumer',     labelBn: 'ভোক্তা',        badgeBg: 'bg-purple-100 text-purple-800 border-purple-200' },
+  businessman: { icon: <Briefcase className="w-3.5 h-3.5" />,    color: 'text-blue-700',    labelEn: 'Wholesaler',   labelBn: 'পাইকার',        badgeBg: 'bg-blue-100 text-blue-800 border-blue-200' },
+  supplier:    { icon: <Store className="w-3.5 h-3.5" />,        color: 'text-amber-700',   labelEn: 'Retailer',     labelBn: 'খুচরা বিক্রেতা', badgeBg: 'bg-amber-100 text-amber-800 border-amber-200' },
+  customer:    { icon: <ShoppingCart className="w-3.5 h-3.5" />, color: 'text-purple-700',  labelEn: 'Consumer',     labelBn: 'ভোক্তা',        badgeBg: 'bg-purple-100 text-purple-800 border-purple-200' },
   expert:      { icon: <Microscope className="w-3.5 h-3.5" />,   color: 'text-teal-700',    labelEn: 'Agri Expert', labelBn: 'কৃষি বিশেষজ্ঞ', badgeBg: 'bg-teal-100 text-teal-800 border-teal-200' },
   admin:       { icon: <ShieldCheck className="w-3.5 h-3.5" />,  color: 'text-slate-800',   labelEn: 'Admin',       labelBn: 'অ্যাডমিন',      badgeBg: 'bg-slate-200 text-slate-800 border-slate-300' },
 };
 
 const NAV_ITEMS: Array<{ id: ActiveView; icon: React.ReactNode; labelEn: string; labelBn: string; roles?: UserRole[] }> = [
-  { id: 'dashboard',    icon: <Sprout className="w-4 h-4" />,    labelEn: 'Dashboard',    labelBn: 'ড্যাশবোর্ড' },
-  { id: 'market_rates', icon: <TrendingUp className="w-4 h-4" />,labelEn: 'Market Rates', labelBn: 'বাজার দর' },
-  { id: 'weather',      icon: <Cloud className="w-4 h-4" />,     labelEn: 'Weather',      labelBn: 'আবহাওয়া' },
-  { id: 'orders',       icon: <Package className="w-4 h-4" />,   labelEn: 'Orders & Settlements', labelBn: 'অর্ডার ও লেনদেন', roles: ['customer', 'farmer', 'businessman', 'supplier'] },
-  { id: 'contacts',     icon: <Users className="w-4 h-4" />,      labelEn: 'Contacts & Network', labelBn: 'যোগাযোগ ও নেটওয়ার্ক' },
-  { id: 'bulletins',    icon: <FileText className="w-4 h-4" />,   labelEn: 'Bulletins', labelBn: 'বুলেটিন', roles: ['farmer', 'customer', 'supplier', 'expert'] },
-  { id: 'ledger',       icon: <Wallet className="w-4 h-4" />,    labelEn: 'Ledger',       labelBn: 'লেজার', roles: ['farmer'] },
+  { id: 'dashboard',    icon: <Sprout className="w-4 h-4" />,    labelEn: 'Marketplace',  labelBn: 'মার্কেটপ্লেস' },
+  { id: 'market_rates', icon: <TrendingUp className="w-4 h-4" />,labelEn: 'DAM Market Rates', labelBn: 'বাজার দর', roles: ['farmer'] },
+  { id: 'weather',      icon: <Cloud className="w-4 h-4" />,     labelEn: 'Agro Weather', labelBn: 'আবহাওয়া', roles: ['farmer'] },
+  { id: 'orders',       icon: <Package className="w-4 h-4" />,   labelEn: 'Orders & Trades', labelBn: 'অর্ডার ও লেনদেন', roles: ['farmer', 'wholesaler', 'retailer', 'consumer', 'businessman', 'supplier', 'customer'] },
+  { id: 'contacts',     icon: <Users className="w-4 h-4" />,      labelEn: 'Trade Network', labelBn: 'যোগাযোগ ও নেটওয়ার্ক', roles: ['farmer', 'wholesaler', 'retailer', 'businessman', 'supplier'] },
+  { id: 'ledger',       icon: <Wallet className="w-4 h-4" />,    labelEn: 'Farm Ledger',  labelBn: 'লেজার', roles: ['farmer'] },
 ];
 
 export const Header: React.FC<HeaderProps> = ({
@@ -50,7 +53,7 @@ export const Header: React.FC<HeaderProps> = ({
   selectedDistrict, onDistrictChange,
   onOpenCropDoctor, onOpenVoiceAssistant,
   activeView, onViewChange, cartCount, onLogout,
-  onOpenProfile, theme = 'light', onThemeToggle,
+  onOpenProfile, onOpenAuth, theme = 'light', onThemeToggle,
 }) => {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifs, setShowNotifs] = useState(false);
@@ -60,8 +63,8 @@ export const Header: React.FC<HeaderProps> = ({
 
   const unread = NotificationStore.unreadCount();
   const notifs = NotificationStore.getAll().slice(0, 8);
-  const role   = currentUser.role;
-  const config = ROLE_CONFIG[role] || ROLE_CONFIG.farmer;
+  const role: UserRole = currentUser ? currentUser.role : 'consumer';
+  const config = ROLE_CONFIG[role] || ROLE_CONFIG.consumer;
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -230,27 +233,29 @@ export const Header: React.FC<HeaderProps> = ({
               )}
             </div>
 
-            {/* Quick Direct Messages / Contacts Button */}
-            <button
-              onClick={() => onViewChange('contacts')}
-              className={`relative w-8 h-8 flex items-center justify-center rounded-lg transition-colors border ${
-                activeView === 'contacts'
-                  ? 'bg-emerald-700 text-white border-emerald-800'
-                  : 'bg-stone-100 hover:bg-stone-200 text-stone-700 border-stone-200'
-              }`}
-              title={t('Messages & Contacts', 'বার্তা ও যোগাযোগ')}
-              aria-label={t('Messages & Contacts', 'বার্তা ও যোগাযোগ')}
-            >
-              <MessageSquare className="w-4 h-4" />
-              {MessageStore.getUnreadCount(currentUser.id) > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-600 text-white text-[9px] font-black rounded-full flex items-center justify-center border border-white animate-pulse">
-                  {MessageStore.getUnreadCount(currentUser.id) > 9 ? '9+' : MessageStore.getUnreadCount(currentUser.id)}
-                </span>
-              )}
-            </button>
+            {/* Quick Direct Messages / Contacts Button (For registered traders) */}
+            {currentUser && role !== 'consumer' && (
+              <button
+                onClick={() => onViewChange('contacts')}
+                className={`relative w-8 h-8 flex items-center justify-center rounded-lg transition-colors border ${
+                  activeView === 'contacts'
+                    ? 'bg-emerald-700 text-white border-emerald-800'
+                    : 'bg-stone-100 hover:bg-stone-200 text-stone-700 border-stone-200'
+                }`}
+                title={t('Messages & Contacts', 'বার্তা ও যোগাযোগ')}
+                aria-label={t('Messages & Contacts', 'বার্তা ও যোগাযোগ')}
+              >
+                <MessageSquare className="w-4 h-4" />
+                {MessageStore.getUnreadCount(currentUser.id) > 0 && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-600 text-white text-[9px] font-black rounded-full flex items-center justify-center border border-white animate-pulse">
+                    {MessageStore.getUnreadCount(currentUser.id) > 9 ? '9+' : MessageStore.getUnreadCount(currentUser.id)}
+                  </span>
+                )}
+              </button>
+            )}
 
-            {/* Cart Badge */}
-            {role === 'customer' && cartCount > 0 && (
+            {/* Cart Badge (Visible for consumers or guests) */}
+            {cartCount > 0 && (
               <button
                 onClick={() => onViewChange('dashboard')}
                 className="relative flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-xs font-bold rounded-lg hover:bg-purple-700 transition-colors shadow-2xs"
@@ -261,55 +266,65 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             )}
 
-            {/* User Menu */}
-            <div className="relative" ref={userRef}>
-              <button
-                onClick={() => { setShowUserMenu(v => !v); setShowNotifs(false); }}
-                className="flex items-center gap-2 pl-2 pr-2.5 py-1.5 bg-stone-100 hover:bg-stone-200 rounded-lg border border-stone-200 transition-colors"
-                aria-label={t('User profile menu', 'ব্যবহারকারী প্রোফাইল')}
-              >
-                <div className="w-6 h-6 rounded-md bg-stone-800 text-white flex items-center justify-center text-xs font-bold shrink-0">
-                  {currentUser.name.charAt(0)}
-                </div>
-                <div className="text-left hidden lg:block">
-                  <p className="text-xs font-bold text-stone-800 leading-none">{currentUser.name.split(' ')[0]}</p>
-                  <p className="text-[10px] text-stone-500 leading-none mt-0.5">{t(config.labelEn, config.labelBn)}</p>
-                </div>
-                <ChevronDown className="w-3 h-3 text-stone-400" />
-              </button>
+            {/* User Menu or Sign In Button */}
+            {currentUser ? (
+              <div className="relative" ref={userRef}>
+                <button
+                  onClick={() => { setShowUserMenu(v => !v); setShowNotifs(false); }}
+                  className="flex items-center gap-2 pl-2 pr-2.5 py-1.5 bg-stone-100 hover:bg-stone-200 rounded-lg border border-stone-200 transition-colors"
+                  aria-label={t('User profile menu', 'ব্যবহারকারী প্রোফাইল')}
+                >
+                  <div className="w-6 h-6 rounded-md bg-stone-800 text-white flex items-center justify-center text-xs font-bold shrink-0">
+                    {currentUser.name.charAt(0)}
+                  </div>
+                  <div className="text-left hidden lg:block">
+                    <p className="text-xs font-bold text-stone-800 leading-none">{currentUser.name.split(' ')[0]}</p>
+                    <p className="text-[10px] text-stone-500 leading-none mt-0.5">{t(config.labelEn, config.labelBn)}</p>
+                  </div>
+                  <ChevronDown className="w-3 h-3 text-stone-400" />
+                </button>
 
-              {showUserMenu && (
-                <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-xl border border-stone-200 overflow-hidden animate-slide-down z-50">
-                  <div className="px-4 py-3 bg-stone-50 border-b border-stone-200">
-                    <p className="font-bold text-stone-900 text-xs">{currentUser.name}</p>
-                    <p className="text-[11px] text-stone-500 font-mono mt-0.5">{currentUser.phone}</p>
-                    <span className={`inline-flex items-center gap-1 mt-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full border ${config.badgeBg}`}>
-                      {config.icon}
-                      {t(config.labelEn, config.labelBn)}
-                    </span>
+                {showUserMenu && (
+                  <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-xl border border-stone-200 overflow-hidden animate-slide-down z-50">
+                    <div className="px-4 py-3 bg-stone-50 border-b border-stone-200">
+                      <p className="font-bold text-stone-900 text-xs">{currentUser.name}</p>
+                      <p className="text-[11px] text-stone-500 font-mono mt-0.5">{currentUser.phone}</p>
+                      <span className={`inline-flex items-center gap-1 mt-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full border ${config.badgeBg}`}>
+                        {config.icon}
+                        {t(config.labelEn, config.labelBn)}
+                      </span>
+                    </div>
+                    <div className="p-1.5 space-y-0.5">
+                      <button
+                        onClick={() => {
+                          if (onOpenProfile) onOpenProfile();
+                          setShowUserMenu(false);
+                        }}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-stone-700 hover:bg-stone-50 rounded-lg text-xs font-semibold transition-colors"
+                      >
+                        <UserIcon className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>{t('View & Edit Profile', 'প্রোফাইল দেখুন')}</span>
+                      </button>
+                      <button
+                        onClick={() => { onLogout(); setShowUserMenu(false); }}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg text-xs font-semibold transition-colors"
+                      >
+                        <LogOut className="w-3.5 h-3.5" />
+                        <span>{t('Sign Out', 'লগআউট')}</span>
+                      </button>
+                    </div>
                   </div>
-                  <div className="p-1.5 space-y-0.5">
-                    <button
-                      onClick={() => {
-                        if (onOpenProfile) onOpenProfile();
-                        setShowUserMenu(false);
-                      }}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-stone-700 hover:bg-stone-50 rounded-lg text-xs font-semibold transition-colors"
-                    >
-                      <UserIcon className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>{t('View & Edit Profile', 'প্রোফাইল দেখুন')}</span>
-                    </button>
-                    <button
-                      onClick={() => { onLogout(); setShowUserMenu(false); }}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg text-xs font-semibold transition-colors"
-                    >
-                      <LogOut className="w-3.5 h-3.5" />
-                      <span>{t('Sign Out', 'লগআউট')}</span>
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            ) : (
+              <button
+                onClick={onOpenAuth}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold transition-all shadow-xs"
+              >
+                <UserIcon className="w-3.5 h-3.5" />
+                <span>{t('Sign In / Register', 'লগইন / নিবন্ধন')}</span>
+              </button>
+            )}
           </div>
 
           {/* Mobile hamburger button */}
@@ -358,15 +373,25 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Mobile Drawer */}
       {mobileMenuOpen && (
         <div className="md:hidden bg-white border-t border-stone-200 p-4 space-y-3 animate-slide-down">
-          <div className="flex items-center gap-2 p-3 bg-stone-50 rounded-xl">
-            <div className="w-8 h-8 rounded-lg bg-stone-900 text-white flex items-center justify-center text-xs font-bold">
-              {currentUser.name.charAt(0)}
+          {currentUser ? (
+            <div className="flex items-center gap-2 p-3 bg-stone-50 rounded-xl">
+              <div className="w-8 h-8 rounded-lg bg-stone-900 text-white flex items-center justify-center text-xs font-bold">
+                {currentUser.name.charAt(0)}
+              </div>
+              <div>
+                <p className="font-bold text-stone-900 text-xs">{currentUser.name}</p>
+                <p className="text-[11px] text-stone-500">{t(config.labelEn, config.labelBn)} • {currentUser.district}</p>
+              </div>
             </div>
-            <div>
-              <p className="font-bold text-stone-900 text-xs">{currentUser.name}</p>
-              <p className="text-[11px] text-stone-500">{t(config.labelEn, config.labelBn)} • {currentUser.district}</p>
-            </div>
-          </div>
+          ) : (
+            <button
+              onClick={() => { if (onOpenAuth) onOpenAuth(); setMobileMenuOpen(false); }}
+              className="w-full py-2.5 bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2"
+            >
+              <UserIcon className="w-4 h-4" />
+              <span>{t('Sign In / Register', 'লগইন / নিবন্ধন')}</span>
+            </button>
+          )}
 
           <div className="grid grid-cols-2 gap-2">
             <button
@@ -405,12 +430,14 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           </div>
 
-          <button
-            onClick={() => { onLogout(); setMobileMenuOpen(false); }}
-            className="w-full flex items-center justify-center gap-2 p-2 bg-red-50 text-red-700 rounded-lg text-xs font-bold hover:bg-red-100 transition-colors"
-          >
-            <LogOut className="w-4 h-4" /> {t('Sign Out', 'লগআউট')}
-          </button>
+          {currentUser && (
+            <button
+              onClick={() => { onLogout(); setMobileMenuOpen(false); }}
+              className="w-full flex items-center justify-center gap-2 p-2 bg-red-50 text-red-700 rounded-lg text-xs font-bold hover:bg-red-100 transition-colors"
+            >
+              <LogOut className="w-4 h-4" /> {t('Sign Out', 'লগআউট')}
+            </button>
+          )}
         </div>
       )}
     </header>

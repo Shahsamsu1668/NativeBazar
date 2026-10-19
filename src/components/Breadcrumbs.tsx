@@ -26,9 +26,12 @@ const VIEW_TITLES: Record<ActiveView, { en: string; bn: string }> = {
 
 const ROLE_TITLES: Record<UserRole, { en: string; bn: string }> = {
   farmer: { en: 'Farmer Hub', bn: 'কৃষক হাব' },
+  wholesaler: { en: 'Wholesale Arat Hub', bn: 'পাইকারি আড়ত হাব' },
+  retailer: { en: 'Retailer Store Hub', bn: 'খুচরা বিক্রেতা হাব' },
+  consumer: { en: 'Fresh Consumer Marketplace', bn: 'ভোক্তা বাজার' },
   businessman: { en: 'Wholesale Buyer Hub', bn: 'পাইকারি ট্রেডার হাব' },
-  supplier: { en: 'Agro Supplier Hub', bn: 'উপকরণ ডিলার হাব' },
-  customer: { en: 'Fresh Marketplace', bn: 'ভোক্তা বাজার' },
+  supplier: { en: 'Retailer Store Hub', bn: 'খুচরা বিক্রেতা হাব' },
+  customer: { en: 'Fresh Consumer Marketplace', bn: 'ভোক্তা বাজার' },
   expert: { en: 'Agronomy Expert Hub', bn: 'কৃষি বিশেষজ্ঞ হাব' },
   admin: { en: 'Central Admin Telemetry', bn: 'প্রশাসন কন্ট্রোল সেন্টার' },
 };
