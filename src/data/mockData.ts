@@ -67,17 +67,278 @@ export const BANGLADESH_LOCATIONS: Array<{
   },
 ];
 
-// Pure genuine initialization — NO fake demo accounts or exposed credentials
+// ─── INITIAL USERS (Zero demo accounts: real registration required) ─────────
 export const INITIAL_USERS: User[] = [];
 
-// Empty initial mock data — real genuine users publish actual listings
-export const INITIAL_CROP_LISTINGS: CropListing[] = [];
-export const INITIAL_BUSINESS_DEMANDS: BusinessDemand[] = [];
-export const INITIAL_SUPPLIER_PRODUCTS: SupplierProduct[] = [];
+// ─── ROLE LABELS & SECURITY DESCRIPTIONS (NO DEFAULT/DEMO PASSWORDS) ────────
+export const ROLE_METADATA: Record<string, {
+  roleLabelEn: string;
+  roleLabelBn: string;
+  securityNoteEn: string;
+  securityNoteBn: string;
+}> = {
+  farmer: {
+    roleLabelEn: 'Farmer',
+    roleLabelBn: 'কৃষক',
+    securityNoteEn: 'List crops, review verified wholesale purchase offers, and access market intelligence.',
+    securityNoteBn: 'ফসল তালিকাভুক্তকরণ, যাচাইকৃত পাইকারি দরপ্রস্তাব ও বাজার তথ্য পর্যবেক্ষণ।',
+  },
+  wholesaler: {
+    roleLabelEn: 'Wholesaler',
+    roleLabelBn: 'পাইকার / আড়তদার',
+    securityNoteEn: 'Procure agricultural harvest directly from farmers and supply wholesale lots to retailers.',
+    securityNoteBn: 'কৃষকের কাছ থেকে সরাসরি ফসল ক্রয় ও খুচরা বিক্রেতাদের কাছে পাইকারি সরবরাহ।',
+  },
+  retailer: {
+    roleLabelEn: 'Retailer',
+    roleLabelBn: 'খুচরা বিক্রেতা',
+    securityNoteEn: 'Procure wholesale lots and sell fresh produce to consumers at retail prices.',
+    securityNoteBn: 'পাইকারি আড়ত থেকে পণ্য সংগ্রহ এবং ভোক্তাদের কাছে খুচরা মূল্যে বিক্রি।',
+  },
+  consumer: {
+    roleLabelEn: 'Consumer',
+    roleLabelBn: 'ভোক্তা',
+    securityNoteEn: 'Fresh authentic agricultural products delivered directly with transparent traceability.',
+    securityNoteBn: 'নিরাপদ তাজা কৃষিপণ্য সরাসরি সংগ্রহ ও সরবরাহ যাচাইকরণ।',
+  },
+  admin: {
+    roleLabelEn: 'Central Admin',
+    roleLabelBn: 'সিস্টেম অ্যাডমিন',
+    securityNoteEn: 'Authorized platform governance and administrative controls only.',
+    securityNoteBn: 'অনুমোদিত কেন্দ্রীয় প্ল্যাটফর্ম প্রশাসন ও মনিটরিং ব্যবস্থা।',
+  },
+};
+
+// Deprecated empty demo credentials for backwards compatibility
+export const DEMO_CREDENTIALS: Record<string, any> = {};
+
+// Empty initial arrays for backwards compatibility
 export const INITIAL_TRADE_ORDERS: TradeOrder[] = [];
 export const INITIAL_CUSTOMER_PRODUCTS: CustomerProduct[] = [];
 export const INITIAL_AI_MATCHES: AIMatchItem[] = [];
 export const INITIAL_AGRO_ADVISORIES: AgroAdvisory[] = [];
+
+// ─── CROP LISTINGS ────────────────────────────────────────────────────────
+export const INITIAL_CROP_LISTINGS: CropListing[] = [
+  {
+    id: 'crop-101',
+    farmerId: 'f-1',
+    farmerName: 'Md. Rafiqul Islam',
+    farmerPhone: '+880 1712-458920',
+    district: 'Bogura',
+    upazila: 'Shibganj',
+    cropName: 'Hybrid Tomatoes (Bijli Plus)',
+    cropBangla: 'হাইব্রিড বিজলি প্লাস টমেটো',
+    variety: 'Bijli Plus F1',
+    quantityKg: 500,
+    availableDate: 'Ready in 10 days (Oct 22)',
+    expectedPricePerKg: 38,
+    marketBenchmarkPrice: 42,
+    status: 'Growing',
+    imageUrl: 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=600&auto=format&fit=crop&q=80',
+    fertilizerNeeded: ['Muriate of Potash (MOP)', 'Mancozeb 75 WP'],
+    matchedBuyersCount: 3,
+    forwardContractOffer: {
+      buyerName: 'Karwan Bazar Syndicate',
+      offeredPrice: 40,
+      escrowAmountBDT: 20000,
+    },
+    qualityGrade: 'A',
+    organicCertified: false,
+    qrCode: 'NB-BGR-SHIB-2024-001',
+    createdAt: '2024-10-01T08:00:00.000Z',
+  },
+  {
+    id: 'crop-102',
+    farmerId: 'f-2',
+    farmerName: 'Abul Kashem Mondol',
+    farmerPhone: '+880 1823-991204',
+    district: 'Bogura',
+    upazila: 'Sherpur',
+    cropName: 'Diamond Fresh Potatoes',
+    cropBangla: 'ডায়মন্ড আলু',
+    variety: 'Diamond Holland Grade',
+    quantityKg: 2000,
+    availableDate: 'Ready to Harvest',
+    expectedPricePerKg: 28,
+    marketBenchmarkPrice: 31,
+    status: 'Ready to Harvest',
+    imageUrl: 'https://images.unsplash.com/photo-1518977676601-b53f82aba655?w=600&auto=format&fit=crop&q=80',
+    fertilizerNeeded: ['DAP', 'Urea'],
+    matchedBuyersCount: 5,
+    forwardContractOffer: {
+      buyerName: 'Pran Agro Foods',
+      offeredPrice: 29.5,
+      escrowAmountBDT: 59000,
+    },
+    qualityGrade: 'A',
+    organicCertified: false,
+    qrCode: 'NB-BGR-SHER-2024-002',
+    createdAt: '2024-09-20T08:00:00.000Z',
+  },
+  {
+    id: 'crop-103',
+    farmerId: 'f-1',
+    farmerName: 'Md. Rafiqul Islam',
+    farmerPhone: '+880 1712-458920',
+    district: 'Bogura',
+    upazila: 'Shibganj',
+    cropName: 'Bindu Green Chilies',
+    cropBangla: 'বিন্দু কাঁচা মরিচ',
+    variety: 'Bindu Hybrid Pungent',
+    quantityKg: 300,
+    availableDate: 'Ready in 5 days (Oct 17)',
+    expectedPricePerKg: 85,
+    marketBenchmarkPrice: 92,
+    status: 'Growing',
+    imageUrl: 'https://images.unsplash.com/photo-1588252303782-cb80119abd6d?w=600&auto=format&fit=crop&q=80',
+    fertilizerNeeded: ['Zinc Sulphate', 'Bio-Compost'],
+    matchedBuyersCount: 2,
+    qualityGrade: 'A',
+    organicCertified: true,
+    qrCode: 'NB-BGR-SHIB-2024-003',
+    createdAt: '2024-10-05T08:00:00.000Z',
+  },
+];
+
+// ─── BUSINESS DEMANDS ─────────────────────────────────────────────────────
+export const INITIAL_BUSINESS_DEMANDS: BusinessDemand[] = [
+  {
+    id: 'dem-201',
+    buyerId: 'b-1',
+    businessName: 'Karwan Bazar Wholesale Arat Syndicate',
+    businessType: 'Wholesaler',
+    contactPerson: 'Haji Nurul Alam',
+    phone: '+880 1711-209934',
+    cropNeeded: 'Hybrid Tomatoes (Firm Red)',
+    cropBangla: 'পাকা শক্ত হাইব্রিড টমেটো',
+    quantityKgNeeded: 5000,
+    fulfilledKg: 2200,
+    targetPricePerKg: 40,
+    deliveryDeadline: 'Within 12 days (Oct 24)',
+    district: 'Bogura Mahasthangarh',
+    urgent: true,
+    notes: 'Grade A tomatoes needed for wholesale dispatch to Dhaka. Advance token payment via escrow.',
+    createdAt: '2024-10-08T06:00:00.000Z',
+  },
+  {
+    id: 'dem-202',
+    buyerId: 'b-2',
+    businessName: 'Shwapno Agro Direct Sourcing Hub',
+    businessType: 'Supermarket',
+    contactPerson: 'Engr. Tanvir Ahmed',
+    phone: '+880 1755-667788',
+    cropNeeded: 'Diamond Potato (Sorted & Graded)',
+    cropBangla: 'বাছাইকৃত ডায়মন্ড আলু',
+    quantityKgNeeded: 10000,
+    fulfilledKg: 4500,
+    targetPricePerKg: 29.5,
+    deliveryDeadline: 'Within 7 days (Oct 19)',
+    district: 'Bogura Sadar / Sherpur',
+    urgent: false,
+    notes: 'Premium graded 50mm+ tuber size potatoes for retail chain packaging.',
+    createdAt: '2024-10-05T09:00:00.000Z',
+  },
+];
+
+// ─── SUPPLIER PRODUCTS ───────────────────────────────────────────────────
+export const INITIAL_SUPPLIER_PRODUCTS: SupplierProduct[] = [
+  {
+    id: 'sup-301',
+    supplierId: 's-1',
+    supplierName: 'Meghna Fertilizer & Pesticide Depot',
+    shopName: 'যমুনা ও মেঘনা সার বিতান (শিবগঞ্জ বাজার)',
+    category: 'Fertilizer',
+    name: 'MOP Fertilizer (Muriate of Potash)',
+    banglaName: 'মিউরেট অব পটাশ (এমওপি সার)',
+    brand: 'Govt. Subsidized / BCIC',
+    unitPriceBDT: 22,
+    unit: 'kg (50kg sack = ৳1,100)',
+    inStock: true,
+    stockQty: 200,
+    distanceKm: 3.2,
+    rating: 4.8,
+    phone: '+880 1715-889900',
+    suitableCrops: ['Tomato', 'Potato', 'Vegetables'],
+    description: 'Government subsidized MOP potassium fertilizer at official rates. Essential for fruit development.',
+  },
+  {
+    id: 'sup-302',
+    supplierId: 's-1',
+    supplierName: 'Meghna Fertilizer & Pesticide Depot',
+    shopName: 'যমুনা ও মেঘনা সার বিতান (শিবগঞ্জ বাজার)',
+    category: 'Pesticide',
+    name: 'Mancozeb 75 WP Fungicide (Dithane M-45)',
+    banglaName: 'ম্যানকোজেব ৭৫ ডব্লিউপি ছত্রাকনাশক',
+    brand: 'Indofil / Bayer',
+    unitPriceBDT: 320,
+    unit: '500g packet',
+    inStock: true,
+    stockQty: 80,
+    distanceKm: 3.2,
+    rating: 4.9,
+    phone: '+880 1715-889900',
+    suitableCrops: ['Tomato', 'Potato', 'Vegetables'],
+    description: 'Broad-spectrum contact fungicide proven against Early and Late Blight disease in solanaceous crops.',
+  },
+  {
+    id: 'sup-303',
+    supplierId: 's-1',
+    supplierName: 'Bogura Krishi Seba Seed Center',
+    shopName: 'বগুড়া কৃষি সেবা বীজ ভাণ্ডার',
+    category: 'Seeds',
+    name: 'Bijli Plus F1 Hybrid Tomato Seeds',
+    banglaName: 'বিজলি প্লাস হাইব্রিড টমেটো বীজ',
+    brand: 'Lal Teer Seed Ltd.',
+    unitPriceBDT: 480,
+    unit: '10g seed packet',
+    inStock: true,
+    stockQty: 50,
+    distanceKm: 4.5,
+    rating: 4.9,
+    phone: '+880 1812-334411',
+    suitableCrops: ['Tomato'],
+    description: 'High-yielding F1 hybrid tomato variety. Disease resistant, ideal for Bogura climate.',
+  },
+  {
+    id: 'sup-304',
+    supplierId: 's-1',
+    supplierName: 'Green Bio-Agro Organic Hub',
+    shopName: 'গ্রিন বায়ো-অর্গানিক ভার্মিকম্পোস্ট',
+    category: 'Organic',
+    name: 'Pure Vermicompost (Earthworm Fertilizer)',
+    banglaName: '১০০% খাঁটি কেঁচো সার (ভার্মিকম্পোস্ট)',
+    brand: 'Bogura Bio-Soil',
+    unitPriceBDT: 14,
+    unit: 'kg (40kg bag = ৳560)',
+    inStock: true,
+    stockQty: 500,
+    distanceKm: 2.1,
+    rating: 4.7,
+    phone: '+880 1915-667722',
+    suitableCrops: ['Tomato', 'Cauliflower', 'Potato', 'Chili'],
+    description: 'Certified 100% pure organic vermicompost enriched with nitrogen, phosphorus and micronutrients.',
+  },
+  {
+    id: 'sup-305',
+    supplierId: 's-1',
+    supplierName: 'North-Bengal Agro Machinery Depot',
+    shopName: 'উত্তরবঙ্গ কৃষি যন্ত্রপাতি বিতান',
+    category: 'Machinery',
+    name: 'Electric Battery Knapsack Sprayer (16 Liters)',
+    banglaName: 'ব্যাটারি চালিত ন্যাপস্যাক স্প্রেয়ার (১৬ লিটার)',
+    brand: 'Dongcheng Pro Agri',
+    unitPriceBDT: 2850,
+    unit: 'piece',
+    inStock: true,
+    stockQty: 12,
+    distanceKm: 5.4,
+    rating: 4.8,
+    phone: '+880 1719-880011',
+    suitableCrops: ['All crops'],
+    description: 'Rechargeable 12V battery sprayer with 4-hour runtime. Minimizes labor and ensures even pesticide/fertilizer spray.',
+  },
+];
 
 // ─── DAILY LOCATION-BASED REAL MARKET RATES (DAM BANGLADESH BENCHMARKS) ─────
 export const INITIAL_MARKET_RATES: MarketRate[] = [

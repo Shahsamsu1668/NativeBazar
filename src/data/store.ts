@@ -119,17 +119,41 @@ function setItem<T>(key: string, value: T): void {
 
 // ─── INITIALIZE (runs once, purges all demo accounts, preserves genuine users) ─────
 export function initializeStore(): void {
-  const STORE_VERSION = 'v20_real_users_only';
+  const STORE_VERSION = 'v21_unified_secure';
 
   // 1. Purge demo user if currently logged in
   const currentUserRaw = getItem<User | null>(KEYS.CURRENT_USER, null);
-  if (currentUserRaw && isDemoAccount(currentUserRaw)) {
+  if (currentUserRaw && (isDemoAccount(currentUserRaw) || DEMO_USER_IDS.has(currentUserRaw.id))) {
     localStorage.removeItem(KEYS.CURRENT_USER);
+  }
+
+  // Always re-run if key changes (bump version to force re-init)
+  if (localStorage.getItem(KEYS.INITIALIZED) === STORE_VERSION) {
+    const currentUsers = getItem<User[]>(KEYS.USERS, []);
+    const filteredUsers = currentUsers.filter((u) => !isDemoAccount(u));
+    if (filteredUsers.length !== currentUsers.length) {
+      setItem(KEYS.USERS, filteredUsers);
+    }
+    return;
   }
 
   // 2. Clean existing stored users: preserve genuine users while purging all demo accounts
   const existingUsers = getItem<User[]>(KEYS.USERS, []);
-  const cleanGenuineUsers = existingUsers.filter((u) => !isDemoAccount(u));
+  const cleanGenuineUsers = existingUsers
+    .filter((u) => !isDemoAccount(u))
+    .map((u) => {
+      // Map legacy roles safely
+      let role = u.role;
+      if (role === 'businessman') role = 'wholesaler';
+      if (role === 'supplier') role = 'retailer';
+      if (role === 'customer') role = 'consumer';
+      return {
+        ...u,
+        role,
+        passwordHash: u.passwordHash || (u.password ? hashPassword(u.password) : undefined),
+      };
+    });
+
   setItem(KEYS.USERS, cleanGenuineUsers);
 
   // 3. Purge fake demo listings, orders, and mock data
@@ -191,11 +215,20 @@ export interface LoginResult {
 export const AuthStore = {
   getUsers: (): User[] => {
     let users = getItem<User[]>(KEYS.USERS, []);
-    // Filter out any stale demo or expert accounts
     users = users.filter((u) => !isDemoAccount(u));
-    return users;
-  },
 
+    return users.map((u) => {
+      let role = u.role;
+      if (role === 'businessman') role = 'wholesaler';
+      if (role === 'supplier') role = 'retailer';
+      if (role === 'customer') role = 'consumer';
+      return {
+        ...u,
+        role,
+        passwordHash: u.passwordHash || (u.password ? hashPassword(u.password) : undefined),
+      };
+    });
+  },
 
   getCurrentUser: (): User | null => {
     const user = getItem<User | null>(KEYS.CURRENT_USER, null);
@@ -213,8 +246,21 @@ export const AuthStore = {
     return user;
   },
 
-  setCurrentUser(user: User): void {
-    setItem(KEYS.CURRENT_USER, user);
+  setCurrentUser: (user: User | null): void => {
+    if (!user) {
+      localStorage.removeItem(KEYS.CURRENT_USER);
+    } else {
+      setItem(KEYS.CURRENT_USER, user);
+      // Ensure user is present in users array if not already present
+      const users = getItem<User[]>(KEYS.USERS, []);
+      const idx = users.findIndex((u) => u.id === user.id || u.phone === user.phone);
+      if (idx >= 0) {
+        users[idx] = { ...users[idx], ...user };
+        setItem(KEYS.USERS, users);
+      } else {
+        setItem(KEYS.USERS, [...users, user]);
+      }
+    }
   },
 
   getAuditLogs: (): LoginAuditLog[] =>
@@ -580,8 +626,7 @@ export const AuthStore = {
     const admin = users.find(
       (u) =>
         u.role === 'admin' &&
-        (cleanEmail === 'nativebazarsjs' ||
-          (u.email && u.email.toLowerCase() === cleanEmail) ||
+        ((u.email && u.email.toLowerCase() === cleanEmail) ||
           (u.phone && u.phone.toLowerCase() === cleanEmail) ||
           (cleanEmail.replace(/\D/g, '') && u.phone === cleanEmail.replace(/\D/g, '')))
     );

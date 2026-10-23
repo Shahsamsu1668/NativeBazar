@@ -7,16 +7,15 @@ import {
   SupplierProduct,
   CustomerProduct,
   CartItem,
-  CustomerOrder,
   AgroAdvisory,
   AIMatchItem,
   Theme,
+  normalizeRole,
 } from './types';
 import { INITIAL_MARKET_RATES } from './data/mockData';
 import {
   initializeStore,
   AuthStore,
-  OrderStore,
   CartStore,
   SupplierStore,
   CustomerProductStore,
@@ -30,10 +29,9 @@ import { Header } from './components/Header';
 import { AuthPage } from './components/AuthPage';
 import { AdminVerificationModal } from './components/AdminVerificationModal';
 import { FarmerDashboard } from './components/FarmerDashboard';
-import { BusinessmanDashboard } from './components/BusinessmanDashboard';
-import { SupplierDashboard } from './components/SupplierDashboard';
+import { WholesalerDashboard } from './components/WholesalerDashboard';
+import { RetailerDashboard } from './components/RetailerDashboard';
 import { CustomerMarketplace } from './components/CustomerMarketplace';
-import { ExpertDashboard } from './components/ExpertDashboard';
 import { AdminDashboard } from './components/AdminDashboard';
 import { MarketRatesView } from './components/MarketRatesView';
 import { WeatherView } from './components/WeatherView';
@@ -47,19 +45,10 @@ import { CallModal } from './components/CallModal';
 import { NoRoleAccountModal } from './components/NoRoleAccountModal';
 import { CreateRoleModal } from './components/CreateRoleModal';
 import { BulletinsPage } from './components/BulletinsPage';
-import {
-  CheckCircle2,
-  Sprout,
-  Briefcase,
-  Store,
-  ShoppingCart,
-  Microscope,
-  ShieldCheck,
-  Zap,
-} from 'lucide-react';
+import { CheckCircle2, ShieldCheck } from 'lucide-react';
 
 export default function App() {
-  // Ensure store is seeded once
+  // Ensure store is seeded once without demo users
   useEffect(() => {
     initializeStore();
   }, []);
@@ -75,20 +64,17 @@ export default function App() {
   const [selectedDistrict, setSelectedDistrict] = useState<string>('Bogura');
   const [activeView, setActiveView] = useState<ActiveView>('dashboard');
 
-  // Cart state persisted to CartStore
+  // Auth Modal State (When guest clicks Sign In / Register)
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
+
+  // Cart state
   const [cart, setCart] = useState<CartItem[]>(() => CartStore.get());
 
-  // Supplier & Customer products & Advisories & Matches
-  const [supplierProducts, setSupplierProducts] = useState<SupplierProduct[]>(() =>
-    SupplierStore.getAll()
-  );
-  const [customerProducts, setCustomerProducts] = useState<CustomerProduct[]>(() =>
-    CustomerProductStore.getAll()
-  );
-  const [agroAdvisories, setAgroAdvisories] = useState<AgroAdvisory[]>(() =>
-    AdvisoryStore.getAll()
-  );
-  const [aiMatches, setAiMatches] = useState<AIMatchItem[]>(() => MatchStore.getAll());
+  // Products & Matches
+  const [supplierProducts] = useState<SupplierProduct[]>(() => SupplierStore.getAll());
+  const [customerProducts] = useState<CustomerProduct[]>(() => CustomerProductStore.getAll());
+  const [agroAdvisories] = useState<AgroAdvisory[]>(() => AdvisoryStore.getAll());
+  const [aiMatches] = useState<AIMatchItem[]>(() => MatchStore.getAll());
 
   // Modals
   const [isCropDoctorOpen, setIsCropDoctorOpen] = useState(false);
@@ -96,13 +82,13 @@ export default function App() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
 
   // Individual user profile page navigation
-  const [viewedUser, setViewedUser] = useState<import('./types').User | null>(null);
+  const [viewedUser, setViewedUser] = useState<User | null>(null);
 
   // Contact & Calling state
   const [callingUser, setCallingUser] = useState<User | null>(null);
   const [initialChatUserId, setInitialChatUserId] = useState<string | null>(null);
 
-  // Multi-role account modals
+  // Multi-role account modals (restricted to 4 public roles)
   const [noRoleModalOpen, setNoRoleModalOpen] = useState(false);
   const [createRoleModalOpen, setCreateRoleModalOpen] = useState(false);
   const [roleToCreate, setRoleToCreate] = useState<UserRole | null>(null);
@@ -123,28 +109,34 @@ export default function App() {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  const currentRole = currentUser?.role || 'farmer';
+  // Normalized canonical role
+  const canonicalRole = currentUser ? normalizeRole(currentUser.role) : 'consumer';
 
-  // Role switching — checks if current user has an account for that role
+  // Role switching — only allows the 4 public roles or admin
   const switchRole = (newRole: UserRole) => {
-    if (newRole === currentUser?.role) return; // already on this role
+    if (!currentUser) {
+      setIsAuthOpen(true);
+      return;
+    }
 
-    const identifier = currentUser?.email || currentUser?.phone || '';
-    const hasAccount = AuthStore.hasRoleAccount(identifier, newRole);
+    const normNewRole = normalizeRole(newRole);
+    if (normNewRole === canonicalRole) return;
+
+    if (normNewRole === 'admin') {
+      setIsAdminVerifyOpen(true);
+      return;
+    }
+
+    const identifier = currentUser.email || currentUser.phone || '';
+    const hasAccount = AuthStore.hasRoleAccount(identifier, normNewRole);
 
     if (!hasAccount) {
-      // User doesn't have an account of this role: show NoRoleAccountModal!
-      setPendingRole(newRole);
+      setPendingRole(normNewRole);
       setNoRoleModalOpen(true);
       return;
     }
 
-    if (newRole === 'admin') {
-      return;
-    }
-
-    // User DOES have an account for this role: open password gate for that specific account!
-    setPendingRole(newRole);
+    setPendingRole(normNewRole);
     setRoleSwitchPwd('');
     setRoleSwitchError('');
   };
@@ -167,11 +159,12 @@ export default function App() {
     if (!result.success || !result.user) {
       setRoleSwitchError(
         result.locked
-          ? language === 'bn' ? 'অ্যাকাউন্ট সাময়িকভাবে লক হয়েছে। পরে চেষ্টা করুন।' : 'Account temporarily locked. Try again later.'
+          ? language === 'bn' ? 'অ্যাকাউন্ট সাময়িকভাবে লক হয়েছে।' : 'Account temporarily locked.'
           : language === 'bn' ? 'পাসওয়ার্ড ভুল। আবার চেষ্টা করুন।' : 'Incorrect password. Try again.'
       );
       return;
     }
+
     const safeUser: User = {
       ...result.user,
       password: '***',
@@ -185,20 +178,12 @@ export default function App() {
     setRoleSwitchError('');
     setViewedUser(null);
     setActiveView('dashboard');
-    NotificationStore.addSystemNotif(
-      safeUser.id,
-      language === 'bn' ? 'ভূমিকা পরিবর্তন সফল' : 'Role Switched',
-      language === 'bn'
-        ? `আপনি সফলভাবে ${safeUser.name} (${pendingRole}) হিসেবে লগইন করেছেন।`
-        : `Logged in as ${safeUser.name} (${pendingRole}).`
-    );
     showToast(
       language === 'bn'
         ? `ভূমিকা পরিবর্তন সফল: ${safeUser.name} (${pendingRole})`
         : `Switched to: ${safeUser.name} (${pendingRole.toUpperCase()})`
     );
   };
-
 
   const handleAdminVerifySuccess = (adminUser: User) => {
     const safeAdmin: User = {
@@ -211,150 +196,37 @@ export default function App() {
     setCurrentUser(safeAdmin);
     localStorage.setItem('nb_current_user', JSON.stringify(safeAdmin));
     setActiveView('dashboard');
+    setIsAdminVerifyOpen(false);
     showToast(
       language === 'bn'
-        ? 'অ্যাডমিন যাচাই সফল! রুট এক্সেস সক্রিয়।'
+        ? 'অ্যাডমিন যাচাই সফল! রুট অ্যাক্সেস সক্রিয়।'
         : 'Admin verified! Root access granted.'
     );
   };
 
-  // Supplier Actions
-  const handleAddSupplierProduct = (newProduct: Partial<SupplierProduct>) => {
-    const created: SupplierProduct = {
-      id: `sup-${Date.now()}`,
-      supplierName: newProduct.supplierName || 'Meghna Fertilizer Depot',
-      shopName: newProduct.shopName || 'যমুনা ও মেঘনা সার বিতান',
-      category: newProduct.category || 'Fertilizer',
-      name: newProduct.name || 'Agro Input',
-      banglaName: newProduct.banglaName || 'কৃষি উপকরণ',
-      brand: newProduct.brand || 'BCIC',
-      unitPriceBDT: newProduct.unitPriceBDT || 100,
-      unit: newProduct.unit || 'unit',
-      inStock: true,
-      distanceKm: 2.8,
-      rating: 4.8,
-      phone: '+880 1715-889900',
-      suitableCrops: ['All crops'],
-    };
-    SupplierStore.add(created);
-    setSupplierProducts(SupplierStore.getAll());
-    showToast(
-      language === 'bn'
-        ? 'উপকরণ ক্যাটালগে নতুন পণ্য যুক্ত হয়েছে!'
-        : 'Product SKU added to supplier inventory!'
-    );
-  };
-
-  // Customer Marketplace Actions
-  const handleAddToCart = (product: CustomerProduct) => {
-    CartStore.addOrUpdate(product, 1);
-    setCart(CartStore.get());
-    showToast(
-      language === 'bn'
-        ? `${product.banglaName} ঝুড়িতে যুক্ত করা হয়েছে!`
-        : `${product.cropName} added to basket!`
-    );
-  };
-
-  const handleUpdateCartQty = (productId: string, delta: number) => {
-    const prod = customerProducts.find((p) => p.id === productId);
-    if (prod) {
-      CartStore.addOrUpdate(prod, delta);
-      setCart(CartStore.get());
-    }
-  };
-
-  const handleRemoveFromCart = (productId: string) => {
-    CartStore.remove(productId);
-    setCart(CartStore.get());
-  };
-
-  const handleCheckout = (orderData: Partial<CustomerOrder>) => {
-    const created: CustomerOrder = {
-      id: `ORD-${Date.now().toString().slice(-6)}`,
-      customerName: orderData.customerName || currentUser?.name || 'Customer',
-      phone: orderData.phone || currentUser?.phone || '',
-      items: orderData.items || cart,
-      totalBDT: orderData.totalBDT || CartStore.total(),
-      paymentMethod: orderData.paymentMethod || 'bKash',
-      deliveryAddress: orderData.deliveryAddress || `${selectedDistrict} City`,
-      status: 'Confirmed',
-      orderDate: new Date().toISOString(),
-    };
-    OrderStore.add(created);
-    CartStore.clear();
-    setCart([]);
-    NotificationStore.addSystemNotif(
-      currentUser!.id,
-      language === 'bn' ? 'অর্ডার নিশ্চিত' : 'Order Confirmed',
-      language === 'bn'
-        ? `আপনার অর্ডার ${created.id} সফলভাবে গৃহীত হয়েছে। মোট: ৳${created.totalBDT}।`
-        : `Order ${created.id} confirmed. Total: ৳${created.totalBDT}. Delivery in progress.`,
-      'success'
-    );
-    showToast(
-      language === 'bn'
-        ? 'অর্ডার সফলভাবে গ্রহণ করা হয়েছে! এসক্রো পেমেন্ট প্রক্রিয়াধীন।'
-        : 'Order confirmed! Direct farmer dispatch initiated.'
-    );
-  };
-
-  // Expert Actions
-  const handleAddAdvisory = (newAdvisory: Partial<AgroAdvisory>) => {
-    const created: AgroAdvisory = {
-      id: `adv-${Date.now()}`,
-      expertName: newAdvisory.expertName || currentUser?.name || 'Agricultural Specialist',
-      designation: newAdvisory.designation || currentUser?.designation || 'Agricultural Specialist',
-      title: newAdvisory.title || 'Agro Alert',
-      titleBn: newAdvisory.titleBn || 'কৃষি সতর্কতা',
-      category: newAdvisory.category || 'Weather Alert',
-      message: newAdvisory.message || '',
-      messageBn: newAdvisory.messageBn || '',
-      severity: newAdvisory.severity || 'Warning',
-      district: selectedDistrict,
-      date: 'Just now',
-    };
-    AdvisoryStore.add(created);
-    setAgroAdvisories(AdvisoryStore.getAll());
-    // Fire real notification
-    NotificationStore.addSystemNotif(
-      currentUser!.id,
-      language === 'bn' ? 'পরামর্শ প্রকাশিত' : 'Advisory Published',
-      language === 'bn'
-        ? `"নতুন পরামর্শ: ${created.title}" ${selectedDistrict}-এ প্রচার করা হয়েছে।`
-        : `Advisory "${created.title}" has been broadcast to ${selectedDistrict} district.`,
-      'info'
-    );
-    showToast(
-      language === 'bn'
-        ? 'কৃষি সতর্কতা সফলভাবে ফোনে পাঠানো হয়েছে!'
-        : 'Advisory bulletin broadcasted across district!'
-    );
-  };
-
-  // If user is logged out, show the Auth Page
-  if (!currentUser) {
+  // If Auth modal is triggered by user clicking "Sign In / Register"
+  if (isAuthOpen) {
     return (
-      <AuthPage
-        language={language}
-        onLanguageToggle={() => setLanguage((prev) => (prev === 'bn' ? 'en' : 'bn'))}
-        onAuthSuccess={(user) => {
-          setCurrentUser(user);
-          showToast(
-            language === 'bn'
-              ? `স্বাগতম, ${user.name}! আপনি সফলভাবে লগইন করেছেন।`
-              : `Welcome, ${user.name}! Signed in successfully.`
-          );
-        }}
-      />
+      <div className="min-h-screen bg-stone-100 flex flex-col">
+        <AuthPage
+          language={language}
+          onLanguageToggle={() => setLanguage((prev) => (prev === 'bn' ? 'en' : 'bn'))}
+          onBack={() => setIsAuthOpen(false)}
+          onAuthSuccess={(user) => {
+            setCurrentUser(user);
+            setIsAuthOpen(false);
+            setActiveView('dashboard');
+            showToast(
+              language === 'bn'
+                ? `স্বাগতম, ${user.name}! আপনি সফলভাবে প্রবেশ করেছেন।`
+                : `Welcome, ${user.name}! Signed in successfully.`
+            );
+          }}
+        />
+      </div>
     );
   }
 
-  const roleNavButtons: { role: UserRole; icon: React.ReactNode; labelEn: string; labelBn: string; color: string }[] = [
-    { role: 'farmer', icon: <Sprout className="w-3.5 h-3.5" />, labelEn: 'Farmer', labelBn: 'কৃষক', color: 'hover:bg-emerald-50 text-emerald-700' },
-    { role: 'supplier', icon: <Store className="w-3.5 h-3.5" />, labelEn: 'Supplier', labelBn: 'সরবরাহকারী', color: 'hover:bg-amber-50 text-amber-700' },
-    { role: 'customer', icon: <ShoppingCart className="w-3.5 h-3.5" />, labelEn: 'Consumer', labelBn: 'ভোক্তা', color: 'hover:bg-purple-50 text-purple-700' },
-  ];
 
   return (
     <div className="min-h-screen bg-stone-100/70 text-stone-900 flex flex-col font-sans transition-colors">
@@ -388,48 +260,21 @@ export default function App() {
         onLogout={() => {
           AuthStore.logout();
           setCurrentUser(null);
+          setActiveView('dashboard');
+          showToast(
+            language === 'bn' ? 'লগআউট সম্পন্ন হয়েছে।' : 'Signed out successfully.'
+          );
         }}
         onOpenProfile={() => setViewedUser(currentUser)}
+        onOpenAuth={() => setIsAuthOpen(true)}
         theme={theme}
         onThemeToggle={() => setTheme(ThemeStore.toggle())}
       />
 
-      {/* Quick Role Switcher Bar */}
-      <div className="bg-white border-b border-stone-200 px-4 py-1.5 shadow-2xs">
-        <div className="max-w-7xl mx-auto flex items-center justify-between gap-3 text-xs overflow-x-auto no-scrollbar">
-          <div className="flex items-center gap-1.5 text-[11px] font-bold text-stone-500 whitespace-nowrap">
-            <Zap className="w-3.5 h-3.5 text-amber-500" />
-            <span>{language === 'bn' ? 'ভূমিকা পরিবর্তন:' : 'Switch Role:'}</span>
-          </div>
-
-          <div className="flex items-center gap-1">
-            {roleNavButtons.map((r) => {
-              const isSelected = currentRole === r.role;
-              return (
-                <button
-                  key={r.role}
-                  onClick={() => {
-                    switchRole(r.role);
-                    setActiveView('dashboard');
-                  }}
-                  className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
-                    isSelected
-                      ? 'bg-stone-900 text-white shadow-xs'
-                      : `bg-stone-100 ${r.color} border border-stone-200`
-                  }`}
-                >
-                  {r.icon}
-                  <span>{language === 'bn' ? r.labelBn : r.labelEn}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
 
       {/* Main View Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-6">
-        {/* Individual User Profile Page (takes priority) */}
+        {/* Individual User Profile Page */}
         {viewedUser ? (
           <UserProfilePage
             user={viewedUser}
@@ -455,7 +300,7 @@ export default function App() {
           />
         ) : (
           <>
-            {activeView === 'contacts' && (
+            {activeView === 'contacts' && currentUser && (
               <ContactsView
                 currentUser={currentUser}
                 language={language}
@@ -486,7 +331,7 @@ export default function App() {
               <BulletinsPage language={language} selectedDistrict={selectedDistrict} />
             )}
 
-            {activeView === 'ledger' && (
+            {activeView === 'ledger' && currentUser && canonicalRole === 'farmer' && (
               <FarmerDashboard
                 currentUser={currentUser}
                 suppliers={supplierProducts}
@@ -496,9 +341,20 @@ export default function App() {
               />
             )}
 
+            {/* Default Dashboard / Marketplace View */}
             {activeView === 'dashboard' && (
               <>
-                {currentRole === 'farmer' && (
+                {/* 1. Guest or Consumer -> Instant Social-Feed Marketplace with zero login */}
+                {(!currentUser || canonicalRole === 'consumer') && (
+                  <CustomerMarketplace
+                    language={language}
+                    currentUser={currentUser}
+                    onOpenAuth={() => setIsAuthOpen(true)}
+                  />
+                )}
+
+                {/* 2. Farmer Role -> Farmer Command Center & Intelligence */}
+                {currentUser && canonicalRole === 'farmer' && (
                   <FarmerDashboard
                     currentUser={currentUser}
                     suppliers={supplierProducts}
@@ -508,40 +364,18 @@ export default function App() {
                   />
                 )}
 
-                {currentRole === 'businessman' && (
-                  <BusinessmanDashboard currentUser={currentUser} language={language} />
+                {/* 3. Wholesaler Role -> Wholesaler Procurement & Wholesale Hub */}
+                {currentUser && canonicalRole === 'wholesaler' && (
+                  <WholesalerDashboard currentUser={currentUser} language={language} />
                 )}
 
-                {currentRole === 'supplier' && (
-                  <SupplierDashboard
-                    products={supplierProducts}
-                    onAddProduct={handleAddSupplierProduct}
-                    language={language}
-                  />
+                {/* 4. Retailer Role -> Retailer Store & Consumer Fulfillment */}
+                {currentUser && canonicalRole === 'retailer' && (
+                  <RetailerDashboard currentUser={currentUser} language={language} />
                 )}
 
-                {currentRole === 'customer' && (
-                  <CustomerMarketplace
-                    products={customerProducts}
-                    cart={cart}
-                    onAddToCart={handleAddToCart}
-                    onUpdateCartQty={handleUpdateCartQty}
-                    onRemoveFromCart={handleRemoveFromCart}
-                    onCheckout={handleCheckout}
-                    language={language}
-                  />
-                )}
-
-                {currentRole === 'expert' && (
-                  <ExpertDashboard
-                    advisories={agroAdvisories}
-                    onAddAdvisory={handleAddAdvisory}
-                    language={language}
-                    currentUser={currentUser}
-                  />
-                )}
-
-                {currentRole === 'admin' && (
+                {/* 5. Restricted Administrator Access */}
+                {currentUser && canonicalRole === 'admin' && (
                   <AdminDashboard matches={aiMatches} language={language} />
                 )}
               </>
@@ -550,8 +384,8 @@ export default function App() {
         )}
       </main>
 
-      {/* Profile Modal (used only when viewedUser is null) */}
-      {!viewedUser && (
+      {/* Profile Modal */}
+      {!viewedUser && currentUser && (
         <ProfileModal
           isOpen={isProfileOpen}
           onClose={() => setIsProfileOpen(false)}
@@ -574,21 +408,7 @@ export default function App() {
         onClose={() => setIsCropDoctorOpen(false)}
         language={language}
         currentUser={currentUser}
-        onSwitchUser={(user) => {
-          const safeUser: User = {
-            ...user,
-            password: '***',
-            sessionToken: `nb_sec_${Date.now()}_expert`,
-            sessionExpiresAt: new Date(Date.now() + 43200000).toISOString(),
-          };
-          setCurrentUser(safeUser);
-          localStorage.setItem('nb_current_user', JSON.stringify(safeUser));
-          showToast(
-            language === 'bn'
-              ? `স্বাগতম! আপনি ${safeUser.name} (কৃষি বিশেষজ্ঞ) হিসেবে প্রবেশ করেছেন।`
-              : `Logged in as ${safeUser.name} (Agricultural Expert).`
-          );
-        }}
+        onSwitchUser={() => {}}
         onMessageExpert={(expert) => {
           setIsCropDoctorOpen(false);
           setInitialChatUserId(expert.id);
@@ -606,7 +426,7 @@ export default function App() {
         isOpen={isVoiceAssistantOpen}
         onClose={() => setIsVoiceAssistantOpen(false)}
         language={language}
-        currentRole={currentRole}
+        currentRole={canonicalRole}
         selectedDistrict={selectedDistrict}
         onNavigate={(view) => setActiveView(view)}
         onOpenCropDoctor={() => setIsCropDoctorOpen(true)}
@@ -614,10 +434,9 @@ export default function App() {
         onToggleLanguage={() => setLanguage((prev) => (prev === 'bn' ? 'en' : 'bn'))}
       />
 
-
-      {/* Role Switch Password Gate (shown only when the user has an account for target role) */}
+      {/* Role Switch Password Gate */}
       {pendingRole && !noRoleModalOpen && !createRoleModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
           <div className="bg-white rounded-2xl shadow-2xl border border-stone-200 w-full max-w-sm p-6 space-y-5 animate-slide-down">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center">
@@ -630,7 +449,7 @@ export default function App() {
                 <p className="text-[11px] text-stone-500 mt-0.5">
                   {language === 'bn'
                     ? `"${pendingRole}" অ্যাকাউন্টের পাসওয়ার্ড দিন`
-                    : `Enter the password for the "${pendingRole}" account`}
+                    : `Enter password for "${pendingRole}" account`}
                 </p>
               </div>
             </div>
@@ -648,11 +467,14 @@ export default function App() {
               <input
                 type="password"
                 value={roleSwitchPwd}
-                onChange={(e) => { setRoleSwitchPwd(e.target.value); setRoleSwitchError(''); }}
+                onChange={(e) => {
+                  setRoleSwitchPwd(e.target.value);
+                  setRoleSwitchError('');
+                }}
                 onKeyDown={(e) => e.key === 'Enter' && confirmRoleSwitch()}
                 placeholder={language === 'bn' ? 'পাসওয়ার্ড লিখুন…' : 'Enter password…'}
                 autoFocus
-                className="w-full px-3 py-2.5 text-sm border border-stone-200 rounded-xl bg-white text-stone-900 font-medium focus:outline-none focus:ring-2 focus:ring-amber-400 transition-all"
+                className="w-full px-3 py-2.5 text-sm border border-stone-200 rounded-xl bg-white text-stone-900 font-medium focus:outline-hidden focus:ring-2 focus:ring-amber-400"
               />
               {roleSwitchError && (
                 <p className="text-red-600 text-[11px] font-bold mt-1.5 flex items-center gap-1">
@@ -669,8 +491,12 @@ export default function App() {
                 {language === 'bn' ? 'যাচাই করুন' : 'Verify & Switch'}
               </button>
               <button
-                onClick={() => { setPendingRole(null); setRoleSwitchPwd(''); setRoleSwitchError(''); }}
-                className="px-4 py-2.5 bg-stone-100 text-stone-700 rounded-xl text-sm font-bold hover:bg-stone-200 transition-all"
+                onClick={() => {
+                  setPendingRole(null);
+                  setRoleSwitchPwd('');
+                  setRoleSwitchError('');
+                }}
+                className="px-4 py-2.5 bg-stone-100 text-stone-700 rounded-xl text-sm font-bold hover:bg-stone-200"
               >
                 {language === 'bn' ? 'বাতিল' : 'Cancel'}
               </button>
@@ -688,7 +514,7 @@ export default function App() {
       />
 
       {/* Interactive VoIP Voice Call Modal */}
-      {callingUser && (
+      {callingUser && currentUser && (
         <CallModal
           isOpen={!!callingUser}
           onClose={() => setCallingUser(null)}
@@ -699,51 +525,55 @@ export default function App() {
       )}
 
       {/* No Role Account Modal */}
-      <NoRoleAccountModal
-        isOpen={noRoleModalOpen}
-        onClose={() => {
-          setNoRoleModalOpen(false);
-          setPendingRole(null);
-        }}
-        targetRole={pendingRole}
-        currentUser={currentUser}
-        language={language}
-        onCreateRoleAccount={(role) => {
-          setNoRoleModalOpen(false);
-          setRoleToCreate(role);
-          setCreateRoleModalOpen(true);
-        }}
-        onLoginDifferentAccount={() => {
-          setNoRoleModalOpen(false);
-          setPendingRole(null);
-          AuthStore.logout();
-          setCurrentUser(null);
-        }}
-      />
+      {noRoleModalOpen && currentUser && (
+        <NoRoleAccountModal
+          isOpen={noRoleModalOpen}
+          onClose={() => {
+            setNoRoleModalOpen(false);
+            setPendingRole(null);
+          }}
+          targetRole={pendingRole}
+          currentUser={currentUser}
+          language={language}
+          onCreateRoleAccount={(role) => {
+            setNoRoleModalOpen(false);
+            setRoleToCreate(role);
+            setCreateRoleModalOpen(true);
+          }}
+          onLoginDifferentAccount={() => {
+            setNoRoleModalOpen(false);
+            setPendingRole(null);
+            AuthStore.logout();
+            setCurrentUser(null);
+          }}
+        />
+      )}
 
       {/* Create Role Modal */}
-      <CreateRoleModal
-        isOpen={createRoleModalOpen}
-        onClose={() => {
-          setCreateRoleModalOpen(false);
-          setRoleToCreate(null);
-          setPendingRole(null);
-        }}
-        targetRole={roleToCreate}
-        currentUser={currentUser}
-        language={language}
-        onSuccess={(newRoleUser) => {
-          setCurrentUser(newRoleUser);
-          setPendingRole(null);
-          setRoleToCreate(null);
-          setActiveView('dashboard');
-          showToast(
-            language === 'bn'
-              ? `নতুন ${newRoleUser.role} অ্যাকাউন্ট সফলভাবে তৈরি ও সক্রিয় করা হয়েছে!`
-              : `New ${newRoleUser.role} account created and activated!`
-          );
-        }}
-      />
+      {createRoleModalOpen && currentUser && (
+        <CreateRoleModal
+          isOpen={createRoleModalOpen}
+          onClose={() => {
+            setCreateRoleModalOpen(false);
+            setRoleToCreate(null);
+            setPendingRole(null);
+          }}
+          targetRole={roleToCreate}
+          currentUser={currentUser}
+          language={language}
+          onSuccess={(newRoleUser) => {
+            setCurrentUser(newRoleUser);
+            setPendingRole(null);
+            setRoleToCreate(null);
+            setActiveView('dashboard');
+            showToast(
+              language === 'bn'
+                ? `নতুন ${newRoleUser.role} অ্যাকাউন্ট তৈরি ও সক্রিয় করা হয়েছে!`
+                : `New ${newRoleUser.role} account created and activated!`
+            );
+          }}
+        />
+      )}
 
       {/* Footer */}
       <footer className="bg-white border-t border-stone-200 mt-12 py-6 text-xs text-stone-500">
@@ -751,7 +581,7 @@ export default function App() {
           <div className="flex items-center gap-2">
             <span className="font-bold text-stone-800">NativeBazar (নেটিভবাজার)</span>
             <span>•</span>
-            <span>AI-Powered Local Agriculture, Business & Supply-Demand Platform</span>
+            <span>Local Agriculture, Business & Supply Chain Platform</span>
           </div>
 
           <div className="text-center sm:text-right">

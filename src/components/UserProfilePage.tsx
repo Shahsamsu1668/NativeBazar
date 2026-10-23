@@ -53,7 +53,7 @@ import {
 
 interface UserProfilePageProps {
   user: User;
-  currentUser: User;
+  currentUser: User | null;
   language: Language;
   onBack: () => void;
   onUpdateUser?: (updated: User) => void;
@@ -74,12 +74,36 @@ const roleConfig: Record<
     label: 'Farmer',
     labelBn: 'কৃষক',
   },
+  wholesaler: {
+    color: 'text-blue-700',
+    bg: 'bg-blue-50',
+    border: 'border-blue-200',
+    icon: <Briefcase className="w-5 h-5" />,
+    label: 'Wholesaler',
+    labelBn: 'পাইকার',
+  },
+  retailer: {
+    color: 'text-amber-700',
+    bg: 'bg-amber-50',
+    border: 'border-amber-200',
+    icon: <Store className="w-5 h-5" />,
+    label: 'Retailer',
+    labelBn: 'খুচরা বিক্রেতা',
+  },
+  consumer: {
+    color: 'text-purple-700',
+    bg: 'bg-purple-50',
+    border: 'border-purple-200',
+    icon: <ShoppingCart className="w-5 h-5" />,
+    label: 'Consumer',
+    labelBn: 'ভোক্তা',
+  },
   businessman: {
     color: 'text-blue-700',
     bg: 'bg-blue-50',
     border: 'border-blue-200',
     icon: <Briefcase className="w-5 h-5" />,
-    label: 'Businessman',
+    label: 'Wholesaler',
     labelBn: 'ব্যবসায়ী',
   },
   supplier: {
@@ -87,7 +111,7 @@ const roleConfig: Record<
     bg: 'bg-amber-50',
     border: 'border-amber-200',
     icon: <Store className="w-5 h-5" />,
-    label: 'Supplier',
+    label: 'Retailer',
     labelBn: 'সরবরাহকারী',
   },
   customer: {
@@ -95,7 +119,7 @@ const roleConfig: Record<
     bg: 'bg-purple-50',
     border: 'border-purple-200',
     icon: <ShoppingCart className="w-5 h-5" />,
-    label: 'Customer',
+    label: 'Consumer',
     labelBn: 'ভোক্তা',
   },
   expert: {
@@ -196,8 +220,8 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({
   onMessageUser,
   onCallUser,
 }) => {
-  const isOwnProfile = currentUser.id === user.id;
-  const isAdmin = currentUser.role === 'admin';
+  const isOwnProfile = currentUser ? currentUser.id === user.id : false;
+  const isAdmin = currentUser ? currentUser.role === 'admin' : false;
   const canEdit = isOwnProfile || isAdmin;
 
   const [activeTab, setActiveTab] = useState<TabId>('overview');
@@ -212,10 +236,11 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({
   const [editDesignation, setEditDesignation] = useState(user.designation || '');
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [connStatus, setConnStatus] = useState<'none' | 'pending_sent' | 'pending_received' | 'accepted'>(
-    ConnectionStore.getStatus(currentUser.id, user.id)
+    currentUser ? ConnectionStore.getStatus(currentUser.id, user.id) : 'none'
   );
 
   const handleConnectToggle = () => {
+    if (!currentUser) return;
     if (connStatus === 'none') {
       ConnectionStore.sendRequest(currentUser, user);
       setConnStatus('pending_sent');

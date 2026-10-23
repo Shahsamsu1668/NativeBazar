@@ -93,8 +93,6 @@ export const AdminVerificationModal: React.FC<AdminVerificationModalProps> = ({
             <X className="w-4 h-4" />
           </button>
         </div>
-
-        {/* Error message */}
         {error && (
           <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center gap-2 animate-slide-up">
             <AlertTriangle className="w-4 h-4 shrink-0 text-red-600" />
@@ -114,7 +112,7 @@ export const AdminVerificationModal: React.FC<AdminVerificationModalProps> = ({
                 type="text"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="NativeBazarSJS"
+                placeholder="admin@nativebazar.gov.bd"
                 className="w-full pl-9 pr-3 py-2 bg-stone-50 border border-stone-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
                 autoFocus
                 required

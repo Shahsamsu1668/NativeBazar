@@ -51,15 +51,36 @@ const ROLE_META: Record<UserRole, { labelEn: string; labelBn: string; color: str
     badge: 'bg-emerald-100 text-emerald-800 border-emerald-200',
     icon: <Sprout className="w-3.5 h-3.5" />,
   },
+  wholesaler: {
+    labelEn: 'Wholesaler',
+    labelBn: 'পাইকার',
+    color: 'text-blue-700',
+    badge: 'bg-blue-100 text-blue-800 border-blue-200',
+    icon: <Briefcase className="w-3.5 h-3.5" />,
+  },
+  retailer: {
+    labelEn: 'Retailer',
+    labelBn: 'খুচরা বিক্রেতা',
+    color: 'text-amber-700',
+    badge: 'bg-amber-100 text-amber-800 border-amber-200',
+    icon: <Store className="w-3.5 h-3.5" />,
+  },
+  consumer: {
+    labelEn: 'Consumer',
+    labelBn: 'ভোক্তা',
+    color: 'text-purple-700',
+    badge: 'bg-purple-100 text-purple-800 border-purple-200',
+    icon: <ShoppingCart className="w-3.5 h-3.5" />,
+  },
   businessman: {
-    labelEn: 'Trader / Buyer',
+    labelEn: 'Wholesaler',
     labelBn: 'ব্যবসায়ী',
     color: 'text-blue-700',
     badge: 'bg-blue-100 text-blue-800 border-blue-200',
     icon: <Briefcase className="w-3.5 h-3.5" />,
   },
   supplier: {
-    labelEn: 'Supplier',
+    labelEn: 'Retailer',
     labelBn: 'সরবরাহকারী',
     color: 'text-amber-700',
     badge: 'bg-amber-100 text-amber-800 border-amber-200',
@@ -94,23 +115,35 @@ const SUGGESTED_MESSAGES: Record<UserRole, { en: string; bn: string }[]> = {
     { en: 'Can we negotiate bulk wholesale pricing?', bn: 'বাল্ক পাইকারি দাম নিয়ে কি আলোচনা করতে পারি?' },
     { en: 'Are organic certification documents available?', bn: 'অর্গানিক সার্টিফিকেশন কি আছে?' },
   ],
+  wholesaler: [
+    { en: 'I am interested in procuring your wholesale stock.', bn: 'আপনার পাইকারি লট ক্রয়ে আগ্রহী।' },
+    { en: 'Can we arrange escrow payment for harvest contract?', bn: 'এসক্রো পেমেন্টে ফসল চুক্তি করা যাবে কি?' },
+    { en: 'What is your required delivery schedule?', bn: 'ডেলিভারির নির্ধারিত সময়সূচী কি?' },
+  ],
+  retailer: [
+    { en: 'Do you have fresh stock currently available?', bn: 'তাজা পণ্য কি বর্তমানে স্টকে আছে?' },
+    { en: 'What is the wholesale lot price?', bn: 'পাইকারি লট মূল্য কত?' },
+    { en: 'Can you deliver to our local shop outlet?', bn: 'দোকান আউটলেটে ডেলিভারি সম্ভব কি?' },
+  ],
+  consumer: [
+    { en: 'Is fresh delivery available today?', bn: 'আজকে কি সরাসরি ডেলিভারি পাওয়া যাবে?' },
+    { en: 'What is the minimum order quantity?', bn: 'সর্বনিম্ন কত কেজি অর্ডার দেওয়া যাবে?' },
+  ],
   businessman: [
     { en: 'I am interested in your seasonal demand.', bn: 'আপনার মৌসুমী ক্রয়ের চাহিদায় আগ্রহী।' },
     { en: 'Can we arrange escrow payment for harvest contract?', bn: 'এসক্রো পেমেন্টে ফসল চুক্তি করা যাবে কি?' },
     { en: 'What is your required delivery schedule?', bn: 'ডেলিভারির নির্ধারিত সময়সূচী কি?' },
   ],
   supplier: [
-    { en: 'Do you have urea/DAP fertilizer currently in stock?', bn: 'ইউরিয়া/ডিএপি সার কি বর্তমানে স্টকে আছে?' },
+    { en: 'Do you have inventory currently in stock?', bn: 'পণ্য কি বর্তমানে স্টকে আছে?' },
     { en: 'What is the bulk price for seed varieties?', bn: 'উন্নত বীজের পাইকারি মূল্য কত?' },
-    { en: 'Can you deliver to our local union hub?', bn: 'স্থানীয় ইউনিয়ন হাবে ডেলিভারি সম্ভব কি?' },
   ],
   customer: [
     { en: 'Is fresh farm delivery available today?', bn: 'আজকে কি সরাসরি ফার্ম থেকে ডেলিভারি পাওয়া যাবে?' },
     { en: 'What is the minimum order quantity?', bn: 'সর্বনিম্ন কত কেজি অর্ডার দেওয়া যাবে?' },
   ],
   expert: [
-    { en: 'Need advice on pest attack in potato field.', bn: 'আলু ক্ষেতে পোকার আক্রমণের প্রতিকার কি?' },
-    { en: 'Which fertilizer dose is ideal for this season?', bn: 'এই মৌসুমে সঠিক সারের মাত্রা জানতে চাই।' },
+    { en: 'Need advice on pest attack in crop field.', bn: 'ফসলে পোকার আক্রমণের প্রতিকার কি?' },
   ],
   admin: [
     { en: 'Inquiry regarding account verification.', bn: 'অ্যাকাউন্ট ভেরিফিকেশন সংক্রান্ত তথ্য জানতে চাই।' },

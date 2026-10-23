@@ -13,6 +13,7 @@ export interface MarketPredictionResult {
   demandLevel: 'Low' | 'Medium' | 'High' | 'Very High';
   boguraAratArrivalEstimate: string;
   buyerRecommendation: string;
+  keyMarketDrivers?: string[];
   keyRiskFactor: string;
   suggestedAction: string;
 }

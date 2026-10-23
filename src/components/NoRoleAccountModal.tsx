@@ -25,8 +25,11 @@ interface NoRoleAccountModalProps {
 
 const ROLE_META: Record<UserRole, { en: string; bn: string; icon: React.ReactNode; color: string }> = {
   farmer: { en: 'Farmer', bn: 'কৃষক', icon: <Sprout className="w-5 h-5 text-emerald-600" />, color: 'emerald' },
-  businessman: { en: 'Businessman / Trader', bn: 'ব্যবসায়ী / পাইকার', icon: <Briefcase className="w-5 h-5 text-blue-600" />, color: 'blue' },
-  supplier: { en: 'Agricultural Supplier', bn: 'কৃষি উপকরণ সরবরাহকারী', icon: <Store className="w-5 h-5 text-amber-600" />, color: 'amber' },
+  wholesaler: { en: 'Wholesaler / Aratdar', bn: 'পাইকার / আড়তদার', icon: <Briefcase className="w-5 h-5 text-blue-600" />, color: 'blue' },
+  retailer: { en: 'Retailer Store', bn: 'খুচরা বিক্রেতা', icon: <Store className="w-5 h-5 text-amber-600" />, color: 'amber' },
+  consumer: { en: 'Consumer', bn: 'ভোক্তা / ক্রেতা', icon: <ShoppingCart className="w-5 h-5 text-purple-600" />, color: 'purple' },
+  businessman: { en: 'Wholesaler', bn: 'ব্যবসায়ী / পাইকার', icon: <Briefcase className="w-5 h-5 text-blue-600" />, color: 'blue' },
+  supplier: { en: 'Retailer', bn: 'খুচরা বিক্রেতা', icon: <Store className="w-5 h-5 text-amber-600" />, color: 'amber' },
   customer: { en: 'Consumer', bn: 'ভোক্তা / ক্রেতা', icon: <ShoppingCart className="w-5 h-5 text-purple-600" />, color: 'purple' },
   expert: { en: 'Agricultural Expert', bn: 'কৃষি বিশেষজ্ঞ', icon: <Microscope className="w-5 h-5 text-teal-600" />, color: 'teal' },
   admin: { en: 'Platform Administrator', bn: 'প্ল্যাটফর্ম অ্যাডমিন', icon: <ShieldCheck className="w-5 h-5 text-slate-700" />, color: 'slate' },

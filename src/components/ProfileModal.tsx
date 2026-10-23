@@ -98,6 +98,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           metric3Bn: `${myOrders.length} টি বাণিজ্যিক চুক্তি`,
         };
       }
+      case 'wholesaler':
       case 'businessman': {
         const demands = DemandStore.getByBuyer(currentUser.id);
         const tradeOrders = TradeOrderStore.getAll().filter(
@@ -112,6 +113,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           metric3Bn: `৳${tradeOrders.reduce((s, o) => s + o.totalBDT, 0).toLocaleString()} মোট লেনদেন`,
         };
       }
+      case 'retailer':
       case 'supplier': {
         const products = SupplierStore.getBySupplierId(currentUser.id);
         const supplierOrders = TradeOrderStore.getAll().filter(
@@ -119,13 +121,14 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
         );
         return {
           metric1: `${products.length} Catalog Items`,
-          metric1Bn: `${products.length} টি ইনপুট পণ্য`,
+          metric1Bn: `${products.length} টি পণ্য তালিকা`,
           metric2: `${supplierOrders.length} Orders Fulfilled`,
-          metric2Bn: `${supplierOrders.length} টি অর্ডার সরবরাহকৃত`,
-          metric3: 'Authorized Distributor',
-          metric3Bn: 'অনুমোদিত ডিলার সনদপ্রাপ্ত',
+          metric2Bn: `${supplierOrders.length} টি অর্ডার সম্পন্ন`,
+          metric3: 'Authorized Retailer',
+          metric3Bn: 'অনুমোদিত খুচরা বিক্রেতা',
         };
       }
+      case 'consumer':
       case 'customer': {
         const customerOrders = OrderStore.getByCustomer(currentUser.id);
         return {
@@ -144,7 +147,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           metric2: 'AI Diagnosis Overseer',
           metric2Bn: 'এআই প্রেসক্রিপশন নিরীক্ষক',
           metric3: 'Official DAE Liaison',
-          metric3Bn: 'কৃষি সম্প্রসারণ অধিদপ্তর কর্মকর্তা',
+          metric3Bn: 'কৃষি সম্প্রসারণ কর্মকর্তা',
         };
       }
       case 'admin': {
@@ -155,6 +158,16 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           metric2Bn: 'টু-ফ্যাক্টর নিরাপত্তা সক্রিয়',
           metric3: 'Encrypted Telemetry Node',
           metric3Bn: 'এনক্রিপ্টেড ডাটা সেন্টার নোড',
+        };
+      }
+      default: {
+        return {
+          metric1: 'Active Member',
+          metric1Bn: 'সক্রিয় সদস্য',
+          metric2: 'Verified Account',
+          metric2Bn: 'যাচাইকৃত অ্যাকাউন্ট',
+          metric3: 'NativeBazar Node',
+          metric3Bn: 'নেটিভবাজার নোড',
         };
       }
     }
@@ -172,9 +185,9 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
       upazila: upazila || (upazilas[0] || 'Bogura Sadar'),
       education,
       farmSizeAcres: currentUser.role === 'farmer' ? farmSizeAcres : undefined,
-      businessName: currentUser.role === 'businessman' ? businessName : undefined,
-      shopName: currentUser.role === 'supplier' ? shopName : undefined,
-      licenseNumber: currentUser.role === 'supplier' ? licenseNumber : undefined,
+      businessName: (currentUser.role === 'businessman' || currentUser.role === 'wholesaler') ? businessName : undefined,
+      shopName: (currentUser.role === 'supplier' || currentUser.role === 'retailer') ? shopName : undefined,
+      licenseNumber: (currentUser.role === 'supplier' || currentUser.role === 'retailer') ? licenseNumber : undefined,
       designation: currentUser.role === 'expert' ? designation : undefined,
       institution: currentUser.role === 'expert' ? institution : undefined,
     };
@@ -202,6 +215,24 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
       color: 'bg-emerald-100 text-emerald-800 border-emerald-300',
       icon: <Sprout className="w-3.5 h-3.5 text-emerald-700" />,
     },
+    wholesaler: {
+      labelEn: 'Wholesaler (পাইকার)',
+      labelBn: 'পাইকার / আড়তদার',
+      color: 'bg-blue-100 text-blue-800 border-blue-300',
+      icon: <Briefcase className="w-3.5 h-3.5 text-blue-700" />,
+    },
+    retailer: {
+      labelEn: 'Retailer (খুচরা বিক্রেতা)',
+      labelBn: 'খুচরা বিক্রেতা',
+      color: 'bg-amber-100 text-amber-800 border-amber-300',
+      icon: <Store className="w-3.5 h-3.5 text-amber-700" />,
+    },
+    consumer: {
+      labelEn: 'Consumer (ভোক্তা)',
+      labelBn: 'ভোক্তা',
+      color: 'bg-purple-100 text-purple-800 border-purple-300',
+      icon: <ShoppingCart className="w-3.5 h-3.5 text-purple-700" />,
+    },
     businessman: {
       labelEn: 'Wholesale Trader / Buyer',
       labelBn: 'ব্যবসায়ী ও পাইকার',
@@ -209,8 +240,8 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
       icon: <Briefcase className="w-3.5 h-3.5 text-blue-700" />,
     },
     supplier: {
-      labelEn: 'Agro Input Supplier',
-      labelBn: 'কৃষি উপকরণ ডিলার',
+      labelEn: 'Retailer Store',
+      labelBn: 'খুচরা বিক্রেতা',
       color: 'bg-amber-100 text-amber-800 border-amber-300',
       icon: <Store className="w-3.5 h-3.5 text-amber-700" />,
     },
@@ -222,7 +253,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
     },
     expert: {
       labelEn: 'Agronomy Specialist',
-      labelBn: 'কৃষি সম্প্রসারণ কর্মকর্তা',
+      labelBn: 'কৃষি কর্মকর্তা',
       color: 'bg-teal-100 text-teal-800 border-teal-300',
       icon: <Microscope className="w-3.5 h-3.5 text-teal-700" />,
     },
@@ -234,7 +265,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
     },
   };
 
-  const badge = roleBadgeInfo[currentUser.role] || roleBadgeInfo.farmer;
+  const badge = roleBadgeInfo[currentUser.role] || roleBadgeInfo.consumer;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">

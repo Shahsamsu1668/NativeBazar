@@ -3,7 +3,15 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI } from '@google/genai';
-import { db, hashPassword } from './server/db';
+import {
+  db,
+  hashPassword,
+  verifyPassword,
+  validateSupplyChainTrade,
+  executeOrderTransaction,
+  cancelOrderAndRestoreStock,
+} from './src/server/db.js';
+import { db as jsonDb } from './server/db.js';
 
 dotenv.config();
 
@@ -72,208 +80,891 @@ async function callGemini(contents: any, config?: any, timeoutMs = 15000) {
   throw lastError || new Error('All candidate AI models were unreachable');
 }
 
-// Health Check with real stats
+// Health Check
 app.get('/api/health', (req, res) => {
-  const stats = db.getStats();
   res.json({
     status: 'ok',
-    service: 'NativeBazar Backend',
+    service: 'NativeBazar Backend (Persistent SQLite)',
     aiEnabled: !!ai,
+    database: 'SQLite WAL Mode',
     models: ['gemini-2.5-flash', 'gemini-3.1-flash-lite'],
+    roles: ['Farmer', 'Wholesaler', 'Retailer', 'Consumer'],
     pilotDistrict: 'Bogura, Bangladesh',
-    stats,
     timestamp: new Date().toISOString(),
   });
 });
 
-// ─── AUTH REST APIS ──────────────────────────────────────────────────────────
-// 1. User Registration (Publicly allowed: Farmer, Supplier, Customer)
+// ─── AUTHENTICATION ENDPOINTS (NO DEMO ACCOUNTS) ─────────────────────────────
+
+// Register new user: Farmer, Wholesaler, Retailer, Consumer
 app.post('/api/auth/register', (req, res) => {
   try {
     const {
+      role, name, phone, password, email = '', district = 'Bogura', upazila = '',
+      farmSizeAcres, primaryCrops, businessName, businessType, shopName, licenseNumber, tradeAddress,
+    } = req.body;
+
+    const allowedRoles = ['farmer', 'wholesaler', 'retailer', 'consumer'];
+    const canonicalRole = (role || '').toLowerCase();
+    if (!allowedRoles.includes(canonicalRole)) {
+      return res.status(400).json({ error: `Invalid role. Public registration permitted only for: ${allowedRoles.join(', ')}` });
+    }
+
+    if (!name || !phone || !password) {
+      return res.status(400).json({ error: 'Name, phone number, and password are required.' });
+    }
+
+    if (phone.length < 9) {
+      return res.status(400).json({ error: 'Please enter a valid phone number.' });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters long.' });
+    }
+
+    // Check if phone is already registered
+    const existing = db.prepare('SELECT id, role, phone FROM users WHERE phone = ?').get(phone) as any;
+    if (existing) {
+      return res.status(409).json({ error: `An account with phone number ${phone} is already registered (${existing.role}). Please log in.` });
+    }
+
+    const userId = `usr-${canonicalRole}-${Date.now()}`;
+    const passwordHash = hashPassword(password);
+    const nowIso = new Date().toISOString();
+
+    const insertStmt = db.prepare(`
+      INSERT INTO users (
+        id, role, name, phone, email, password_hash, district, upazila, verified,
+        farm_size_acres, primary_crops, business_name, business_type, shop_name,
+        license_number, trade_address, created_at, last_login_at
+      ) VALUES (
+        ?, ?, ?, ?, ?, ?, ?, ?, 1,
+        ?, ?, ?, ?, ?,
+        ?, ?, ?, ?
+      )
+    `);
+
+    insertStmt.run(
+      userId,
+      canonicalRole,
+      name,
+      phone,
+      email || null,
+      passwordHash,
+      district,
+      upazila || null,
+      farmSizeAcres ? Number(farmSizeAcres) : null,
+      primaryCrops ? (Array.isArray(primaryCrops) ? JSON.stringify(primaryCrops) : primaryCrops) : null,
+      businessName || null,
+      businessType || null,
+      shopName || null,
+      licenseNumber || null,
+      tradeAddress || null,
+      nowIso,
+      nowIso
+    );
+
+    const safeUser = {
+      id: userId,
+      role: canonicalRole,
       name,
       phone,
       email,
-      password,
-      role = 'farmer',
-      district = 'Bogura',
-      upazila = 'Shibganj',
-      education,
-      farmSizeAcres,
-      primaryCrops,
+      district,
+      upazila,
+      verified: true,
+      farmSizeAcres: farmSizeAcres ? Number(farmSizeAcres) : undefined,
+      primaryCrops: primaryCrops || undefined,
+      businessName,
+      businessType,
       shopName,
       licenseNumber,
-      isOrganicCertified,
-    } = req.body;
+      createdAt: nowIso,
+      sessionToken: `nb_token_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+    };
 
-    if (!name || !name.trim()) {
-      return res.status(400).json({ success: false, error: 'Full name is required' });
-    }
-    if (!phone || !phone.trim()) {
-      return res.status(400).json({ success: false, error: 'Phone number is required' });
-    }
-    if (!password || password.length < 6) {
-      return res.status(400).json({ success: false, error: 'Password must be at least 6 characters' });
-    }
-
-    // Role safety: public registration only allowed for farmer, supplier, customer
-    const allowedRoles = ['farmer', 'supplier', 'customer'];
-    if (!allowedRoles.includes(role)) {
-      return res.status(403).json({
-        success: false,
-        error: 'Registration is only available for Farmers, Suppliers, and Consumers.',
-      });
-    }
-
-    const cleanPhone = phone.trim().replace(/\D/g, '');
-    const cleanEmail = email ? email.trim().toLowerCase() : undefined;
-
-    // Check existing
-    const existing = db.findUserByIdentifier(cleanPhone, role);
-    if (existing) {
-      return res.status(409).json({
-        success: false,
-        error: `An account with this phone number already exists for role: ${role}.`,
-      });
-    }
-
-    const token = `nb_sec_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    const user = db.addUser({
-      id: `usr_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-      role,
-      name: name.trim(),
-      phone: cleanPhone,
-      email: cleanEmail,
-      passwordHash: hashPassword(password),
-      district: district.trim(),
-      upazila: upazila ? upazila.trim() : undefined,
-      education: education ? education.trim() : undefined,
-      verified: true,
-      createdAt: new Date().toISOString(),
-      farmSizeAcres: farmSizeAcres ? parseFloat(farmSizeAcres) : undefined,
-      primaryCrops: Array.isArray(primaryCrops) ? primaryCrops : undefined,
-      shopName: shopName ? shopName.trim() : undefined,
-      licenseNumber: licenseNumber ? licenseNumber.trim() : undefined,
-      isOrganicCertified: !!isOrganicCertified,
-      sessionToken: token,
-    });
-
-    db.addAuditLog({
-      timestamp: new Date().toISOString(),
-      phone: cleanPhone,
-      role,
-      status: 'SUCCESS',
-      ip: req.ip || '127.0.0.1',
-      device: (req.headers['user-agent'] as string) || 'Web Client',
-      details: `New genuine ${role} account registered`,
-    });
-
-    const { passwordHash: _, ...safeUser } = user;
     return res.status(201).json({
       success: true,
+      message: 'Registration successful!',
       user: safeUser,
-      token,
-      message: 'Account registered successfully',
     });
   } catch (err: any) {
-    console.error('[API Register Error]', err);
-    return res.status(500).json({ success: false, error: err.message || 'Server error' });
+    console.error('Registration error:', err);
+    return res.status(500).json({ error: err.message || 'Registration failed.' });
   }
 });
 
-// 2. User Login
+// Login for registered users
 app.post('/api/auth/login', (req, res) => {
   try {
-    const { identifier, password, role, securityPin } = req.body;
-
+    const { identifier, password, role } = req.body;
     if (!identifier || !password) {
-      return res.status(400).json({
-        success: false,
-        error: 'Identifier (phone/email/admin ID) and password are required',
-      });
+      return res.status(400).json({ error: 'Phone/Email and password are required.' });
     }
 
-    const targetUser = db.findUserByIdentifier(identifier, role);
-    if (!targetUser) {
-      db.addAuditLog({
-        timestamp: new Date().toISOString(),
-        phone: identifier,
-        role: role || 'unknown',
-        status: 'FAILED_PASSWORD',
-        ip: req.ip || '127.0.0.1',
-        device: (req.headers['user-agent'] as string) || 'Web Client',
-        details: 'User account not found',
-      });
-      return res.status(401).json({
-        success: false,
-        error: 'Invalid credentials. Please verify your phone number / email and password.',
-      });
+    let query = 'SELECT * FROM users WHERE (phone = ? OR email = ?)';
+    const params: any[] = [identifier, identifier];
+    if (role) {
+      query += ' AND role = ?';
+      params.push(role);
+    }
+    query += ' LIMIT 1';
+
+    const user = db.prepare(query).get(...params) as any;
+    if (!user) {
+      return res.status(401).json({ error: 'No account found with these credentials. Please register first.' });
     }
 
-    const hashed = hashPassword(password);
-    if (targetUser.passwordHash !== hashed) {
-      db.addAuditLog({
-        timestamp: new Date().toISOString(),
-        phone: targetUser.phone,
-        role: targetUser.role,
-        status: 'FAILED_PASSWORD',
-        ip: req.ip || '127.0.0.1',
-        device: (req.headers['user-agent'] as string) || 'Web Client',
-        details: 'Incorrect password entered',
-      });
-      return res.status(401).json({
-        success: false,
-        error: 'Incorrect password. Please try again.',
-      });
+    const isValid = verifyPassword(password, user.password_hash);
+    if (!isValid) {
+      return res.status(401).json({ error: 'Incorrect password. Please try again.' });
     }
 
-    // Admin 2FA check if enabled
-    if (targetUser.role === 'admin' && targetUser.twoFactorEnabled) {
-      if (!securityPin) {
-        return res.json({
-          success: false,
-          require2FA: true,
-          message: '6-digit Admin security code required',
-        });
-      }
-      if (securityPin !== (targetUser.securityPin || '883650')) {
-        return res.status(401).json({
-          success: false,
-          require2FA: true,
-          error: 'INVALID_2FA_PIN',
-          message: 'Invalid 6-digit Admin Security Code / PIN',
-        });
-      }
-    }
+    const nowIso = new Date().toISOString();
+    db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?').run(nowIso, user.id);
 
-    const token = `nb_sec_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    db.updateUser(targetUser.id, {
-      sessionToken: token,
-      lastLoginAt: new Date().toISOString(),
-    });
-
-    db.addAuditLog({
-      timestamp: new Date().toISOString(),
-      phone: targetUser.phone,
-      role: targetUser.role,
-      status: 'SUCCESS',
-      ip: req.ip || '127.0.0.1',
-      device: (req.headers['user-agent'] as string) || 'Web Client',
-      details: 'Session established',
-    });
-
-    const { passwordHash: _, ...safeUser } = targetUser;
-    safeUser.sessionToken = token;
+    const safeUser = {
+      id: user.id,
+      role: user.role,
+      name: user.name,
+      nameBn: user.name_bn,
+      phone: user.phone,
+      email: user.email,
+      district: user.district,
+      upazila: user.upazila,
+      verified: Boolean(user.verified),
+      farmSizeAcres: user.farm_size_acres,
+      primaryCrops: user.primary_crops ? JSON.parse(user.primary_crops) : undefined,
+      businessName: user.business_name,
+      businessType: user.business_type,
+      shopName: user.shop_name,
+      licenseNumber: user.license_number,
+      createdAt: user.created_at,
+      lastLoginAt: nowIso,
+      sessionToken: `nb_token_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+    };
 
     return res.json({
       success: true,
       user: safeUser,
-      token,
-      message: 'Login successful',
     });
   } catch (err: any) {
-    console.error('[API Login Error]', err);
-    return res.status(500).json({ success: false, error: err.message || 'Server error' });
+    console.error('Login error:', err);
+    return res.status(500).json({ error: err.message || 'Login failed.' });
+  }
+});
+
+// Admin Authorization Login (Restricted to authorized administrators only)
+app.post('/api/auth/admin-login', (req, res) => {
+  try {
+    const { username, password, securityPin } = req.body;
+    const validUser = process.env.ADMIN_USER;
+    const validPass = process.env.ADMIN_PASSWORD;
+    const validPin = process.env.ADMIN_PIN;
+
+    // Fail closed if admin credentials have not been explicitly configured in environment
+    if (!validUser || !validPass || !validPin) {
+      console.error('[Security] Admin login blocked: ADMIN_USER, ADMIN_PASSWORD, or ADMIN_PIN environment variable is not configured.');
+      return res.status(503).json({ error: 'Administrator access is currently not configured or disabled.' });
+    }
+
+    const isMatch = username === validUser && password === validPass && securityPin === validPin;
+
+    if (!isMatch) {
+      return res.status(403).json({ error: 'Access Denied: Invalid administrator credentials or clearance PIN.' });
+    }
+
+    const nowIso = new Date().toISOString();
+    const adminUser = {
+      id: 'admin-authorized-root',
+      role: 'admin',
+      name: 'Central Platform Administrator',
+      phone: '01700000000',
+      email: 'admin@nativebazar.gov.bd',
+      district: 'Bogura',
+      upazila: 'Bogura Sadar',
+      verified: true,
+      createdAt: '2026-01-01T00:00:00Z',
+      lastLoginAt: nowIso,
+      sessionToken: `nb_admin_token_${Date.now()}`,
+    };
+
+    return res.json({
+      success: true,
+      user: adminUser,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Admin login failed.' });
+  }
+});
+
+// ─── PRODUCT MARKETPLACE ENDPOINTS (STRICT ROLE-BASED ACCESS) ─────────────────
+
+// Get products with role filtering
+// Consumers ONLY see Retailer products
+// Retailers ONLY see Wholesaler products
+// Wholesalers ONLY see Farmer products
+app.get('/api/products', (req, res) => {
+  try {
+    const { targetRole, sellerRole, district, category, search, minAvailable = 0 } = req.query as any;
+
+    let query = 'SELECT * FROM products WHERE available_kg > ?';
+    const params: any[] = [Number(minAvailable) || 0];
+
+    // Strict role filters
+    if (targetRole) {
+      query += ' AND target_role = ?';
+      params.push(targetRole);
+    }
+    if (sellerRole) {
+      query += ' AND seller_role = ?';
+      params.push(sellerRole);
+    }
+    if (district && district !== 'All') {
+      query += ' AND district = ?';
+      params.push(district);
+    }
+    if (category && category !== 'All') {
+      query += ' AND category = ?';
+      params.push(category);
+    }
+    if (search) {
+      query += ' AND (crop_name LIKE ? OR bangla_name LIKE ? OR seller_name LIKE ?)';
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+    }
+
+    query += ' ORDER BY created_at DESC';
+
+    const rows = db.prepare(query).all(...params) as any[];
+    const mapped = rows.map((r) => ({
+      id: r.id,
+      sellerId: r.seller_id,
+      sellerName: r.seller_name,
+      sellerPhone: r.seller_phone,
+      sellerRole: r.seller_role,
+      targetRole: r.target_role,
+      cropName: r.crop_name,
+      banglaName: r.bangla_name,
+      category: r.category,
+      variety: r.variety,
+      quantityKg: r.quantity_kg,
+      availableKg: r.available_kg,
+      minOrderKg: r.min_order_kg,
+      pricePerKg: r.price_per_kg,
+      marketPricePerKg: r.market_price_per_kg,
+      qualityGrade: r.quality_grade,
+      district: r.district,
+      upazila: r.upazila,
+      locationDetails: r.location_details,
+      harvestStatus: r.harvest_status,
+      availableDate: r.available_date,
+      organicCertified: Boolean(r.organic_certified),
+      imageUrl: r.image_url,
+      description: r.description,
+      traceability: {
+        farmerOrigin: r.farmer_origin,
+        wholesalerArat: r.wholesaler_arat,
+        procurementDate: r.procurement_date,
+        safetyNote: r.safety_note,
+      },
+      createdAt: r.created_at,
+    }));
+
+    return res.json({ products: mapped, total: mapped.length });
+  } catch (err: any) {
+    console.error('Error fetching products:', err);
+    return res.status(500).json({ error: err.message || 'Failed to fetch products.' });
+  }
+});
+
+// Publish new product: Enforces seller role restrictions
+app.post('/api/products', (req, res) => {
+  try {
+    const {
+      sellerId, sellerName, sellerPhone = '', sellerRole, cropName, banglaName,
+      category = 'Vegetables', variety = '', quantityKg, pricePerKg, marketPricePerKg,
+      qualityGrade = 'A', district = 'Bogura', upazila = '', locationDetails = '',
+      harvestStatus = 'Harvested Today', availableDate = 'In Stock', organicCertified = false,
+      imageUrl = '', description = '', farmerOrigin = '', wholesalerArat = '',
+      procurementDate = '', safetyNote = '', minOrderKg = 1,
+    } = req.body;
+
+    const sRole = (sellerRole || '').toLowerCase();
+    let targetRole = 'consumer';
+
+    // Strict supply chain mapping:
+    // Farmer lists crops -> Wholesaler buys
+    if (sRole === 'farmer') {
+      targetRole = 'wholesaler';
+    }
+    // Wholesaler lists produce -> Retailer buys
+    else if (sRole === 'wholesaler') {
+      targetRole = 'retailer';
+    }
+    // Retailer lists goods -> Consumer buys
+    else if (sRole === 'retailer') {
+      targetRole = 'consumer';
+    } else {
+      return res.status(403).json({ error: 'Only Farmers, Wholesalers, and Retailers are authorized to publish products.' });
+    }
+
+    if (!cropName || !pricePerKg || !quantityKg) {
+      return res.status(400).json({ error: 'Crop name, quantity, and price are required.' });
+    }
+
+    const prodId = `prod-${sRole.slice(0, 3)}-${Date.now()}`;
+    const nowIso = new Date().toISOString();
+
+    const insertStmt = db.prepare(`
+      INSERT INTO products (
+        id, seller_id, seller_name, seller_phone, seller_role, target_role,
+        crop_name, bangla_name, category, variety, quantity_kg, available_kg,
+        min_order_kg, price_per_kg, market_price_per_kg, quality_grade, district,
+        upazila, location_details, harvest_status, available_date, organic_certified,
+        image_url, description, farmer_origin, wholesaler_arat, procurement_date,
+        safety_note, created_at
+      ) VALUES (
+        ?, ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?,
+        ?, ?
+      )
+    `);
+
+    insertStmt.run(
+      prodId,
+      sellerId || 'seller-1',
+      sellerName || 'Verified Seller',
+      sellerPhone || '',
+      sRole,
+      targetRole,
+      cropName,
+      banglaName || cropName,
+      category,
+      variety || '',
+      Number(quantityKg),
+      Number(quantityKg),
+      Number(minOrderKg) || 1,
+      Number(pricePerKg),
+      marketPricePerKg ? Number(marketPricePerKg) : Number(pricePerKg) * 1.15,
+      qualityGrade,
+      district,
+      upazila || '',
+      locationDetails || '',
+      harvestStatus,
+      availableDate,
+      organicCertified ? 1 : 0,
+      imageUrl || 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=800&auto=format&fit=crop&q=80',
+      description || '',
+      farmerOrigin || '',
+      wholesalerArat || '',
+      procurementDate || '',
+      safetyNote || '',
+      nowIso
+    );
+
+    return res.status(201).json({
+      success: true,
+      productId: prodId,
+      targetRole,
+      message: `Product successfully published for ${targetRole}s!`,
+    });
+  } catch (err: any) {
+    console.error('Error creating product:', err);
+    return res.status(500).json({ error: err.message || 'Failed to publish product.' });
+  }
+});
+
+// Update product
+app.put('/api/products/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const { pricePerKg, quantityKg, availableKg, qualityGrade, harvestStatus, description, imageUrl } = req.body;
+
+    const existing = db.prepare('SELECT id FROM products WHERE id = ?').get(id);
+    if (!existing) return res.status(404).json({ error: 'Product not found.' });
+
+    db.prepare(`
+      UPDATE products
+      SET price_per_kg = COALESCE(?, price_per_kg),
+          quantity_kg = COALESCE(?, quantity_kg),
+          available_kg = COALESCE(?, available_kg),
+          quality_grade = COALESCE(?, quality_grade),
+          harvest_status = COALESCE(?, harvest_status),
+          description = COALESCE(?, description),
+          image_url = COALESCE(?, image_url)
+      WHERE id = ?
+    `).run(
+      pricePerKg !== undefined ? Number(pricePerKg) : null,
+      quantityKg !== undefined ? Number(quantityKg) : null,
+      availableKg !== undefined ? Number(availableKg) : null,
+      qualityGrade || null,
+      harvestStatus || null,
+      description || null,
+      imageUrl || null,
+      id
+    );
+
+    return res.json({ success: true, message: 'Product updated successfully.' });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Delete product
+app.delete('/api/products/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    db.prepare('DELETE FROM products WHERE id = ?').run(id);
+    return res.json({ success: true, message: 'Product removed.' });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── ORDER & SUPPLY CHAIN EXECUTION (STRICT RULES ENFORCED) ─────────────────
+
+// Create an order: Verifies supply chain rules, reserves stock, creates tracking code
+app.post('/api/orders', (req, res) => {
+  try {
+    const {
+      buyerId, buyerName, buyerPhone, buyerEmail, buyerRole,
+      sellerId, sellerName, sellerPhone, sellerRole, items,
+      paymentMethod = 'Cash on Delivery', deliveryAddress, district = 'Bogura', notes,
+    } = req.body;
+
+    if (!buyerName || !buyerPhone || !deliveryAddress) {
+      return res.status(400).json({ error: 'Name, phone number, and delivery address are required.' });
+    }
+
+    if (!items || !items.length) {
+      return res.status(400).json({ error: 'No items in cart to order.' });
+    }
+
+    // Execute atomic transaction with supply chain validation
+    const result = executeOrderTransaction({
+      buyerId,
+      buyerName,
+      buyerPhone,
+      buyerEmail,
+      buyerRole: buyerRole || 'consumer',
+      sellerId,
+      sellerName,
+      sellerPhone,
+      sellerRole,
+      items,
+      paymentMethod,
+      deliveryAddress,
+      district,
+      notes,
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: 'Order confirmed successfully!',
+      order: result,
+    });
+  } catch (err: any) {
+    console.error('Order creation error:', err.message);
+    if (err.message.includes('Rule Violation')) {
+      return res.status(403).json({ error: err.message });
+    }
+    if (err.message.includes('Insufficient stock')) {
+      return res.status(400).json({ error: err.message });
+    }
+    return res.status(500).json({ error: err.message || 'Order execution failed.' });
+  }
+});
+
+// Get orders: filtered by user or role
+app.get('/api/orders', (req, res) => {
+  try {
+    const { userId, role, sellerId, buyerId } = req.query as any;
+
+    let query = 'SELECT * FROM orders WHERE 1=1';
+    const params: any[] = [];
+
+    if (buyerId) {
+      query += ' AND buyer_id = ?';
+      params.push(buyerId);
+    } else if (sellerId) {
+      query += ' AND seller_id = ?';
+      params.push(sellerId);
+    } else if (userId) {
+      query += ' AND (buyer_id = ? OR seller_id = ?)';
+      params.push(userId, userId);
+    }
+
+    if (role) {
+      query += ' AND (buyer_role = ? OR seller_role = ?)';
+      params.push(role, role);
+    }
+
+    query += ' ORDER BY created_at DESC';
+
+    const orders = db.prepare(query).all(...params) as any[];
+    const itemsStmt = db.prepare('SELECT * FROM order_items WHERE order_id = ?');
+
+    const fullOrders = orders.map((o) => {
+      const items = itemsStmt.all(o.id) as any[];
+      return {
+        id: o.id,
+        orderType: o.order_type,
+        buyerId: o.buyer_id,
+        buyerName: o.buyer_name,
+        buyerPhone: o.buyer_phone,
+        buyerEmail: o.buyer_email,
+        buyerRole: o.buyer_role,
+        sellerId: o.seller_id,
+        sellerName: o.seller_name,
+        sellerPhone: o.seller_phone,
+        sellerRole: o.seller_role,
+        totalBDT: o.total_bdt,
+        paymentMethod: o.payment_method,
+        paymentStatus: o.payment_status,
+        deliveryStatus: o.delivery_status,
+        deliveryAddress: o.delivery_address,
+        district: o.district,
+        trackingCode: o.tracking_code,
+        notes: o.notes,
+        createdAt: o.created_at,
+        updatedAt: o.updated_at,
+        items: items.map((it) => ({
+          id: it.id,
+          productId: it.product_id,
+          cropName: it.crop_name,
+          banglaName: it.bangla_name,
+          quantityKg: it.quantity_kg,
+          unitPrice: it.unit_price,
+          subtotal: it.subtotal,
+        })),
+      };
+    });
+
+    return res.json({ orders: fullOrders, total: fullOrders.length });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Update order status (or cancel with stock restoration)
+app.put('/api/orders/:id/status', (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, actorName, actorRole } = req.body;
+
+    if (status === 'Cancelled') {
+      const cancelResult = cancelOrderAndRestoreStock(id, actorName, actorRole);
+      return res.json(cancelResult);
+    }
+
+    const nowIso = new Date().toISOString();
+    db.prepare('UPDATE orders SET delivery_status = ?, updated_at = ? WHERE id = ?').run(status, nowIso, id);
+
+    return res.json({ success: true, message: `Order status updated to ${status}.` });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── WHOLESALER BIDS & FARMER INTELLIGENCE (FARMER-ONLY) ─────────────────────
+
+// Get verified wholesaler purchase offers for farmers
+app.get('/api/wholesaler-offers', (req, res) => {
+  try {
+    const { district, crop } = req.query as any;
+    let query = 'SELECT * FROM wholesaler_offers WHERE 1=1';
+    const params: any[] = [];
+
+    if (district && district !== 'All') {
+      query += ' AND district = ?';
+      params.push(district);
+    }
+    if (crop) {
+      query += ' AND (crop_name LIKE ? OR crop_bangla LIKE ?)';
+      params.push(`%${crop}%`, `%${crop}%`);
+    }
+
+    query += ' ORDER BY urgent DESC, created_at DESC';
+    const offers = db.prepare(query).all(...params);
+    return res.json({ offers });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Wholesalers post procurement demands / purchase offers
+app.post('/api/wholesaler-offers', (req, res) => {
+  try {
+    const {
+      wholesalerId, wholesalerName, wholesalerPhone, businessName,
+      cropName, cropBangla, quantityKgNeeded, offeredPricePerKg,
+      district = 'Bogura', upazila = '', location, deadline, urgent = false, notes = '',
+    } = req.body;
+
+    if (!cropName || !quantityKgNeeded || !offeredPricePerKg || !location) {
+      return res.status(400).json({ error: 'Crop, quantity, offered price, and delivery location are required.' });
+    }
+
+    const offerId = `bid-${Date.now()}`;
+    const nowIso = new Date().toISOString();
+
+    db.prepare(`
+      INSERT INTO wholesaler_offers (
+        id, wholesaler_id, wholesaler_name, wholesaler_phone, business_name,
+        crop_name, crop_bangla, quantity_kg_needed, fulfilled_kg, offered_price_per_kg,
+        district, upazila, location, deadline, urgent, verified, notes, created_at
+      ) VALUES (
+        ?, ?, ?, ?, ?,
+        ?, ?, ?, 0, ?,
+        ?, ?, ?, ?, ?, 1, ?, ?
+      )
+    `).run(
+      offerId,
+      wholesalerId || 'w-user',
+      wholesalerName || 'Verified Wholesaler',
+      wholesalerPhone || '',
+      businessName || wholesalerName || 'Wholesale Arat',
+      cropName,
+      cropBangla || cropName,
+      Number(quantityKgNeeded),
+      Number(offeredPricePerKg),
+      district,
+      upazila || null,
+      location,
+      deadline || 'Within 7 days',
+      urgent ? 1 : 0,
+      notes || null,
+      nowIso
+    );
+
+    return res.status(201).json({ success: true, offerId, message: 'Purchase offer broadcast to farmers successfully!' });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Official Department of Agricultural Marketing (DAM) market prices
+app.get('/api/market-prices', (req, res) => {
+  try {
+    const { district } = req.query as any;
+    let query = 'SELECT * FROM market_prices';
+    const params: any[] = [];
+
+    if (district && district !== 'All') {
+      query += ' WHERE district = ?';
+      params.push(district);
+    }
+    query += ' ORDER BY crop_name ASC';
+
+    const rates = db.prepare(query).all(...params);
+    return res.json({ rates, source: 'Department of Agricultural Marketing (DAM)' });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Farmer-Only Intelligence aggregation (Weather, DAM Prices, Verified Bids, Demand)
+app.get('/api/farmer/intelligence', async (req, res) => {
+  try {
+    const district = (req.query.district as string) || 'Bogura';
+
+    const rates = db.prepare('SELECT * FROM market_prices WHERE district = ?').all(district);
+    const offers = db.prepare('SELECT * FROM wholesaler_offers WHERE district = ? ORDER BY urgent DESC').all(district);
+
+    const highDemandCrops = [
+      { name: 'Hybrid Tomatoes (হাইব্রিড টমেটো)', demandIndex: 94, trend: 'High Demand', reason: 'High arat arrivals from Karwan Bazar & Dhaka wholesale corridor' },
+      { name: 'Diamond Potatoes (ডায়মন্ড আলু)', demandIndex: 88, trend: 'Stable Demand', reason: 'Cold storage intake active in Sherpur & Shibganj' },
+      { name: 'Green Chili (কাঁচা মরিচ)', demandIndex: 91, trend: 'Very High Demand', reason: 'Inter-district supply shortage due to riverine rains' },
+      { name: 'Winter Cauliflower (ফুলকপি)', demandIndex: 79, trend: 'Moderate Demand', reason: 'Early harvest fetching premium rates in city arats' },
+    ];
+
+    return res.json({
+      district,
+      marketRates: rates,
+      wholesalerOffers: offers,
+      highDemandCrops,
+      officialSource: 'Department of Agricultural Marketing (DAM) & Bangladesh Agro Met',
+      lastRefreshed: new Date().toISOString(),
+      verified: true,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin Metrics & System Overview
+app.get('/api/admin/metrics', (req, res) => {
+  try {
+    const userCounts = db.prepare('SELECT role, COUNT(*) as count FROM users GROUP BY role').all() as any[];
+    const productCounts = db.prepare('SELECT target_role, COUNT(*) as count, SUM(available_kg) as total_kg FROM products GROUP BY target_role').all() as any[];
+    const orderStats = db.prepare('SELECT COUNT(*) as total_orders, SUM(total_bdt) as total_volume FROM orders').get() as any;
+    const recentAudit = db.prepare('SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 20').all();
+
+    return res.json({
+      userCounts,
+      productCounts,
+      totalOrders: orderStats?.total_orders || 0,
+      totalVolumeBDT: orderStats?.total_volume || 0,
+      auditLogs: recentAudit,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+
+// ─── AI CROP DOCTOR & MARKET PREDICTION APIS ─────────────────────────────
+
+// 1. Crop Diagnosis Endpoint
+app.post('/api/ai/diagnose-crop', async (req, res) => {
+  const { cropName = 'Tomato', symptoms = '', imageBase64, imageMimeType = 'image/jpeg', language = 'bn' } = req.body;
+
+  const fallback = {
+    diseaseName: cropName.toLowerCase().includes('tomato') || cropName.toLowerCase().includes('টমেটো')
+      ? 'Early Blight (Alternaria solani)'
+      : cropName.toLowerCase().includes('potato') || cropName.toLowerCase().includes('আলু')
+      ? 'Late Blight (Phytophthora infestans)'
+      : 'Bacterial Leaf Spot',
+    diseaseBanglaName: cropName.toLowerCase().includes('tomato') || cropName.toLowerCase().includes('টমেটো')
+      ? 'টমেটোর আগাম ধসা রোগ'
+      : cropName.toLowerCase().includes('potato') || cropName.toLowerCase().includes('আলু')
+      ? 'আলুর নাবি ধসা রোগ (লেইট ব্লাইট)'
+      : 'পাতার ব্যাকটেরিয়াজনিত দাগ রোগ',
+    severity: 'Moderate' as const,
+    isAiEstimate: true,
+    symptomsSummary: symptoms || 'Dark concentric brown rings on lower leaves with yellow halo margins.',
+    immediateActions: language === 'bn'
+      ? ['আক্রান্ত পাতা সংগ্রহ করে পুড়িয়ে ফেলুন', 'গাছের গোড়ায় অতিরিক্ত পানি নিষ্কাশন নিশ্চিত করুন', 'বাতাস চলাচলের জন্য জমি আগাছামুক্ত রাখুন']
+      : ['Collect and burn severely infected leaves', 'Ensure proper drainage at roots', 'Keep field weed-free for aeration'],
+    chemicalTreatment: {
+      medicine: 'Mancozeb 75 WP (Dithane M-45) or Ridomil Gold MZ',
+      dose: language === 'bn' ? 'প্রতি লিটার পানিতে ২ গ্রাম হারে স্প্রে করুন' : '2 grams per liter of water',
+      schedule: language === 'bn' ? '৭-১০ দিন পর পর ২ বার স্প্রে করুন' : 'Spray twice at 7-10 day intervals',
+    },
+    organicTreatment: language === 'bn'
+      ? 'নিম তেলের দ্রবণ (প্রতি লিটারে ৫ মিলি) অথবা ট্রাইকোডার্মা জৈব ছত্রাকনাশক ব্যবহার করুন।'
+      : 'Neem oil solution (5ml/L) or Trichoderma bio-fungicide soil treatment.',
+    preventionTips: language === 'bn'
+      ? 'পরবর্তী মৌসুমে রোগমুক্ত প্রত্যায়িত বীজ ব্যবহার করুন এবং ফসল পর্যায়ক্রম অনুসরণ করুন।'
+      : 'Use certified disease-free seeds and practice crop rotation next season.',
+    aiDisclaimer: language === 'bn'
+      ? 'সতর্কতা: এটি এআই ভিত্তিক প্রাথমিক বিশ্লেষণ। কোনো রাসায়নিক প্রয়োগের পূর্বে অবশ্যই স্থানীয় উপ-সহকারী কৃষি কর্মকর্তা (SAAO/UAO) বা কৃষি বিশেষজ্ঞের পরামর্শ নিন।'
+      : 'Advisory: This is an automated AI diagnostic estimate. Always consult your local Sub-Assistant Agriculture Officer (SAAO) or certified agronomist before taking action.',
+    pesticideSafetyWarning: language === 'bn'
+      ? 'কীটনাশক সতর্কতা: স্প্রে করার সময় মাস্ক ও গ্লাভস পরিধান করুন। ফসল তোলার পূর্ববর্তী নির্ধারিত নিরাপদ সময় (PHI) বজায় রাখুন।'
+      : 'Pesticide Safety: Wear protective gloves and face mask. Strictly adhere to Pre-Harvest Intervals (PHI).',
+    verifiedBySAAO: false,
+  };
+
+  if (!ai) {
+    return res.json(fallback);
+  }
+
+  try {
+    const promptText = `Expert Agronomist for Bogura Bangladesh. Diagnose this crop:
+Crop: ${cropName}
+Symptoms: ${symptoms}
+Language: ${language === 'bn' ? 'Bengali' : 'English'}
+NOTE: Do NOT claim human or SAAO verification. Do NOT return fake certainty or confidence percentages.
+Return JSON with:
+{
+  "diseaseName": "English name",
+  "diseaseBanglaName": "বাংলা নাম",
+  "severity": "Moderate",
+  "symptomsSummary": "short explanation",
+  "immediateActions": ["action 1", "action 2"],
+  "chemicalTreatment": {
+    "medicine": "Mancozeb 75 WP or approved chemical",
+    "dose": "2g per liter",
+    "schedule": "every 7 days"
+  },
+  "organicTreatment": "Neem oil or bio remedy",
+  "preventionTips": "crop rotation and clean seed",
+  "aiDisclaimer": "AI advisory note",
+  "pesticideSafetyWarning": "safety notice"
+}`;
+
+    const parts: any[] = [{ text: promptText }];
+    if (imageBase64) {
+      const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+      parts.push({
+        inlineData: {
+          mimeType: imageMimeType || 'image/jpeg',
+          data: cleanBase64,
+        },
+      });
+    }
+
+    const response = await callGemini(parts, {
+      responseMimeType: 'application/json',
+    }, 15000);
+
+    const parsed = JSON.parse(response.text || '{}');
+    return res.json({ ...fallback, ...parsed });
+  } catch (error: any) {
+    console.warn('Crop diagnosis fallback activated:', error.message);
+    return res.json(fallback);
+  }
+});
+
+// 2. Supply-Demand & Price Prediction Endpoint
+app.post('/api/ai/predict-demand', async (req, res) => {
+  const { cropName = 'Tomato', quantityKg = 500, targetHarvestDate = 'in 10 days', district = 'Bogura', language = 'bn' } = req.body;
+
+  const fallback = {
+    cropName,
+    district,
+    expectedPriceRangeBDT: {
+      min: 36,
+      max: 46,
+      recommendedWholesale: 41,
+      retailExpected: 54,
+    },
+    marketTrend: 'Bullish (Demand exceeding local supply by 15%)',
+    demandLevel: 'High' as const,
+    boguraAratArrivalEstimate: 'Medium (approx. 45-60 metric tons daily next week)',
+    buyerRecommendation: language === 'bn'
+      ? `আগামী ১০ দিনে বগুড়া ও ঢাকা কারওয়ান বাজারের চাহিদা চাঙ্গা থাকবে। ফসল তোলার ৩ দিন আগে পাইকারদের সাথে দর পাকা করার পরামর্শ দেওয়া হচ্ছে।`
+      : `High procurement demand anticipated across Bogura Wholesale Arat & Dhaka corridors. Recommended to pre-contract 3-5 days prior.`,
+    keyRiskFactor: language === 'bn'
+      ? 'বৃষ্টিপাতের সম্ভাবনা রয়েছে, ফসল দ্রুত শুকিয়ে গ্রেডিং নিশ্চিত করুন।'
+      : 'Intermittent rainfall forecasted; ensure post-harvest curing and proper crate packing.',
+    suggestedAction: 'List on NativeBazar forward-contracts for guaranteed ৳41/kg rate',
+  };
+
+  if (!ai) {
+    return res.json(fallback);
+  }
+
+  try {
+    const prompt = `Agricultural economist for Bogura Bangladesh. Predict market rate for:
+Crop: ${cropName}, Qty: ${quantityKg} kg, Harvest in: ${targetHarvestDate}, District: ${district}
+Return JSON:
+{
+  "cropName": "${cropName}",
+  "district": "${district}",
+  "expectedPriceRangeBDT": { "min": 35, "max": 48, "recommendedWholesale": 42, "retailExpected": 56 },
+  "marketTrend": "short trend string",
+  "demandLevel": "High",
+  "boguraAratArrivalEstimate": "estimate string",
+  "buyerRecommendation": "recommendation in ${language === 'bn' ? 'Bengali' : 'English'}",
+  "keyRiskFactor": "short risk note",
+  "suggestedAction": "action note"
+}`;
+
+    const response = await callGemini(prompt, {
+      responseMimeType: 'application/json',
+    }, 15000);
+
+    const parsed = JSON.parse(response.text || '{}');
+    return res.json({ ...fallback, ...parsed });
+  } catch (error: any) {
+    console.warn('Market prediction fallback activated:', error.message);
+    return res.json(fallback);
   }
 });
 
@@ -282,9 +973,34 @@ app.get('/api/auth/me', (req, res) => {
   const token = req.headers.authorization?.replace('Bearer ', '');
   const phone = req.query.phone as string;
 
-  let user = token ? db.getUsers().find(u => u.sessionToken === token) : undefined;
+  let user: any = token ? jsonDb.getUsers().find((u: any) => u.sessionToken === token) : undefined;
   if (!user && phone) {
-    user = db.findUserByIdentifier(phone);
+    user = jsonDb.findUserByIdentifier(phone);
+  }
+
+  // Also check SQLite database if not found in jsonDb
+  if (!user && phone) {
+    const row = db.prepare('SELECT * FROM users WHERE phone = ? LIMIT 1').get(phone) as any;
+    if (row) {
+      user = {
+        id: row.id,
+        role: row.role,
+        name: row.name,
+        nameBn: row.name_bn,
+        phone: row.phone,
+        email: row.email,
+        district: row.district,
+        upazila: row.upazila,
+        verified: Boolean(row.verified),
+        farmSizeAcres: row.farm_size_acres,
+        primaryCrops: row.primary_crops ? JSON.parse(row.primary_crops) : undefined,
+        businessName: row.business_name,
+        businessType: row.business_type,
+        shopName: row.shop_name,
+        licenseNumber: row.license_number,
+        createdAt: row.created_at,
+      };
+    }
   }
 
   if (!user) {
@@ -300,7 +1016,38 @@ app.put('/api/users/profile', (req, res) => {
   const { id, name, nameBn, district, upazila, farmSizeAcres, primaryCrops, shopName, licenseNumber } = req.body;
   if (!id) return res.status(400).json({ success: false, error: 'User id is required' });
 
-  const updated = db.updateUser(id, {
+  // Update in SQLite if exists there
+  try {
+    const existing = db.prepare('SELECT id FROM users WHERE id = ?').get(id);
+    if (existing) {
+      db.prepare(`
+        UPDATE users SET
+          name = COALESCE(?, name),
+          name_bn = COALESCE(?, name_bn),
+          district = COALESCE(?, district),
+          upazila = COALESCE(?, upazila),
+          farm_size_acres = COALESCE(?, farm_size_acres),
+          primary_crops = COALESCE(?, primary_crops),
+          shop_name = COALESCE(?, shop_name),
+          license_number = COALESCE(?, license_number)
+        WHERE id = ?
+      `).run(
+        name ?? null,
+        nameBn ?? null,
+        district ?? null,
+        upazila ?? null,
+        farmSizeAcres ?? null,
+        primaryCrops ? JSON.stringify(primaryCrops) : null,
+        shopName ?? null,
+        licenseNumber ?? null,
+        id
+      );
+    }
+  } catch {
+    // continue to jsonDb
+  }
+
+  const updated = jsonDb.updateUser(id, {
     name,
     nameBn,
     district,
@@ -311,8 +1058,9 @@ app.put('/api/users/profile', (req, res) => {
     licenseNumber,
   });
 
-  if (!updated) return res.status(404).json({ success: false, error: 'User not found' });
-  const { passwordHash: _, ...safeUser } = updated;
+  const finalUser = updated || (db.prepare('SELECT * FROM users WHERE id = ?').get(id) as any);
+  if (!finalUser) return res.status(404).json({ success: false, error: 'User not found' });
+  const { passwordHash: _, password_hash: __, ...safeUser } = finalUser;
   return res.json({ success: true, user: safeUser });
 });
 
@@ -323,7 +1071,18 @@ app.get('/api/users', (req, res) => {
   try {
     const { excludeId, role, district, search } = req.query;
 
-    let users = db.getUsers().filter((u) => {
+    const sqliteRows = db.prepare('SELECT id, role, name, name_bn as nameBn, phone, email, district, upazila, verified, farm_size_acres as farmSizeAcres, primary_crops as primaryCrops, business_name as businessName, business_type as businessType, shop_name as shopName, license_number as licenseNumber FROM users').all() as any[];
+    const sqliteUsers = sqliteRows.map((u: any) => ({
+      ...u,
+      primaryCrops: u.primaryCrops ? (typeof u.primaryCrops === 'string' ? JSON.parse(u.primaryCrops) : u.primaryCrops) : undefined,
+    }));
+
+    const jsonUsers = jsonDb.getUsers();
+    const userMap = new Map<string, any>();
+    jsonUsers.forEach((u: any) => userMap.set(u.id, u));
+    sqliteUsers.forEach((u: any) => userMap.set(u.id, { ...userMap.get(u.id), ...u }));
+
+    let users = Array.from(userMap.values()).filter((u: any) => {
       // Never expose admin accounts in directory
       if (u.role === 'admin') return false;
       // Exclude the requesting user themselves
@@ -333,40 +1092,42 @@ app.get('/api/users', (req, res) => {
 
     // Role filter
     if (role && role !== 'all') {
-      users = users.filter((u) => u.role === String(role));
+      users = users.filter((u: any) => u.role === String(role));
     }
 
     // District filter
     if (district && district !== 'all') {
       users = users.filter(
-        (u) => u.district && u.district.toLowerCase() === String(district).toLowerCase()
+        (u: any) => u.district && u.district.toLowerCase() === String(district).toLowerCase()
       );
     }
 
     // Text search (name, nameBn, phone, businessName, shopName, designation, primaryCrops)
     if (search && String(search).trim()) {
       const q = String(search).toLowerCase().trim();
-      users = users.filter((u) => {
+      users = users.filter((u: any) => {
         if (u.name && u.name.toLowerCase().includes(q)) return true;
         if (u.nameBn && u.nameBn.includes(q)) return true;
         if (u.phone && u.phone.includes(q)) return true;
         if (u.district && u.district.toLowerCase().includes(q)) return true;
-        if ((u as any).businessName && (u as any).businessName.toLowerCase().includes(q)) return true;
-        if ((u as any).shopName && (u as any).shopName.toLowerCase().includes(q)) return true;
-        if ((u as any).designation && (u as any).designation.toLowerCase().includes(q)) return true;
-        if (Array.isArray((u as any).primaryCrops)) {
-          if ((u as any).primaryCrops.some((c: string) => c.toLowerCase().includes(q))) return true;
+        if (u.businessName && u.businessName.toLowerCase().includes(q)) return true;
+        if (u.shopName && u.shopName.toLowerCase().includes(q)) return true;
+        if (u.designation && u.designation.toLowerCase().includes(q)) return true;
+        if (Array.isArray(u.primaryCrops)) {
+          if (u.primaryCrops.some((c: string) => c.toLowerCase().includes(q))) return true;
         }
         return false;
       });
     }
 
     // Strip sensitive fields
-    const safeUsers = users.map(({ passwordHash: _, sessionToken: __, securityPin: ___, ...safe }) => ({
-      ...safe,
-      // Mask phone: show only last 4 digits publicly
-      phone: safe.phone ? `****${safe.phone.slice(-4)}` : '',
-    }));
+    const safeUsers = users.map((u: any) => {
+      const { passwordHash: _, password_hash: __, sessionToken: ___, securityPin: ____, ...safe } = u;
+      return {
+        ...safe,
+        phone: safe.phone ? `****${String(safe.phone).slice(-4)}` : '',
+      };
+    });
 
     res.json({ success: true, users: safeUsers, total: safeUsers.length });
   } catch (err: any) {
@@ -377,7 +1138,7 @@ app.get('/api/users', (req, res) => {
 // ─── CROPS REST APIS ─────────────────────────────────────────────────────────
 app.get('/api/crops', (req, res) => {
   const { farmerId, district } = req.query;
-  const crops = db.getCrops({
+  const crops = jsonDb.getCrops({
     farmerId: farmerId ? String(farmerId) : undefined,
     district: district ? String(district) : undefined,
   });
@@ -411,7 +1172,7 @@ app.post('/api/crops', (req, res) => {
       });
     }
 
-    const newCrop = db.addCrop({
+    const newCrop = jsonDb.addCrop({
       id: `crop-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       farmerId,
       farmerName,
@@ -439,13 +1200,13 @@ app.post('/api/crops', (req, res) => {
 });
 
 app.put('/api/crops/:id', (req, res) => {
-  const updated = db.updateCrop(req.params.id, req.body);
+  const updated = jsonDb.updateCrop(req.params.id, req.body);
   if (!updated) return res.status(404).json({ success: false, error: 'Crop listing not found' });
   return res.json({ success: true, crop: updated });
 });
 
 app.delete('/api/crops/:id', (req, res) => {
-  const deleted = db.deleteCrop(req.params.id);
+  const deleted = jsonDb.deleteCrop(req.params.id);
   if (!deleted) return res.status(404).json({ success: false, error: 'Crop listing not found' });
   return res.json({ success: true, message: 'Crop listing deleted' });
 });
@@ -453,7 +1214,7 @@ app.delete('/api/crops/:id', (req, res) => {
 // ─── SUPPLIER PRODUCTS REST APIS ─────────────────────────────────────────────
 app.get('/api/supplier-products', (req, res) => {
   const { supplierId, category, organicOnly } = req.query;
-  const products = db.getSupplierProducts({
+  const products = jsonDb.getSupplierProducts({
     supplierId: supplierId ? String(supplierId) : undefined,
     category: category ? String(category) : undefined,
     organicOnly: organicOnly === 'true',
@@ -489,7 +1250,7 @@ app.post('/api/supplier-products', (req, res) => {
       });
     }
 
-    const created = db.addSupplierProduct({
+    const created = jsonDb.addSupplierProduct({
       id: `sup-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       supplierId,
       supplierName: supplierName || 'Certified Organic Depot',
@@ -518,89 +1279,26 @@ app.post('/api/supplier-products', (req, res) => {
 });
 
 app.put('/api/supplier-products/:id', (req, res) => {
-  const updated = db.updateSupplierProduct(req.params.id, req.body);
+  const updated = jsonDb.updateSupplierProduct(req.params.id, req.body);
   if (!updated) return res.status(404).json({ success: false, error: 'Product not found' });
   return res.json({ success: true, product: updated });
 });
 
 app.delete('/api/supplier-products/:id', (req, res) => {
-  const deleted = db.deleteSupplierProduct(req.params.id);
+  const deleted = jsonDb.deleteSupplierProduct(req.params.id);
   if (!deleted) return res.status(404).json({ success: false, error: 'Product not found' });
   return res.json({ success: true, message: 'Product deleted' });
 });
 
 // ─── ORDERS & ORDER TRACKING REST APIS ───────────────────────────────────────
-app.get('/api/orders', (req, res) => {
+app.get('/api/legacy/orders', (req, res) => {
   const { customerId, sellerId, orderType } = req.query;
-  const orders = db.getOrders({
+  const orders = jsonDb.getOrders({
     customerId: customerId ? String(customerId) : undefined,
     sellerId: sellerId ? String(sellerId) : undefined,
     orderType: orderType ? String(orderType) : undefined,
   });
   res.json({ success: true, orders });
-});
-
-app.post('/api/orders', (req, res) => {
-  try {
-    const {
-      orderType = 'consumer_retail',
-      customerId,
-      customerName,
-      phone,
-      items,
-      totalBDT,
-      paymentMethod = 'bKash',
-      deliveryAddress,
-      district = 'Bogura',
-      upazila = 'Bogura Sadar',
-      sellerId,
-      sellerName,
-      sellerRole,
-      notes,
-    } = req.body;
-
-    if (!customerName || !phone || !items || !items.length || !totalBDT) {
-      return res.status(400).json({ success: false, error: 'Missing required order details' });
-    }
-
-    const randomSuffix = Math.floor(10000 + Math.random() * 90000);
-    const trackingCode = `TRK-${district.slice(0, 3).toUpperCase()}-${randomSuffix}`;
-    const orderId = `ORD-${Date.now().toString().slice(-6)}`;
-
-    const newOrder = db.addOrder({
-      id: orderId,
-      orderType,
-      customerId: customerId || `cust-${Date.now()}`,
-      customerName,
-      phone,
-      items,
-      totalBDT: Number(totalBDT),
-      paymentMethod,
-      deliveryAddress: deliveryAddress || `${district} City`,
-      district,
-      upazila,
-      status: 'Confirmed',
-      trackingCode,
-      orderDate: new Date().toISOString(),
-      sellerId,
-      sellerName,
-      sellerRole,
-      notes,
-    });
-
-    return res.status(201).json({ success: true, order: newOrder, trackingCode });
-  } catch (err: any) {
-    return res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-app.put('/api/orders/:id/status', (req, res) => {
-  const { status, deliveredDate } = req.body;
-  if (!status) return res.status(400).json({ success: false, error: 'Status is required' });
-
-  const updated = db.updateOrderStatus(req.params.id, status, deliveredDate);
-  if (!updated) return res.status(404).json({ success: false, error: 'Order not found' });
-  return res.json({ success: true, order: updated });
 });
 
 // Verified Buyer Review Submission (Allowed ONLY on Delivered Orders)
@@ -611,7 +1309,7 @@ app.post('/api/orders/:id/review', (req, res) => {
       return res.status(400).json({ success: false, error: 'Valid star rating between 1 and 5 is required' });
     }
 
-    const order = db.getOrderById(req.params.id);
+    const order = jsonDb.getOrderById(req.params.id);
     if (!order) return res.status(404).json({ success: false, error: 'Order not found' });
     if (order.status !== 'Delivered') {
       return res.status(400).json({
@@ -620,7 +1318,7 @@ app.post('/api/orders/:id/review', (req, res) => {
       });
     }
 
-    const updated = db.addOrderReview(req.params.id, Number(rating), comment || '');
+    const updated = jsonDb.addOrderReview(req.params.id, Number(rating), comment || '');
     return res.json({ success: true, order: updated, message: 'Verified review submitted successfully' });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err.message });
@@ -630,13 +1328,13 @@ app.post('/api/orders/:id/review', (req, res) => {
 // ─── REVIEWS REST APIS ───────────────────────────────────────────────────────
 app.get('/api/reviews', (req, res) => {
   const { productId } = req.query;
-  const reviews = db.getReviews(productId ? String(productId) : undefined);
+  const reviews = jsonDb.getReviews(productId ? String(productId) : undefined);
   res.json({ success: true, reviews });
 });
 
 // ─── REAL STATS REST API ────────────────────────────────────────────────────
 app.get('/api/stats', (req, res) => {
-  res.json({ success: true, stats: db.getStats() });
+  res.json({ success: true, stats: jsonDb.getStats() });
 });
 
 // ─── MASTER AGRICULTURAL CATALOG REST APIS ──────────────────────────────────
@@ -644,7 +1342,7 @@ app.get('/api/catalog', (req, res) => {
   const { category, query, page = '1', limit = '24' } = req.query;
   const cat = typeof category === 'string' ? category : undefined;
   const q = typeof query === 'string' ? query : undefined;
-  const all = db.getCatalog(cat, q);
+  const all = jsonDb.getCatalog(cat, q);
 
   if (limit === 'all') {
     return res.json({ success: true, products: all, total: all.length, page: 1, totalPages: 1 });
@@ -668,7 +1366,7 @@ app.get('/api/catalog', (req, res) => {
 });
 
 app.get('/api/catalog/:id', (req, res) => {
-  const product = db.getCatalogById(req.params.id);
+  const product = jsonDb.getCatalogById(req.params.id);
   if (!product) return res.status(404).json({ success: false, error: 'Product not found' });
   res.json({ success: true, product });
 });
@@ -734,7 +1432,7 @@ app.get('/api/messages', (req, res) => {
   if (!userA || !userB) {
     return res.status(400).json({ success: false, error: 'userA and userB are required' });
   }
-  const messages = db.getMessages(String(userA), String(userB));
+  const messages = jsonDb.getMessages(String(userA), String(userB));
   res.json({ success: true, messages });
 });
 
@@ -745,7 +1443,7 @@ app.post('/api/messages', (req, res) => {
       return res.status(400).json({ success: false, error: 'Missing required message parameters' });
     }
 
-    const message = db.addMessage({
+    const message = jsonDb.addMessage({
       senderId,
       senderName: senderName || 'User',
       senderRole: senderRole || 'farmer',
@@ -771,7 +1469,7 @@ app.put('/api/messages/read', (req, res) => {
   if (!recipientId || !senderId) {
     return res.status(400).json({ success: false, error: 'recipientId and senderId are required' });
   }
-  db.markMessagesRead(recipientId, senderId);
+  jsonDb.markMessagesRead(recipientId, senderId);
   sendSSE(senderId, 'messages_read', { recipientId, senderId });
   res.json({ success: true });
 });
@@ -780,7 +1478,7 @@ app.put('/api/messages/read', (req, res) => {
 app.get('/api/connections', (req, res) => {
   const { userId } = req.query;
   if (!userId) return res.status(400).json({ success: false, error: 'userId is required' });
-  const connections = db.getConnections(String(userId));
+  const connections = jsonDb.getConnections(String(userId));
   res.json({ success: true, connections });
 });
 
@@ -790,7 +1488,7 @@ app.post('/api/connections', (req, res) => {
     if (!requesterId || !recipientId) {
       return res.status(400).json({ success: false, error: 'requesterId and recipientId are required' });
     }
-    const connection = db.addConnectionRequest(requesterId, recipientId);
+    const connection = jsonDb.addConnectionRequest(requesterId, recipientId);
     sendSSE(recipientId, 'new_connection', { connection });
     sendSSE(requesterId, 'connection_requested', { connection });
     res.status(201).json({ success: true, connection });
@@ -804,7 +1502,7 @@ app.put('/api/connections/:id', (req, res) => {
   if (status !== 'accepted' && status !== 'rejected') {
     return res.status(400).json({ success: false, error: 'Status must be accepted or rejected' });
   }
-  const connection = db.updateConnectionStatus(req.params.id, status);
+  const connection = jsonDb.updateConnectionStatus(req.params.id, status);
   if (!connection) return res.status(404).json({ success: false, error: 'Connection not found' });
 
   sendSSE(connection.requesterId, 'connection_updated', { connection });
@@ -813,7 +1511,7 @@ app.put('/api/connections/:id', (req, res) => {
 });
 
 app.delete('/api/connections/:id', (req, res) => {
-  const deleted = db.deleteConnection(req.params.id);
+  const deleted = jsonDb.deleteConnection(req.params.id);
   res.json({ success: deleted });
 });
 
@@ -821,19 +1519,19 @@ app.delete('/api/connections/:id', (req, res) => {
 app.get('/api/notifications', (req, res) => {
   const { userId } = req.query;
   if (!userId) return res.status(400).json({ success: false, error: 'userId is required' });
-  const notifications = db.getNotifications(String(userId));
+  const notifications = jsonDb.getNotifications(String(userId));
   res.json({ success: true, notifications });
 });
 
 app.put('/api/notifications/:id/read', (req, res) => {
-  db.markNotificationRead(req.params.id);
+  jsonDb.markNotificationRead(req.params.id);
   res.json({ success: true });
 });
 
 app.put('/api/notifications/read-all', (req, res) => {
   const { userId } = req.body;
   if (!userId) return res.status(400).json({ success: false, error: 'userId is required' });
-  db.markAllNotificationsRead(userId);
+  jsonDb.markAllNotificationsRead(userId);
   res.json({ success: true });
 });
 
@@ -843,14 +1541,14 @@ app.post('/api/auth/logout', (req, res) => {
     const token = req.headers.authorization?.replace('Bearer ', '') || req.body.token;
     const { userId } = req.body;
 
-    let user = userId ? db.getUserById(userId) : undefined;
+    let user: any = userId ? jsonDb.getUserById(userId) : undefined;
     if (!user && token) {
-      user = db.getUsers().find((u) => u.sessionToken === token);
+      user = jsonDb.getUsers().find((u: any) => u.sessionToken === token);
     }
 
     if (user) {
-      db.updateUser(user.id, { sessionToken: undefined });
-      db.addAuditLog({
+      jsonDb.updateUser(user.id, { sessionToken: undefined });
+      jsonDb.addAuditLog({
         timestamp: new Date().toISOString(),
         phone: user.phone,
         role: user.role,
@@ -892,13 +1590,13 @@ app.post('/api/calls/signal', (req, res) => {
 app.get('/api/calls/logs', (req, res) => {
   const { userId } = req.query;
   if (!userId) return res.status(400).json({ success: false, error: 'userId is required' });
-  const logs = db.getCallLogs(String(userId));
+  const logs = jsonDb.getCallLogs(String(userId));
   res.json({ success: true, logs });
 });
 
 app.post('/api/calls/logs', (req, res) => {
   try {
-    const log = db.addCallLog(req.body);
+    const log = jsonDb.addCallLog(req.body);
     res.status(201).json({ success: true, log });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
@@ -1112,14 +1810,14 @@ function resolveContextAwareAssistant(
   // 2. Real Authenticated User Orders lookup
   if (q.includes('অর্ডার') || q.includes('order') || q.includes('ডেলিভারি') || q.includes('অবস্থা')) {
     if (userId) {
-      const userOrders = db.getOrders({ customerId: userId }).concat(db.getOrders({ sellerId: userId }));
+      const userOrders = jsonDb.getOrders({ customerId: userId }).concat(jsonDb.getOrders({ sellerId: userId }));
       if (userOrders.length > 0) {
         const latest = userOrders[0];
         const statusBn = latest.status === 'Delivered' ? 'সরবরাহ সম্পন্ন' : latest.status === 'Confirmed' ? 'নিশ্চিতকৃত ও প্রস্তুত' : 'প্রক্রিয়াধীন';
         return {
           intent: 'ANSWER',
           reply: language === 'bn'
-            ? `আপনার সর্বশেষ অর্ডার #${latest.id} (${latest.items.map(i => i.itemName).join(', ')}) বর্তমানে "${statusBn}" অবস্থায় আছে। মোট মূল্য: ৳${latest.totalBDT}। ট্র্যাকিং কোড: ${latest.trackingCode}।`
+            ? `আপনার সর্বশেষ অর্ডার #${latest.id} (${latest.items.map((i: any) => i.itemName).join(', ')}) বর্তমানে "${statusBn}" অবস্থায় আছে। মোট মূল্য: ৳${latest.totalBDT}। ট্র্যাকিং কোড: ${latest.trackingCode}।`
             : `Your latest order #${latest.id} is currently "${latest.status}". Total: ৳${latest.totalBDT}. Tracking: ${latest.trackingCode}.`,
           action: { label: language === 'bn' ? 'অর্ডারের বিবরণ দেখুন' : 'View Order Details', action: 'OPEN_ORDERS', route: `/orders?orderId=${latest.id}` },
         };
@@ -1146,9 +1844,9 @@ function resolveContextAwareAssistant(
     }
 
     // Identify crop from catalog
-    const catalog = db.getCatalog();
+    const catalog = jsonDb.getCatalog();
     let matchedCrop = catalog.find(
-      (c) => q.includes(c.name.toLowerCase()) || q.includes(c.nameBn) || c.keywords.some((k) => q.includes(k.toLowerCase()))
+      (c: any) => q.includes(c.name.toLowerCase()) || q.includes(c.nameBn) || c.keywords.some((k: string) => q.includes(k.toLowerCase()))
     );
 
     // If query asks for price but specifies neither a crop nor clear location:

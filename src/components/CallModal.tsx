@@ -27,6 +27,9 @@ interface CallModalProps {
 
 const ROLE_ICONS: Record<UserRole, React.ReactNode> = {
   farmer: <Sprout className="w-3.5 h-3.5" />,
+  wholesaler: <Briefcase className="w-3.5 h-3.5" />,
+  retailer: <Store className="w-3.5 h-3.5" />,
+  consumer: <ShoppingCart className="w-3.5 h-3.5" />,
   businessman: <Briefcase className="w-3.5 h-3.5" />,
   supplier: <Store className="w-3.5 h-3.5" />,
   customer: <ShoppingCart className="w-3.5 h-3.5" />,
@@ -36,6 +39,9 @@ const ROLE_ICONS: Record<UserRole, React.ReactNode> = {
 
 const ROLE_NAMES: Record<UserRole, { en: string; bn: string }> = {
   farmer: { en: 'Farmer', bn: 'কৃষক' },
+  wholesaler: { en: 'Wholesaler', bn: 'পাইকার' },
+  retailer: { en: 'Retailer', bn: 'খুচরা বিক্রেতা' },
+  consumer: { en: 'Consumer', bn: 'ভোক্তা' },
   businessman: { en: 'Trader / Buyer', bn: 'ব্যবসায়ী' },
   supplier: { en: 'Agri Supplier', bn: 'সরবরাহকারী' },
   customer: { en: 'Consumer', bn: 'ভোক্তা' },
