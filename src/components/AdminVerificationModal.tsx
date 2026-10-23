@@ -62,12 +62,6 @@ export const AdminVerificationModal: React.FC<AdminVerificationModalProps> = ({
     }, 400);
   };
 
-  const handleFillDemoAdmin = () => {
-    setEmail('NativeBazarSJS');
-    setPassword('12345678');
-    setError('');
-  };
-
   return (
     <div
       role="dialog"
@@ -87,7 +81,7 @@ export const AdminVerificationModal: React.FC<AdminVerificationModalProps> = ({
                 {t('Admin Authentication Required', 'অ্যাডমিন নিরাপত্তা যাচাইকরণ')}
               </h3>
               <p className="text-[11px] text-stone-500 font-medium">
-                {t('Verify email & password to access admin section', 'অ্যাডমিন সেকশনে প্রবেশের জন্য ইমেইল ও পাসওয়ার্ড দিন')}
+                {t('Verify credentials to access admin section', 'অ্যাডমিন সেকশনে প্রবেশের জন্য অনুমোদিত তথ্য দিন')}
               </p>
             </div>
           </div>
@@ -97,25 +91,6 @@ export const AdminVerificationModal: React.FC<AdminVerificationModalProps> = ({
             className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-stone-100 text-stone-400"
           >
             <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        {/* Demo Helper Banner */}
-        <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl text-xs flex items-center justify-between gap-2">
-          <div className="space-y-0.5">
-            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">
-              {t('Demo Admin Account', 'ডেমো অ্যাডমিন অ্যাকাউন্ট')}
-            </span>
-            <span className="text-[11px] text-slate-800 font-mono block">
-              admin@nativebazar.gov.bd
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={handleFillDemoAdmin}
-            className="px-2.5 py-1 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-[10px] font-bold transition-colors shrink-0"
-          >
-            {t('Fill Demo Credentials', 'ডেমো তথ্য পূরণ')}
           </button>
         </div>
 

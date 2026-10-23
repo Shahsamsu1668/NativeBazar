@@ -6,24 +6,99 @@
 
 import { WeatherData, WeatherForecastDay, CropWeatherAlert } from '../types';
 
-// District coordinates (Bangladesh)
-const DISTRICT_COORDS: Record<string, { lat: number; lon: number }> = {
-  Bogura:      { lat: 24.846, lon: 89.372 },
-  Rajshahi:    { lat: 24.375, lon: 88.603 },
-  Rangpur:     { lat: 25.747, lon: 89.275 },
-  Dhaka:       { lat: 23.810, lon: 90.412 },
-  Jashore:     { lat: 23.166, lon: 89.208 },
-  Mymensingh:  { lat: 24.747, lon: 90.407 },
-  Chittagong:  { lat: 22.356, lon: 91.783 },
-  Sylhet:      { lat: 24.894, lon: 91.868 },
-  Barisal:     { lat: 22.701, lon: 90.353 },
-  Khulna:      { lat: 22.845, lon: 89.540 },
-  Dinajpur:    { lat: 25.627, lon: 88.633 },
-  Comilla:     { lat: 23.468, lon: 91.178 },
-  Joypurhat:   { lat: 25.099, lon: 89.022 },
-  Gabtali:     { lat: 24.789, lon: 89.225 },
-  Shibganj:    { lat: 24.858, lon: 89.353 },
+// Comprehensive district coordinates and aliases (Bangladesh 64 districts)
+export const BANGLADESH_DISTRICT_COORDS: Record<string, { lat: number; lon: number; bn: string; aliases: string[] }> = {
+  // Rajshahi Division
+  Bogura: { lat: 24.8465, lon: 89.3778, bn: 'বগুড়া', aliases: ['bogura', 'bogra', 'বগুড়া', 'বগুড়া'] },
+  Rajshahi: { lat: 24.3745, lon: 88.6042, bn: 'রাজশাহী', aliases: ['rajshahi', 'রাজশাহী'] },
+  Joypurhat: { lat: 25.0947, lon: 89.0209, bn: 'জয়পুরহাট', aliases: ['joypurhat', 'জয়পুরহাট', 'জয়পুরহাট'] },
+  Naogaon: { lat: 24.7936, lon: 88.9318, bn: 'নওগাঁ', aliases: ['naogaon', 'নওগাঁ'] },
+  Natore: { lat: 24.4206, lon: 89.0003, bn: 'নাটোর', aliases: ['natore', 'নাটোর'] },
+  Chapainawabganj: { lat: 24.5965, lon: 88.2775, bn: 'চাঁপাইনবাবগঞ্জ', aliases: ['chapainawabganj', 'চাঁপাইনবাবগঞ্জ'] },
+  Pabna: { lat: 24.0064, lon: 89.2372, bn: 'পাবনা', aliases: ['pabna', 'পাবনা'] },
+  Sirajganj: { lat: 24.4534, lon: 89.7006, bn: 'সিরাজগঞ্জ', aliases: ['sirajganj', 'সিরাজগঞ্জ'] },
+
+  // Dhaka Division
+  Dhaka: { lat: 23.8103, lon: 90.4125, bn: 'ঢাকা', aliases: ['dhaka', 'ঢাকা'] },
+  Gazipur: { lat: 23.9999, lon: 90.4203, bn: 'গাজীপুর', aliases: ['gazipur', 'গাজীপুর'] },
+  Narayanganj: { lat: 23.6337, lon: 90.4965, bn: 'নারায়ণগঞ্জ', aliases: ['narayanganj', 'নারায়ণগঞ্জ', 'নারায়নগঞ্জ'] },
+  Tangail: { lat: 24.2513, lon: 89.9167, bn: 'টাঙ্গাইল', aliases: ['tangail', 'টাঙ্গাইল'] },
+  Narsingdi: { lat: 23.9322, lon: 90.7154, bn: 'নরসিংদী', aliases: ['narsingdi', 'নরসিংদী'] },
+  Faridpur: { lat: 23.6071, lon: 89.8429, bn: 'ফরিদপুর', aliases: ['faridpur', 'ফরিদপুর'] },
+  Manikganj: { lat: 23.8644, lon: 90.0047, bn: 'মানিকগঞ্জ', aliases: ['manikganj', 'মানিকগঞ্জ'] },
+  Munshiganj: { lat: 23.5422, lon: 90.5305, bn: 'মুন্সীগঞ্জ', aliases: ['munshiganj', 'মুন্সীগঞ্জ'] },
+  Gopalganj: { lat: 23.0051, lon: 89.8266, bn: 'গোপালগঞ্জ', aliases: ['gopalganj', 'গোপালগঞ্জ'] },
+  Madaripur: { lat: 23.1641, lon: 90.1897, bn: 'মাদারীপুর', aliases: ['madaripur', 'মাদারীপুর'] },
+  Rajbari: { lat: 23.7574, lon: 89.6445, bn: 'রাজবাড়ী', aliases: ['rajbari', 'রাজবাড়ী', 'রাজবাড়ি'] },
+  Shariatpur: { lat: 23.2423, lon: 90.3526, bn: 'শরীয়তপুর', aliases: ['shariatpur', 'শরীয়তপুর', 'শরিয়তপুর'] },
+  Kishoreganj: { lat: 24.4449, lon: 90.7766, bn: 'কিশোরগঞ্জ', aliases: ['kishoreganj', 'কিশোরগঞ্জ'] },
+
+  // Rangpur Division
+  Rangpur: { lat: 25.7439, lon: 89.2752, bn: 'রংপুর', aliases: ['rangpur', 'রংপুর'] },
+  Dinajpur: { lat: 25.6217, lon: 88.6355, bn: 'দিনাজপুর', aliases: ['dinajpur', 'দিনাজপুর'] },
+  Kurigram: { lat: 25.8054, lon: 89.6362, bn: 'কুড়িগ্রাম', aliases: ['kurigram', 'কুড়িগ্রাম', 'কুড়িগ্রাম'] },
+  Gaibandha: { lat: 25.3288, lon: 89.5430, bn: 'গাইবান্ধা', aliases: ['gaibandha', 'গাইবান্ধা'] },
+  Nilphamari: { lat: 25.9318, lon: 88.8560, bn: 'নীলফামারী', aliases: ['nilphamari', 'নীলফামারী'] },
+  Panchagarh: { lat: 26.3411, lon: 88.5542, bn: 'পঞ্চগড়', aliases: ['panchagarh', 'পঞ্চগড়', 'পঞ্চগড়'] },
+  Thakurgaon: { lat: 26.0337, lon: 88.4617, bn: 'ঠাকুরগাঁও', aliases: ['thakurgaon', 'ঠাকুরগাঁও'] },
+  Lalmonirhat: { lat: 25.9923, lon: 89.2847, bn: 'লালমনিরহাট', aliases: ['lalmonirhat', 'লালমনিরহাট'] },
+
+  // Chittagong Division
+  Chittagong: { lat: 22.3569, lon: 91.7832, bn: 'চট্টগ্রাম', aliases: ['chittagong', 'chattogram', 'ctg', 'চট্টগ্রাম'] },
+  CoxsBazar: { lat: 21.4272, lon: 92.0058, bn: 'কক্সবাজার', aliases: ['coxsbazar', "cox's bazar", 'কক্সবাজার'] },
+  Comilla: { lat: 23.4682, lon: 91.1788, bn: 'কুমিল্লা', aliases: ['comilla', 'cumilla', 'কুমিল্লা'] },
+  Feni: { lat: 23.0159, lon: 91.3976, bn: 'ফেনী', aliases: ['feni', 'ফেনী'] },
+  Brahmanbaria: { lat: 23.9571, lon: 91.1119, bn: 'ব্রাহ্মণবাড়িয়া', aliases: ['brahmanbaria', 'ব্রাহ্মণবাড়িয়া', 'ব্রাহ্মণবাড়িয়া'] },
+  Noakhali: { lat: 22.8696, lon: 91.0994, bn: 'নোয়াখালী', aliases: ['noakhali', 'নোয়াখালী', 'নোয়াখালী'] },
+  Chandpur: { lat: 23.2333, lon: 90.6667, bn: 'চাঁদপুর', aliases: ['chandpur', 'চাঁদপুর'] },
+  Lakshmipur: { lat: 22.9425, lon: 90.8412, bn: 'লক্ষ্মীপুর', aliases: ['lakshmipur', 'লক্ষ্মীপুর'] },
+  Rangamati: { lat: 22.7324, lon: 92.2985, bn: 'রাঙ্গামাটি', aliases: ['rangamati', 'রাঙ্গামাটি'] },
+  Khagrachhari: { lat: 23.1193, lon: 91.9847, bn: 'খাগড়াছড়ি', aliases: ['khagrachhari', 'খাগড়াছড়ি', 'খাগড়াছড়ি'] },
+  Bandarban: { lat: 22.1953, lon: 92.2184, bn: 'বান্দরবান', aliases: ['bandarban', 'বান্দরবান'] },
+
+  // Khulna Division
+  Khulna: { lat: 22.8456, lon: 89.5403, bn: 'খুলনা', aliases: ['khulna', 'খুলনা'] },
+  Jashore: { lat: 23.1664, lon: 89.2081, bn: 'যশোর', aliases: ['jashore', 'jessore', 'যশোর'] },
+  Satkhira: { lat: 22.7185, lon: 89.0705, bn: 'সাতক্ষীরা', aliases: ['satkhira', 'সাতক্ষীরা'] },
+  Bagerhat: { lat: 22.6516, lon: 89.7859, bn: 'বাগেরহাট', aliases: ['bagerhat', 'বাগেরহাট'] },
+  Kushtia: { lat: 23.9013, lon: 89.1205, bn: 'কুষ্টিয়া', aliases: ['kushtia', 'কুষ্টিয়া', 'কুষ্টিয়া'] },
+  Chuadanga: { lat: 23.6402, lon: 88.8418, bn: 'চুয়াডাঙ্গা', aliases: ['chuadanga', 'চুয়াডাঙ্গা', 'চুয়াডাঙ্গা'] },
+  Meherpur: { lat: 23.7622, lon: 88.6318, bn: 'মেহেরপুর', aliases: ['meherpur', 'মেহেরপুর'] },
+  Jhenaidah: { lat: 23.5448, lon: 89.1539, bn: 'ঝিনাইদহ', aliases: ['jhenaidah', 'ঝিনাইদহ'] },
+  Magura: { lat: 23.4873, lon: 89.4199, bn: 'মাগুরা', aliases: ['magura', 'মাগুরা'] },
+  Narail: { lat: 23.1725, lon: 89.5127, bn: 'নড়াইল', aliases: ['narail', 'নড়াইল', 'নড়াইল'] },
+
+  // Barisal Division
+  Barisal: { lat: 22.7010, lon: 90.3535, bn: 'বরিশাল', aliases: ['barisal', 'barishal', 'বরিশাল'] },
+  Bhola: { lat: 22.6859, lon: 90.6481, bn: 'ভোলা', aliases: ['bhola', 'ভোলা'] },
+  Jhalokati: { lat: 22.6406, lon: 90.1987, bn: 'ঝালকাঠি', aliases: ['jhalokati', 'jhalakati', 'ঝালকাঠি'] },
+  Pirojpur: { lat: 22.5841, lon: 89.9720, bn: 'পিরোজপুর', aliases: ['pirojpur', 'পিরোজপুর'] },
+  Barguna: { lat: 22.0953, lon: 90.1121, bn: 'বরগুনা', aliases: ['barguna', 'বরগুনা'] },
+  Patuakhali: { lat: 22.3596, lon: 90.3299, bn: 'পটুয়াখালী', aliases: ['patuakhali', 'পটুয়াখালী', 'পটুয়াখালী'] },
+
+  // Sylhet Division
+  Sylhet: { lat: 24.8949, lon: 91.8687, bn: 'সিলেট', aliases: ['sylhet', 'সিলেট'] },
+  Moulvibazar: { lat: 24.4829, lon: 91.7774, bn: 'মৌলভীবাজার', aliases: ['moulvibazar', 'মৌলভীবাজার'] },
+  Habiganj: { lat: 24.3749, lon: 91.4155, bn: 'হবিগঞ্জ', aliases: ['habiganj', 'হবিগঞ্জ'] },
+  Sunamganj: { lat: 25.0658, lon: 91.3950, bn: 'সুনামগঞ্জ', aliases: ['sunamganj', 'সুনামগঞ্জ'] },
+
+  // Mymensingh Division
+  Mymensingh: { lat: 24.7471, lon: 90.4203, bn: 'ময়মনসিংহ', aliases: ['mymensingh', 'ময়মনসিংহ', 'ময়মনসিংহ'] },
+  Jamalpur: { lat: 24.9375, lon: 89.9378, bn: 'জামালপুর', aliases: ['jamalpur', 'জামালপুর'] },
+  Netrokona: { lat: 24.8709, lon: 90.7279, bn: 'নেত্রকোণা', aliases: ['netrokona', 'নেত্রকোণা', 'নেত্রকোনা'] },
+  Sherpur: { lat: 25.0205, lon: 90.0153, bn: 'শেরপুর', aliases: ['sherpur', 'শেরপুর'] },
 };
+
+export function resolveDistrictKey(districtInput: string): string | null {
+  if (!districtInput || !districtInput.trim()) return null;
+  const clean = districtInput.trim().toLowerCase();
+
+  for (const [key, val] of Object.entries(BANGLADESH_DISTRICT_COORDS)) {
+    if (key.toLowerCase() === clean || val.bn.toLowerCase() === clean) return key;
+    if (val.aliases.some((a) => a.toLowerCase() === clean)) return key;
+  }
+  return null;
+}
 
 // WMO weather codes to descriptions
 const WEATHER_CODES: Record<number, { en: string; bn: string; icon: string }> = {
@@ -124,14 +199,57 @@ let weatherCache: { district: string; data: WeatherData; fetchedAt: number } | n
 const CACHE_TTL = 30 * 60 * 1000; // 30 minutes
 
 export async function fetchWeather(district = 'Bogura'): Promise<WeatherData> {
+  const resolvedKey = resolveDistrictKey(district) || 'Bogura';
+
   // Return cached data if fresh
-  if (weatherCache && weatherCache.district === district && Date.now() - weatherCache.fetchedAt < CACHE_TTL) {
+  if (weatherCache && weatherCache.district === resolvedKey && Date.now() - weatherCache.fetchedAt < CACHE_TTL) {
     return weatherCache.data;
   }
 
-  const coords = DISTRICT_COORDS[district] || DISTRICT_COORDS.Bogura;
+  const coords = BANGLADESH_DISTRICT_COORDS[resolvedKey];
 
   try {
+    // 1. Try our backend proxy first
+    const proxyRes = await fetch(`/api/weather/${encodeURIComponent(resolvedKey)}`).catch(() => null);
+    if (proxyRes && proxyRes.ok) {
+      const json = await proxyRes.json();
+      if (json.success && json.data) {
+        const cur = json.data.current_weather || json.data.current;
+        const day = json.data.daily;
+        const temp = Math.round(cur.temperature || cur.temperature_2m);
+        const humidity = cur.relative_humidity_2m || 70;
+        const code = cur.weathercode !== undefined ? cur.weathercode : cur.weather_code;
+        const desc = getWeatherDesc(code);
+
+        const forecast: WeatherForecastDay[] = (day.time as string[]).slice(0, 7).map((date: string, i: number) => ({
+          date,
+          maxTemp: Math.round(day.temperature_2m_max[i]),
+          minTemp: Math.round(day.temperature_2m_min[i]),
+          precipitation: parseFloat((day.precipitation_sum[i] || 0).toFixed(1)),
+          weatherCode: day.weathercode ? day.weathercode[i] : day.weather_code[i],
+        }));
+
+        const precipitation7d = forecast.reduce((s, d) => s + d.precipitation, 0);
+        const cropAlerts = generateCropAlerts(temp, humidity, code, precipitation7d);
+
+        const data: WeatherData = {
+          temperature: temp,
+          humidity,
+          windSpeed: Math.round(cur.windspeed || cur.wind_speed_10m || 10),
+          weatherCode: code,
+          description: desc.en,
+          descriptionBn: desc.bn,
+          icon: desc.icon,
+          forecast,
+          cropAlerts,
+        };
+
+        weatherCache = { district: resolvedKey, data, fetchedAt: Date.now() };
+        return data;
+      }
+    }
+
+    // 2. Direct Open-Meteo fallback
     const url = new URL('https://api.open-meteo.com/v1/forecast');
     url.searchParams.set('latitude',         String(coords.lat));
     url.searchParams.set('longitude',        String(coords.lon));
@@ -175,7 +293,7 @@ export async function fetchWeather(district = 'Bogura'): Promise<WeatherData> {
       cropAlerts,
     };
 
-    weatherCache = { district, data, fetchedAt: Date.now() };
+    weatherCache = { district: resolvedKey, data, fetchedAt: Date.now() };
     return data;
   } catch (err) {
     console.warn('Weather API fallback:', err);

@@ -300,7 +300,7 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
                   </div>
                   <div className="flex justify-between text-stone-600">
                     <span>Delivery (Bogura Local)</span>
-                    <span className="text-emerald-700 font-medium">Free (Pilot Offer)</span>
+                    <span className="text-emerald-700 font-medium">Free</span>
                   </div>
                   <div className="flex justify-between font-extrabold text-sm text-stone-900 pt-1">
                     <span>Total Amount</span>
@@ -313,7 +313,7 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
                   className="w-full mt-2 bg-purple-700 hover:bg-purple-800 text-white font-bold py-2.5 rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2"
                 >
                   <ShieldCheck className="w-4 h-4" />
-                  <span>{language === 'bn' ? 'অর্ডার সম্পন্ন করুন' : 'Proceed to Checkout'}</span>
+                  <span>{language === 'bn' ? 'এখনই অর্ডার করুন' : 'Order Now'}</span>
                 </button>
               </div>
             ) : (
@@ -431,7 +431,7 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
                       type="submit"
                       className="bg-purple-700 hover:bg-purple-800 text-white font-bold px-4 py-2 rounded-lg shadow-sm"
                     >
-                      Confirm Order
+                      {language === 'bn' ? 'এখনই অর্ডার করুন' : 'Confirm Order'}
                     </button>
                   </div>
                 </form>

@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Language, UserRole, User } from '../types';
 import { AuthStore, LoginResult } from '../data/store';
-import { DEMO_CREDENTIALS, BANGLADESH_LOCATIONS } from '../data/mockData';
+import { BANGLADESH_LOCATIONS } from '../data/mockData';
+import { apiService } from '../services/apiService';
 import {
   Sprout,
   Phone,
@@ -10,10 +11,8 @@ import {
   EyeOff,
   ArrowRight,
   ShieldCheck,
-  Briefcase,
   Store,
   ShoppingCart,
-  Microscope,
   RefreshCw,
   KeyRound,
   AlertTriangle,
@@ -22,13 +21,9 @@ import {
   ArrowLeft,
   Clock,
   Mail,
-  GraduationCap,
   MapPin,
   Building,
-  ImagePlus,
-  FileText,
-  CreditCard,
-  X,
+  Sparkles,
 } from 'lucide-react';
 
 interface AuthPageProps {
@@ -37,6 +32,18 @@ interface AuthPageProps {
   onAuthSuccess: (user: User) => void;
 }
 
+const COMMON_CROP_PILLS = [
+  { en: 'Potato', bn: 'আলু' },
+  { en: 'Tomato', bn: 'টমেটো' },
+  { en: 'Green Chili', bn: 'কাঁচা মরিচ' },
+  { en: 'Eggplant', bn: 'বেগুন' },
+  { en: 'Cauliflower', bn: 'ফুলকপি' },
+  { en: 'Onion', bn: 'পেঁয়াজ' },
+  { en: 'Paddy', bn: 'ধান' },
+  { en: 'Cabbage', bn: 'বাঁধাকপি' },
+  { en: 'Carrot', bn: 'গাজর' },
+];
+
 export const AuthPage: React.FC<AuthPageProps> = ({
   language,
   onLanguageToggle,
@@ -44,10 +51,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 }) => {
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [selectedRole, setSelectedRole] = useState<UserRole>('farmer');
+  const [isAdminPortal, setIsAdminPortal] = useState(false);
 
-  // Login credentials
-  const [loginIdentifier, setLoginIdentifier] = useState('01712458920');
-  const [loginPassword, setLoginPassword] = useState('Krishi#2026!Rafiq');
+  // Login credentials - completely empty by default, no demo passwords
+  const [loginIdentifier, setLoginIdentifier] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
   // Admin 2FA Step State
@@ -67,23 +75,16 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   const [regPhone, setRegPhone] = useState('');
   const [regDistrict, setRegDistrict] = useState('Bogura');
   const [regUpazila, setRegUpazila] = useState('Shibganj');
-  const [regEducation, setRegEducation] = useState('Diploma in Agriculture');
   const [regPassword, setRegPassword] = useState('');
   const [regConfirmPassword, setRegConfirmPassword] = useState('');
 
-  // Role extras for registration
-  const [farmSize, setFarmSize] = useState('3.5');
-  const [cropsSelected, setCropsSelected] = useState('Potato, Tomato, Chili');
-  const [businessName, setBusinessName] = useState('Bogura Trading Hub');
-  const [businessType, setBusinessType] = useState('Wholesaler / Aratdar');
-  const [shopName, setShopName] = useState('Krishi Upokoron Bitan');
-  const [licenseNumber, setLicenseNumber] = useState('LIC-BOG-2026');
-  const [designation, setDesignation] = useState('Assistant Agronomy Officer');
-  const [institution, setInstitution] = useState('Department of Agricultural Extension (DAE)');
-  const [regCertPreview, setRegCertPreview] = useState<string | null>(null);
-  const [regNidPreview, setRegNidPreview] = useState<string | null>(null);
-  const certInputRef = useRef<HTMLInputElement>(null);
-  const nidInputRef = useRef<HTMLInputElement>(null);
+  // Farmer specific simplified fields
+  const [farmSize, setFarmSize] = useState('');
+  const [selectedCropPills, setSelectedCropPills] = useState<string[]>(['Potato', 'Tomato']);
+
+  // Supplier specific fields
+  const [shopName, setShopName] = useState('');
+  const [licenseNumber, setLicenseNumber] = useState('');
 
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -117,17 +118,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   // Select a role tab & configure defaults
   const handleRoleSelect = (role: UserRole) => {
     setSelectedRole(role);
+    setIsAdminPortal(role === 'admin');
     setIs2FAStep(false);
     setError('');
-
-    const cred = DEMO_CREDENTIALS[role];
-    if (cred && cred.phone) {
-      setLoginIdentifier(cred.phone);
-      setLoginPassword(cred.password);
-    } else {
-      setLoginIdentifier('');
-      setLoginPassword('');
-    }
   };
 
   // Upazilas based on chosen district
@@ -152,50 +145,86 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     setError('');
     setLoading(true);
 
-    await new Promise((r) => setTimeout(r, 400));
+    const targetRole = isAdminPortal ? 'admin' : selectedRole;
 
-    const result: LoginResult = AuthStore.login(
-      loginIdentifier,
-      loginPassword,
-      is2FAStep ? securityPin : undefined,
-      selectedRole
-    );
-    setLoading(false);
+    try {
+      const apiRes = await apiService.login({
+        identifier: loginIdentifier.trim(),
+        password: loginPassword,
+        securityPin: is2FAStep ? securityPin.trim() : undefined,
+        role: targetRole,
+      });
 
-    if (result.locked) {
-      setIsLocked(true);
-      setLockoutSeconds(result.remainingSeconds || 180);
-      setError(
-        language === 'bn'
-          ? `একাধিক ভুল চেষ্টার কারণে অ্যাকাউন্ট সাময়িকভাবে লক করা হয়েছে। ${result.remainingSeconds} সেকেন্ড পর চেষ্টা করুন।`
-          : `Account locked due to 3 failed attempts. Please retry in ${result.remainingSeconds}s.`
-      );
-      return;
-    }
+      if (apiRes.require2FA) {
+        setIs2FAStep(true);
+        setAdminPhonePending(loginIdentifier);
+        setAdminPasswordPending(loginPassword);
+        setLoading(false);
+        return;
+      }
 
-    if (result.require2FA) {
-      setIs2FAStep(true);
-      setAdminPhonePending(loginIdentifier);
-      setAdminPasswordPending(loginPassword);
-      if (result.error === 'INVALID_2FA_PIN') {
+      if (apiRes.locked) {
+        setIsLocked(true);
+        setLockoutSeconds(apiRes.remainingSeconds || 180);
         setError(
           language === 'bn'
-            ? 'প্রদত্ত ৬-সংখ্যার অ্যাডমিন টু-ফ্যাক্টর (2FA) পিন কোডটি ভুল! সঠিক কোডটি দিন।'
-            : 'Invalid 6-digit Admin Security Code / PIN. Please re-enter.'
+            ? `একাধিক ভুল চেষ্টার কারণে অ্যাকাউন্ট সাময়িকভাবে লক করা হয়েছে। ${apiRes.remainingSeconds} সেকেন্ড পর চেষ্টা করুন।`
+            : `Account locked due to failed attempts. Please retry in ${apiRes.remainingSeconds}s.`
+        );
+        setLoading(false);
+        return;
+      }
+
+      if (apiRes.success && apiRes.user) {
+        AuthStore.setCurrentUser(apiRes.user);
+        setLoading(false);
+        onAuthSuccess(apiRes.user);
+        return;
+      }
+
+      if (apiRes.error) {
+        setError(apiRes.message || (language === 'bn' ? 'লগইন তথ্য সঠিক নয়।' : 'Invalid credentials.'));
+        setLoading(false);
+        return;
+      }
+    } catch {
+      // Offline fallback to local store
+      const result: LoginResult = AuthStore.login(
+        loginIdentifier,
+        loginPassword,
+        is2FAStep ? securityPin : undefined,
+        targetRole
+      );
+      setLoading(false);
+
+      if (result.locked) {
+        setIsLocked(true);
+        setLockoutSeconds(result.remainingSeconds || 180);
+        setError(
+          language === 'bn'
+            ? `একাধিক ভুল চেষ্টার কারণে অ্যাকাউন্ট সাময়িকভাবে লক করা হয়েছে। ${result.remainingSeconds} সেকেন্ড পর চেষ্টা করুন।`
+            : `Account locked due to 3 failed attempts. Please retry in ${result.remainingSeconds}s.`
+        );
+        return;
+      }
+
+      if (result.require2FA) {
+        setIs2FAStep(true);
+        setAdminPhonePending(loginIdentifier);
+        setAdminPasswordPending(loginPassword);
+        return;
+      }
+
+      if (result.success && result.user) {
+        onAuthSuccess(result.user);
+      } else {
+        setError(
+          result.message ||
+            (language === 'bn'
+              ? 'মোবাইল নম্বর/ইমেইল বা পাসওয়ার্ড সঠিক নয়।'
+              : 'Invalid credentials. Please verify your phone/email and password.')
         );
       }
-      return;
-    }
-
-    if (result.success && result.user) {
-      onAuthSuccess(result.user);
-    } else {
-      setError(
-        result.message ||
-          (language === 'bn'
-            ? 'মোবাইল নম্বর/ইমেইল বা পাসওয়ার্ড সঠিক নয়। নিচের ডেমো বাটনে ক্লিক করে সঠিক তথ্য পূরণ করতে পারেন।'
-            : 'Invalid credentials. Please click the demo credential chip below to auto-fill.')
-      );
     }
   };
 
@@ -204,22 +233,39 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     setError('');
     setLoading(true);
 
-    await new Promise((r) => setTimeout(r, 450));
-    const result: LoginResult = AuthStore.login(
-      adminPhonePending,
-      adminPasswordPending,
-      securityPin
-    );
-    setLoading(false);
+    try {
+      const apiRes = await apiService.login({
+        identifier: adminPhonePending,
+        password: adminPasswordPending,
+        securityPin: securityPin.trim(),
+        role: 'admin',
+      });
+      setLoading(false);
 
-    if (result.success && result.user) {
-      onAuthSuccess(result.user);
-    } else {
-      setError(
-        language === 'bn'
-          ? 'ভুল টু-ফ্যাক্টর (2FA) নিরাপত্তা কোড! পরীক্ষামূলক কোড: 883650'
-          : 'Invalid 2FA Authenticator Token. Demo code is: 883650'
+      if (apiRes.success && apiRes.user) {
+        AuthStore.setCurrentUser(apiRes.user);
+        onAuthSuccess(apiRes.user);
+        return;
+      }
+
+      setError(apiRes.message || (language === 'bn' ? 'ভুল টু-ফ্যাক্টর (2FA) নিরাপত্তা কোড!' : 'Invalid 2FA security code.'));
+    } catch {
+      const result: LoginResult = AuthStore.login(
+        adminPhonePending,
+        adminPasswordPending,
+        securityPin
       );
+      setLoading(false);
+
+      if (result.success && result.user) {
+        onAuthSuccess(result.user);
+      } else {
+        setError(
+          language === 'bn'
+            ? 'ভুল টু-ফ্যাক্টর (2FA) নিরাপত্তা কোড! পুনরায় চেষ্টা করুন।'
+            : 'Invalid 2FA Authenticator Token. Please re-enter.'
+        );
+      }
     }
   };
 
@@ -230,8 +276,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     if (selectedRole === 'admin') {
       setError(
         t(
-          'Admin accounts are pre-provisioned by platform security authority. Please sign in via Admin portal.',
-          'নিরাপত্তাজনিত কারণে অ্যাডমিন অ্যাকাউন্ট সরাসরি নিবন্ধনযোগ্য নয়। অনুগ্রহ করে অ্যাডমিন লগইন ব্যবহার করুন।'
+          'Admin accounts are managed privately. Please sign in via Admin portal.',
+          'অ্যাডমিন অ্যাকাউন্ট উন্মুক্ত নিবন্ধনের জন্য উপলব্ধ নয়।'
         )
       );
       return;
@@ -242,8 +288,19 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       return;
     }
 
-    if (!regEmail.includes('@')) {
+    const cleanPhone = regPhone.replace(/\D/g, '');
+    if (!cleanPhone || cleanPhone.length < 10) {
+      setError(t('Please enter a valid mobile number (e.g. 017XXXXXXXX)', 'সঠিক মোবাইল নম্বর দিন (যেমন: 017XXXXXXXX)'));
+      return;
+    }
+
+    if (selectedRole !== 'farmer' && regEmail.trim() && !regEmail.includes('@')) {
       setError(t('Please enter a valid email address', 'সঠিক ইমেইল ঠিকানা দিন'));
+      return;
+    }
+
+    if (selectedRole === 'supplier' && !shopName.trim()) {
+      setError(t('Shop / Enterprise name is required', 'দোকান বা প্রতিষ্ঠানের নাম আবশ্যক'));
       return;
     }
 
@@ -252,80 +309,88 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       return;
     }
 
-    if (regPassword.length < 8) {
+    if (regPassword.length < 6) {
       setError(
         t(
-          'Password must be at least 8 characters with numbers & symbols for security',
-          'নিরাপত্তার স্বার্থে পাসওয়ার্ড কমপক্ষে ৮ অক্ষর, সংখ্যা ও স্পেশাল চিহ্নের হতে হবে'
+          'Password must be at least 6 characters',
+          'পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে'
         )
       );
       return;
-    }
-
-    if (selectedRole === 'expert') {
-      if (!institution.trim()) {
-        setError(t('Institute Name is required for Expert registration', 'বিশেষজ্ঞ নিবন্ধনের জন্য প্রতিষ্ঠানের নাম আবশ্যক'));
-        return;
-      }
-      if (!regCertPreview) {
-        setError(t('Certificate photo upload is required for Expert registration', 'বিশেষজ্ঞ নিবন্ধনের জন্য ডিগ্রি সনদপত্রের ছবি আপলোড আবশ্যক'));
-        return;
-      }
-      if (!regNidPreview) {
-        setError(t('National ID (NID) photo upload is required for Expert registration', 'বিশেষজ্ঞ নিবন্ধনের জন্য জাতীয় পরিচয়পত্র (NID) ছবি আপলোড আবশ্যক'));
-        return;
-      }
     }
 
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 600));
 
-    const cleanPhone = regPhone.replace(/\D/g, '');
-    const cleanEmail = regEmail.trim().toLowerCase();
+    const cleanEmail = regEmail.trim().toLowerCase() || `${cleanPhone}@nativebazar.local`;
 
-    const existingRoleAccount = AuthStore.getUsers().find(
-      (u) =>
-        ((u.phone && u.phone === cleanPhone) ||
-         (u.email && u.email.toLowerCase() === cleanEmail)) &&
-        u.role === selectedRole
-    );
+    try {
+      const apiRes = await apiService.register({
+        name: regName.trim(),
+        phone: cleanPhone,
+        email: cleanEmail,
+        password: regPassword,
+        role: selectedRole as 'farmer' | 'supplier' | 'customer',
+        district: regDistrict,
+        upazila: regUpazila || (upazilaList[0] || 'Bogura Sadar'),
+        farmSizeAcres: selectedRole === 'farmer' ? (parseFloat(farmSize) || undefined) : undefined,
+        primaryCrops: selectedRole === 'farmer' ? selectedCropPills : undefined,
+        shopName: selectedRole === 'supplier' ? shopName.trim() : undefined,
+        licenseNumber: selectedRole === 'supplier' ? licenseNumber.trim() : undefined,
+      });
 
-    if (existingRoleAccount) {
-      setError(
-        t(
-          `You already have a registered ${selectedRole.toUpperCase()} account with this email/phone. Please sign in instead.`,
-          `এই ইমেইল বা ফোন নম্বরে ইতিমধ্যে একটি ${selectedRole === 'farmer' ? 'কৃষক' : selectedRole === 'businessman' ? 'ব্যবসায়ী' : selectedRole === 'supplier' ? 'সরবরাহকারী' : selectedRole === 'customer' ? 'ভোক্তা' : 'বিশেষজ্ঞ'} অ্যাকাউন্ট রয়েছে। অনুগ্রহ করে লগইন করুন।`
-        )
+      if (apiRes.success && apiRes.user) {
+        AuthStore.setCurrentUser(apiRes.user);
+        setLoading(false);
+        onAuthSuccess(apiRes.user);
+        return;
+      }
+
+      if (apiRes.error) {
+        setError(apiRes.message || (language === 'bn' ? 'নিবন্ধনে ত্রুটি হয়েছে।' : 'Registration failed.'));
+        setLoading(false);
+        return;
+      }
+    } catch {
+      // Local fallback
+      const existingRoleAccount = AuthStore.getUsers().find(
+        (u) =>
+          ((u.phone && u.phone === cleanPhone) ||
+           (u.email && u.email.toLowerCase() === cleanEmail)) &&
+          u.role === selectedRole
       );
+
+      if (existingRoleAccount) {
+        setError(
+          t(
+            `An account already exists with this phone/email. Please sign in instead.`,
+            `এই ফোন নম্বরে ইতিমধ্যে একটি অ্যাকাউন্ট রয়েছে। লগইন করুন।`
+          )
+        );
+        setLoading(false);
+        return;
+      }
+
+      const newUser = AuthStore.register({
+        name: regName.trim(),
+        email: cleanEmail,
+        phone: cleanPhone,
+        password: regPassword,
+        role: selectedRole,
+        district: regDistrict,
+        upazila: regUpazila || (upazilaList[0] || 'Bogura Sadar'),
+        verified: true,
+        farmSizeAcres: selectedRole === 'farmer' ? (parseFloat(farmSize) || undefined) : undefined,
+        primaryCrops: selectedRole === 'farmer' ? selectedCropPills : undefined,
+        shopName: selectedRole === 'supplier' ? shopName.trim() : undefined,
+        licenseNumber: selectedRole === 'supplier' ? licenseNumber.trim() : undefined,
+      });
+
       setLoading(false);
-      return;
+      onAuthSuccess(newUser);
     }
-
-    const newUser = AuthStore.register({
-      name: regName,
-      email: cleanEmail,
-      phone: cleanPhone || `017${Math.floor(10000000 + Math.random() * 90000000)}`,
-      password: regPassword,
-      role: selectedRole,
-      district: regDistrict,
-      upazila: regUpazila || (upazilaList[0] || 'Bogura Sadar'),
-      education: regEducation,
-      verified: true,
-      farmSizeAcres: selectedRole === 'farmer' ? parseFloat(farmSize) || 3 : undefined,
-      primaryCrops: selectedRole === 'farmer' ? cropsSelected.split(',').map((s) => s.trim()) : undefined,
-      businessName: selectedRole === 'businessman' ? businessName : undefined,
-      shopName: selectedRole === 'supplier' ? shopName : undefined,
-      licenseNumber: selectedRole === 'supplier' ? licenseNumber : undefined,
-      designation: selectedRole === 'expert' ? designation : undefined,
-      institution: selectedRole === 'expert' ? institution : undefined,
-      certificatePhotoUrl: selectedRole === 'expert' ? (regCertPreview || undefined) : undefined,
-      nidPhotoUrl: selectedRole === 'expert' ? (regNidPreview || undefined) : undefined,
-    });
-
-    setLoading(false);
-    onAuthSuccess(newUser);
   };
 
+  // Only expose Farmer, Supplier, and Consumer
   const roleNavItems: Array<{
     role: UserRole;
     icon: React.ReactNode;
@@ -341,17 +406,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       labelEn: 'Farmer',
       labelBn: 'কৃষক',
       badgeBg: 'text-emerald-700 bg-emerald-50 border-emerald-300',
-      descEn: 'Direct farm produce sales, mandi benchmark comparison, supplier orders & AI crop diagnostics.',
-      descBn: 'ফসল বিক্রি, সরকারি আড়ত দর নিরীক্ষণ, কৃষি উপকরণ ক্রয় এবং এআই রোগ নির্ণয়।',
-    },
-    {
-      role: 'businessman',
-      icon: <Briefcase className="w-4 h-4" />,
-      labelEn: 'Businessman',
-      labelBn: 'ব্যবসায়ী',
-      badgeBg: 'text-blue-700 bg-blue-50 border-blue-300',
-      descEn: 'B2B agricultural trading, bulk harvest procurement, escrow contracts and logistics tracking.',
-      descBn: 'পাইকারি ফসল ক্রয়, কৃষকদের সাথে সরাসরি চুক্তি ও আড়ত সরবরাহ ব্যবস্থাপনা।',
+      descEn: 'Direct farm produce listings, transparent rates, organic inputs & orders.',
+      descBn: 'সরাসরি ফসল বিক্রি, স্বচ্ছ বাজার দর, জৈব সার-বীজ সংগ্রহ ও অর্ডার।',
     },
     {
       role: 'supplier',
@@ -359,43 +415,33 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       labelEn: 'Supplier',
       labelBn: 'সরবরাহকারী',
       badgeBg: 'text-amber-700 bg-amber-50 border-amber-300',
-      descEn: 'Certified seeds, bio-fertilizers, pesticides & machinery distribution to local farmers.',
-      descBn: 'উন্নত বীজ, সার, কীটনাশক ও আধুনিক কৃষিযন্ত্র ডিলারশিপ ও অর্ডার ব্যবস্থাপনা।',
+      descEn: 'Verified organic inputs, bio-fertilizers, seeds & delivery fulfillment.',
+      descBn: 'জৈব সার, বালাইনাশক, উন্নত বীজ সরবরাহ ও ডেলিভারি ব্যবস্থাপনা।',
     },
     {
       role: 'customer',
       icon: <ShoppingCart className="w-4 h-4" />,
-      labelEn: 'Customer',
+      labelEn: 'Consumer',
       labelBn: 'ভোক্তা',
       badgeBg: 'text-purple-700 bg-purple-50 border-purple-300',
-      descEn: 'Farm-fresh chemical-free produce delivered directly to your household with transparent pricing.',
-      descBn: 'মাঠ থেকে সরাসরি তাজা সবজি, ফল ও খাদ্যপণ্য ন্যায্যমূল্যে হোম ডেলিভারি।',
-    },
-    {
-      role: 'expert',
-      icon: <Microscope className="w-4 h-4" />,
-      labelEn: 'Agri Expert',
-      labelBn: 'কৃষি কর্মকর্তা',
-      badgeBg: 'text-teal-700 bg-teal-50 border-teal-300',
-      descEn: 'Agronomy specialist portal for reviewing disease cases and publishing weather advisories.',
-      descBn: 'কৃষি সম্প্রসারণ অধিদপ্তর কর্মকর্তা ও বিশেষজ্ঞদের জন্য প্রেসক্রিপশন ও পরামর্শ হাব।',
-    },
-    {
-      role: 'admin',
-      icon: <ShieldCheck className="w-4 h-4" />,
-      labelEn: 'Admin',
-      labelBn: 'অ্যাডমিন',
-      badgeBg: 'text-slate-800 bg-slate-100 border-slate-300',
-      descEn: 'Platform administrative governance control panel.',
-      descBn: 'প্ল্যাটফর্মের কেন্দ্রীয় মনিটরিং ও কন্ট্রোল প্যানেল।',
+      descEn: 'Fresh chemical-free harvests directly from local farmers at fair prices.',
+      descBn: 'মাঠ থেকে সরাসরি তাজা ও রাসায়নিকমুক্ত কৃষিপণ্য সুলভ মূল্যে সংগ্রহ।',
     },
   ];
 
-  const activeRoleConfig =
-    roleNavItems.find((r) => r.role === selectedRole) || roleNavItems[0];
-  const demoCred = DEMO_CREDENTIALS[selectedRole];
-  const displayedRoles =
-    mode === 'register' ? roleNavItems.filter((r) => r.role !== 'admin') : roleNavItems;
+  const activeRoleConfig = isAdminPortal
+    ? {
+        role: 'admin' as UserRole,
+        icon: <ShieldCheck className="w-4 h-4" />,
+        labelEn: 'Admin Portal',
+        labelBn: 'অ্যাডমিন পোর্টাল',
+        badgeBg: 'text-slate-800 bg-slate-100 border-slate-300',
+        descEn: 'Administrative security governance & platform management.',
+        descBn: 'প্ল্যাটফর্ম প্রশাসন ও নিরাপত্তা ব্যবস্থাপনা।',
+      }
+    : roleNavItems.find((r) => r.role === selectedRole) || roleNavItems[0];
+
+  const displayedRoles = roleNavItems;
 
   return (
     <div
@@ -613,31 +659,22 @@ export const AuthPage: React.FC<AuthPageProps> = ({
               onSubmit={handle2FASubmit}
               className="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm space-y-4"
             >
-              <div className="bg-gradient-to-r from-slate-900 to-emerald-950 p-4 rounded-xl text-white space-y-2">
+              <div className="bg-gradient-to-r from-slate-900 to-emerald-950 p-4 rounded-xl text-white space-y-1">
                 <div className="flex items-center justify-between text-xs">
                   <span className="flex items-center gap-1.5 text-emerald-400 font-bold">
                     <ShieldCheck className="w-4 h-4" />
-                    Level-4 TOTP Security Code
+                    {t('Two-Factor Authentication (2FA)', 'টু-ফ্যাক্টর নিরাপত্তা যাচাই (2FA)')}
                   </span>
                   <span className="text-[10px] font-mono text-stone-400 flex items-center gap-1">
                     <Clock className="w-3 h-3" /> {totpCountdown}s
                   </span>
                 </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="text-[10px] text-stone-300 block">Current Admin 2FA Token</span>
-                    <span className="text-2xl font-black font-mono tracking-widest text-emerald-300">
-                      883 650
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setSecurityPin('883650')}
-                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[10px] font-bold shadow-xs transition-colors"
-                  >
-                    Insert 883650
-                  </button>
-                </div>
+                <p className="text-[11px] text-stone-300">
+                  {t(
+                    'Enter the 6-digit TOTP code generated by your Authenticator application.',
+                    'আপনার প্রমাণীকরণ অ্যাপ (Authenticator) থেকে ৬-সংখ্যার কোডটি প্রবেশ করান।'
+                  )}
+                </p>
               </div>
 
               <div>
@@ -651,7 +688,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                     maxLength={6}
                     value={securityPin}
                     onChange={(e) => setSecurityPin(e.target.value.replace(/\D/g, ''))}
-                    placeholder="883650"
+                    placeholder="••••••"
                     className="w-full pl-10 pr-4 py-2.5 bg-stone-50 border border-stone-300 rounded-xl text-base font-mono font-bold tracking-widest text-center focus:outline-emerald-600"
                     required
                     autoFocus
@@ -678,7 +715,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   ) : (
                     <ShieldCheck className="w-3.5 h-3.5" />
                   )}
-                  <span>{t('Verify & Access Admin Console', 'যাচাই ও প্রবেশ করুন')}</span>
+                  <span>{t('Verify & Sign In', 'যাচাই ও প্রবেশ করুন')}</span>
                 </button>
               </div>
             </form>
@@ -688,60 +725,20 @@ export const AuthPage: React.FC<AuthPageProps> = ({
               onSubmit={handleLogin}
               className="space-y-4 bg-white p-6 rounded-2xl border border-stone-200 shadow-sm"
             >
-              {/* Demo quick credential helper chip */}
-              {demoCred && demoCred.phone ? (
-                <div className="p-3 bg-stone-50 border border-stone-200 rounded-xl flex items-center justify-between text-xs">
-                  <div>
-                    <span className="font-bold text-stone-700 block text-[11px]">
-                      {t(`Verified Demo Account (${activeRoleConfig.labelEn}):`, `পরীক্ষামূলক ${activeRoleConfig.labelBn} অ্যাকাউন্ট:`)}
-                    </span>
-                    <span className="font-mono text-stone-500 text-[10px]">
-                      {selectedRole === 'admin'
-                        ? `ID: ${demoCred.phone} • Password: ${demoCred.password}`
-                        : `${demoCred.phone} • ${demoCred.password}`}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setLoginIdentifier(demoCred.phone);
-                      setLoginPassword(demoCred.password);
-                    }}
-                    className="px-2.5 py-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 rounded-lg text-[10px] font-bold transition-colors"
-                  >
-                    {t('Fill Demo', 'তথ্য বসান')}
-                  </button>
-                </div>
-              ) : selectedRole === 'expert' ? (
-                <div className="p-3 bg-teal-50 border border-teal-200 rounded-xl flex items-center justify-between text-xs">
-                  <div>
-                    <span className="font-bold text-teal-900 block text-[11px]">
-                      {t('No preloaded expert account', 'কোনো প্রিলোড করা বিশেষজ্ঞ অ্যাকাউন্ট নেই')}
-                    </span>
-                    <span className="text-teal-700 text-[10px]">
-                      {t('Register a new expert account to login with your profile.', 'আপনার প্রোফাইলে লগইন করতে নতুন বিশেষজ্ঞ হিসেবে নিবন্ধন করুন।')}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setMode('register')}
-                    className="px-2.5 py-1 bg-teal-700 hover:bg-teal-800 text-white rounded-lg text-[10px] font-bold transition-colors"
-                  >
-                    {t('Register', 'নিবন্ধন')}
-                  </button>
-                </div>
-              ) : null}
-
               {/* Login Identifier: Email, Phone, or Admin ID */}
               <div>
                 <label className="block text-xs font-bold text-stone-700 mb-1">
-                  {selectedRole === 'admin'
-                    ? t('Admin ID / অ্যাডমিন আইডি', 'অ্যাডমিন আইডি')
+                  {isAdminPortal
+                    ? t('Administrator ID or Email', 'অ্যাডমিন আইডি বা ইমেইল')
+                    : selectedRole === 'farmer'
+                    ? t('Mobile Phone Number / ইমেইল', 'মোবাইল নম্বর অথবা ইমেইল')
                     : t('Email Address or Mobile Phone', 'ইমেইল ঠিকানা অথবা মোবাইল নম্বর')}
                 </label>
                 <div className="relative">
-                  {selectedRole === 'admin' ? (
+                  {isAdminPortal ? (
                     <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
+                  ) : selectedRole === 'farmer' ? (
+                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
                   ) : (
                     <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
                   )}
@@ -750,13 +747,16 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                     value={loginIdentifier}
                     onChange={(e) => setLoginIdentifier(e.target.value)}
                     placeholder={
-                      selectedRole === 'admin'
-                        ? 'NativeBazarSJS'
-                        : 'e.g. rafiq@gmail.com or 01712458920'
+                      isAdminPortal
+                        ? 'Admin ID / Email'
+                        : selectedRole === 'farmer'
+                        ? '017XXXXXXXX'
+                        : '017XXXXXXXX / user@example.com'
                     }
                     className="w-full pl-10 pr-4 py-2.5 bg-stone-50 border border-stone-300 rounded-xl text-xs font-medium focus:outline-emerald-600 font-mono"
                     required
                     disabled={isLocked}
+                    autoComplete="username"
                   />
                 </div>
               </div>
@@ -775,10 +775,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                     type={showPassword ? 'text' : 'password'}
                     value={loginPassword}
                     onChange={(e) => setLoginPassword(e.target.value)}
-                    placeholder="Enter password"
+                    placeholder={t('Enter password', 'পাসওয়ার্ড দিন')}
                     className="w-full pl-10 pr-10 py-2.5 bg-stone-50 border border-stone-300 rounded-xl text-xs font-medium focus:outline-emerald-600"
                     required
                     disabled={isLocked}
+                    autoComplete="current-password"
                   />
                   <button
                     type="button"
@@ -809,6 +810,25 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                       )}
                 </span>
               </button>
+
+              {/* Discreet Administrator Access Link */}
+              <div className="pt-2 text-center border-t border-stone-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAdminPortal(!isAdminPortal);
+                    setError('');
+                  }}
+                  className="text-[11px] font-semibold text-stone-400 hover:text-stone-700 transition-colors inline-flex items-center gap-1.5"
+                >
+                  <KeyRound className="w-3.5 h-3.5" />
+                  <span>
+                    {isAdminPortal
+                      ? t('← Back to Stakeholder Portal', '← ব্যবহারকারী পোর্টালে ফিরুন')
+                      : t('Administrative Security Portal', 'অ্যাডমিন সিকিউরিটি পোর্টাল')}
+                  </span>
+                </button>
+              </div>
             </form>
           ) : (
             /* ROLE-BASED REGISTRATION INTERFACE */
@@ -816,52 +836,31 @@ export const AuthPage: React.FC<AuthPageProps> = ({
               onSubmit={handleRegister}
               className="space-y-4 bg-white p-6 rounded-2xl border border-stone-200 shadow-sm text-xs"
             >
-              {selectedRole === 'admin' && (
-                <div className="p-4 bg-amber-50 border border-amber-300 rounded-xl text-xs text-amber-900 space-y-1">
-                  <strong className="font-bold flex items-center gap-1.5">
-                    <ShieldAlert className="w-4 h-4 text-amber-700" />
-                    {t('Admin Registration Restricted', 'অ্যাডমিন অ্যাকাউন্ট নিবন্ধন সংরক্ষিত')}
-                  </strong>
-                  <p>
-                    {t(
-                      'Admin accounts are pre-provisioned by platform security. Switch to Sign In and use official credentials.',
-                      'নিরাপত্তার স্বার্থে অ্যাডমিন সরাসরি নিবন্ধন করা যায় না। লগইন অপশন নির্বাচন করে নির্ধারিত ক্রেডেনশিয়াল দিন।'
-                    )}
-                  </p>
-                </div>
-              )}
-
               {/* Mandatory: Full Name */}
               <div>
                 <label className="block font-bold text-stone-700 mb-1">
-                  {t('Full Name (পূর্ণ নাম) *', 'পূর্ণ নাম *')}
+                  {selectedRole === 'farmer'
+                    ? t('Full Name (কৃষকের নাম) *', 'আপনার নাম *')
+                    : selectedRole === 'supplier'
+                    ? t('Dealer / Representative Name (প্রতিনিধির নাম) *', 'প্রতিনিধির পূর্ণ নাম *')
+                    : t('Full Name (পূর্ণ নাম) *', 'পূর্ণ নাম *')}
                 </label>
                 <input
                   type="text"
                   value={regName}
                   onChange={(e) => setRegName(e.target.value)}
-                  placeholder="e.g. Md. Mostafa Kamal"
+                  placeholder={
+                    selectedRole === 'farmer'
+                      ? 'যেমন: মোঃ মোস্তফা কামাল'
+                      : 'e.g. Md. Mostafa Kamal'
+                  }
                   className="w-full p-2.5 bg-stone-50 border border-stone-300 rounded-xl"
                   required
                 />
               </div>
 
-              {/* Mandatory: Email and Phone */}
+              {/* Mobile Phone & Optional Email */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-stone-700 mb-1 flex items-center gap-1">
-                    <Mail className="w-3.5 h-3.5 text-stone-400" />
-                    {t('Email Address (ইমেইল) *', 'ইমেইল ঠিকানা *')}
-                  </label>
-                  <input
-                    type="email"
-                    value={regEmail}
-                    onChange={(e) => setRegEmail(e.target.value)}
-                    placeholder="name@gmail.com"
-                    className="w-full p-2.5 bg-stone-50 border border-stone-300 rounded-xl"
-                    required
-                  />
-                </div>
                 <div>
                   <label className="block font-bold text-stone-700 mb-1 flex items-center gap-1">
                     <Phone className="w-3.5 h-3.5 text-stone-400" />
@@ -876,9 +875,24 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                     required
                   />
                 </div>
+                <div>
+                  <label className="block font-bold text-stone-700 mb-1 flex items-center gap-1">
+                    <Mail className="w-3.5 h-3.5 text-stone-400" />
+                    {selectedRole === 'farmer'
+                      ? t('Email Address (ঐচ্ছিক)', 'ইমেইল (প্রয়োজন হলে দিন)')
+                      : t('Email Address (ইমেইল)', 'ইমেইল ঠিকানা')}
+                  </label>
+                  <input
+                    type="email"
+                    value={regEmail}
+                    onChange={(e) => setRegEmail(e.target.value)}
+                    placeholder="name@gmail.com"
+                    className="w-full p-2.5 bg-stone-50 border border-stone-300 rounded-xl"
+                  />
+                </div>
               </div>
 
-              {/* Mandatory: Location (District & Upazila from BANGLADESH_LOCATIONS) */}
+              {/* Location: District & Upazila */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-bold text-stone-700 mb-1 flex items-center gap-1">
@@ -896,7 +910,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                         setRegUpazila(loc.upazilas[0]);
                       }
                     }}
-                    className="w-full p-2.5 bg-stone-50 border border-stone-300 rounded-xl"
+                    className="w-full p-2.5 bg-stone-50 border border-stone-300 rounded-xl cursor-pointer"
                   >
                     {BANGLADESH_LOCATIONS.map((loc) => (
                       <option key={loc.district} value={loc.district}>
@@ -907,12 +921,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                 </div>
                 <div>
                   <label className="block font-bold text-stone-700 mb-1">
-                    {t('Upazila / Area (উপজেলা) *', 'উপজেলা *')}
+                    {t('Upazila / Thana (উপজেলা) *', 'উপজেলা *')}
                   </label>
                   <select
                     value={regUpazila}
                     onChange={(e) => setRegUpazila(e.target.value)}
-                    className="w-full p-2.5 bg-stone-50 border border-stone-300 rounded-xl"
+                    className="w-full p-2.5 bg-stone-50 border border-stone-300 rounded-xl cursor-pointer"
                   >
                     {upazilaList.map((u) => (
                       <option key={u} value={u}>
@@ -923,91 +937,69 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                 </div>
               </div>
 
-              {/* Mandatory: Education / Qualification */}
-              <div>
-                <label className="block font-bold text-stone-700 mb-1 flex items-center gap-1">
-                  <GraduationCap className="w-3.5 h-3.5 text-stone-400" />
-                  {t('Education / Agricultural Training (শিক্ষাগত যোগ্যতা) *', 'শিক্ষাগত যোগ্যতা / প্রশিক্ষণ *')}
-                </label>
-                <input
-                  type="text"
-                  value={regEducation}
-                  onChange={(e) => setRegEducation(e.target.value)}
-                  placeholder="e.g. Diploma in Agronomy, B.Sc in Agriculture, SSC / HSC"
-                  className="w-full p-2.5 bg-stone-50 border border-stone-300 rounded-xl"
-                  required
-                />
-              </div>
-
-              {/* Role-Specific Contextual Fields */}
+              {/* FARMER EXTRAS: Simplified with clickable Crop presets */}
               {selectedRole === 'farmer' && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-emerald-50/50 rounded-xl border border-emerald-200">
+                <div className="p-3.5 bg-emerald-50/70 rounded-xl border border-emerald-200 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-emerald-950 flex items-center gap-1 text-xs">
+                      <Sprout className="w-4 h-4 text-emerald-700" />
+                      {t('What crops do you grow?', 'আপনার প্রধান ফসলসমূহ নির্বাচন করুন')}
+                    </span>
+                    <span className="text-[10px] text-emerald-700 font-semibold">
+                      {t('Click to toggle', 'ক্লিক করে নির্বাচন করুন')}
+                    </span>
+                  </div>
+
+                  {/* Crop Pills */}
+                  <div className="flex flex-wrap gap-1.5">
+                    {COMMON_CROP_PILLS.map((crop) => {
+                      const isSelected = selectedCropPills.includes(crop.en);
+                      return (
+                        <button
+                          key={crop.en}
+                          type="button"
+                          onClick={() => {
+                            if (isSelected) {
+                              setSelectedCropPills((prev) => prev.filter((c) => c !== crop.en));
+                            } else {
+                              setSelectedCropPills((prev) => [...prev, crop.en]);
+                            }
+                          }}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 border ${
+                            isSelected
+                              ? 'bg-emerald-600 text-white border-emerald-700 shadow-2xs'
+                              : 'bg-white text-stone-700 border-stone-200 hover:bg-emerald-100/50'
+                          }`}
+                        >
+                          {isSelected && <CheckCircle2 className="w-3 h-3 text-white" />}
+                          <span>{language === 'bn' ? crop.bn : crop.en}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
                   <div>
-                    <label className="block font-bold text-stone-700 mb-1">
-                      {t('Farm Size (Acres)', 'জমির আয়তন (একর)')}
+                    <label className="block font-semibold text-emerald-950 mb-1 text-[11px]">
+                      {t('Farm Size (Optional, in Acres)', 'জমির আয়তন (ঐচ্ছিক, একরে)')}
                     </label>
                     <input
                       type="number"
                       step="0.1"
                       value={farmSize}
                       onChange={(e) => setFarmSize(e.target.value)}
-                      placeholder="e.g. 4.5"
-                      className="w-full p-2 bg-white border border-stone-300 rounded-lg"
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-bold text-stone-700 mb-1">
-                      {t('Major Crops Grown', 'প্রধান ফসলসমূহ')}
-                    </label>
-                    <input
-                      type="text"
-                      value={cropsSelected}
-                      onChange={(e) => setCropsSelected(e.target.value)}
-                      placeholder="Potato, Cauliflower, Paddy"
-                      className="w-full p-2 bg-white border border-stone-300 rounded-lg"
+                      placeholder="e.g. 2.5"
+                      className="w-full p-2 bg-white border border-emerald-300 rounded-lg text-xs"
                     />
                   </div>
                 </div>
               )}
 
-              {selectedRole === 'businessman' && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-blue-50/50 rounded-xl border border-blue-200">
-                  <div>
-                    <label className="block font-bold text-stone-700 mb-1">
-                      {t('Trading Firm / Business Name', 'ব্যবসা প্রতিষ্ঠানের নাম')}
-                    </label>
-                    <input
-                      type="text"
-                      value={businessName}
-                      onChange={(e) => setBusinessName(e.target.value)}
-                      placeholder="e.g. Bogura Food Processors Ltd."
-                      className="w-full p-2 bg-white border border-stone-300 rounded-lg"
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-bold text-stone-700 mb-1">
-                      {t('Business Type', 'ব্যবসার ধরন')}
-                    </label>
-                    <select
-                      value={businessType}
-                      onChange={(e) => setBusinessType(e.target.value)}
-                      className="w-full p-2 bg-white border border-stone-300 rounded-lg"
-                    >
-                      <option>Wholesaler / Aratdar</option>
-                      <option>Food Processor</option>
-                      <option>Supermarket Chain</option>
-                      <option>Exporter</option>
-                      <option>Local Retailer</option>
-                    </select>
-                  </div>
-                </div>
-              )}
-
+              {/* SUPPLIER EXTRAS: Organic focused shop name and license */}
               {selectedRole === 'supplier' && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-amber-50/50 rounded-xl border border-amber-200">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-amber-50/70 rounded-xl border border-amber-200">
                   <div>
                     <label className="block font-bold text-stone-700 mb-1">
-                      {t('Agro Input Enterprise / Shop', 'বীজ-সার দোকানের নাম')}
+                      {t('Enterprise / Shop Name *', 'প্রতিষ্ঠান বা দোকানের নাম *')}
                     </label>
                     <input
                       type="text"
@@ -1015,148 +1007,20 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                       onChange={(e) => setShopName(e.target.value)}
                       placeholder="e.g. Modern Krishi Bitan"
                       className="w-full p-2 bg-white border border-stone-300 rounded-lg"
+                      required
                     />
                   </div>
                   <div>
                     <label className="block font-bold text-stone-700 mb-1">
-                      {t('Trade License / Registration Number', 'ট্রেড লাইসেন্স নম্বর')}
+                      {t('Trade License / Reg (Optional)', 'ট্রেড লাইসেন্স (ঐচ্ছিক)')}
                     </label>
                     <input
                       type="text"
                       value={licenseNumber}
                       onChange={(e) => setLicenseNumber(e.target.value)}
-                      placeholder="e.g. DAE-TRD-2026-88"
+                      placeholder="e.g. DAE-TRD-2026"
                       className="w-full p-2 bg-white border border-stone-300 rounded-lg"
                     />
-                  </div>
-                </div>
-              )}
-
-              {selectedRole === 'expert' && (
-                <div className="space-y-3 p-3.5 bg-teal-50/50 rounded-xl border border-teal-200">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block font-bold text-stone-700 mb-1">
-                        {t('Official Designation', 'সরকারি পদবি')}
-                      </label>
-                      <input
-                        type="text"
-                        value={designation}
-                        onChange={(e) => setDesignation(e.target.value)}
-                        placeholder="e.g. Scientific Officer (BARI)"
-                        className="w-full p-2 bg-white border border-stone-300 rounded-lg text-xs"
-                      />
-                    </div>
-                    <div>
-                      <label className="block font-bold text-stone-700 mb-1">
-                        {t('Institute Name (প্রতিষ্ঠান) *', 'প্রতিষ্ঠানের নাম *')}
-                      </label>
-                      <input
-                        type="text"
-                        value={institution}
-                        onChange={(e) => setInstitution(e.target.value)}
-                        placeholder="e.g. BARI / BAU / DAE / BRRI"
-                        className="w-full p-2 bg-white border border-stone-300 rounded-lg text-xs"
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  {/* Document Uploads for Expert */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                    {/* Certificate Upload */}
-                    <div>
-                      <label className="block font-bold text-stone-700 mb-1 flex items-center gap-1 text-[11px]">
-                        <FileText className="w-3.5 h-3.5 text-teal-600" />
-                        {t('Certificate Photo Upload *', 'ডিগ্রি সনদপত্রের ছবি *')}
-                      </label>
-                      {regCertPreview ? (
-                        <div className="relative rounded-lg border border-teal-300 bg-white p-2 flex items-center gap-2">
-                          <img src={regCertPreview} alt="Certificate" className="w-10 h-10 rounded object-cover border" />
-                          <span className="text-[10px] text-emerald-700 font-bold flex-1 truncate">✓ Certificate ready</span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setRegCertPreview(null);
-                              if (certInputRef.current) certInputRef.current.value = '';
-                            }}
-                            className="text-stone-400 hover:text-red-600 p-1"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => certInputRef.current?.click()}
-                          className="w-full py-2 px-3 border border-dashed border-teal-300 rounded-lg bg-white hover:bg-teal-50/50 text-stone-600 text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                        >
-                          <ImagePlus className="w-3.5 h-3.5 text-teal-600" />
-                          <span>{t('Upload Certificate Photo', 'সনদপত্রের ছবি দিন')}</span>
-                        </button>
-                      )}
-                      <input
-                        ref={certInputRef}
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            const reader = new FileReader();
-                            reader.onload = (ev) => setRegCertPreview(ev.target?.result as string);
-                            reader.readAsDataURL(file);
-                          }
-                        }}
-                        className="hidden"
-                      />
-                    </div>
-
-                    {/* NID Upload */}
-                    <div>
-                      <label className="block font-bold text-stone-700 mb-1 flex items-center gap-1 text-[11px]">
-                        <CreditCard className="w-3.5 h-3.5 text-teal-600" />
-                        {t('National ID (NID) Photo Upload *', 'জাতীয় পরিচয়পত্র (NID) ছবি *')}
-                      </label>
-                      {regNidPreview ? (
-                        <div className="relative rounded-lg border border-teal-300 bg-white p-2 flex items-center gap-2">
-                          <img src={regNidPreview} alt="NID" className="w-10 h-10 rounded object-cover border" />
-                          <span className="text-[10px] text-emerald-700 font-bold flex-1 truncate">✓ NID ready</span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setRegNidPreview(null);
-                              if (nidInputRef.current) nidInputRef.current.value = '';
-                            }}
-                            className="text-stone-400 hover:text-red-600 p-1"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => nidInputRef.current?.click()}
-                          className="w-full py-2 px-3 border border-dashed border-teal-300 rounded-lg bg-white hover:bg-teal-50/50 text-stone-600 text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                        >
-                          <CreditCard className="w-3.5 h-3.5 text-teal-600" />
-                          <span>{t('Upload NID Photo', 'NID কার্ডের ছবি দিন')}</span>
-                        </button>
-                      )}
-                      <input
-                        ref={nidInputRef}
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            const reader = new FileReader();
-                            reader.onload = (ev) => setRegNidPreview(ev.target?.result as string);
-                            reader.readAsDataURL(file);
-                          }
-                        }}
-                        className="hidden"
-                      />
-                    </div>
                   </div>
                 </div>
               )}
@@ -1171,9 +1035,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                     type="password"
                     value={regPassword}
                     onChange={(e) => setRegPassword(e.target.value)}
-                    placeholder="Min 8 characters"
+                    placeholder={t('Min 6 characters', 'কমপক্ষে ৬ অক্ষর')}
                     className="w-full p-2.5 bg-stone-50 border border-stone-300 rounded-xl"
                     required
+                    autoComplete="new-password"
                   />
                   {/* Real-time Password Strength Meter */}
                   <div className="mt-1.5 space-y-1">
@@ -1210,16 +1075,17 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                     type="password"
                     value={regConfirmPassword}
                     onChange={(e) => setRegConfirmPassword(e.target.value)}
-                    placeholder="Repeat password"
+                    placeholder={t('Repeat password', 'পুনরায় লিখুন')}
                     className="w-full p-2.5 bg-stone-50 border border-stone-300 rounded-xl"
                     required
+                    autoComplete="new-password"
                   />
                 </div>
               </div>
 
               <button
                 type="submit"
-                disabled={loading || selectedRole === 'admin'}
+                disabled={loading}
                 className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 {loading ? (
@@ -1239,10 +1105,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
           {/* Footer attribution */}
           <div className="text-center text-[11px] text-stone-400">
-            NativeBazar Security Module • SHA-256 Salted Hashing • Zero-Fabrication Agriculture
+            NativeBazar Security Module • SHA-256 Salted Hashing • Zero-Fabrication Platform
           </div>
         </div>
       </div>
     </div>
   );
 };
+

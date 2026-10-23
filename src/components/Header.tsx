@@ -36,13 +36,13 @@ const ROLE_CONFIG: Record<UserRole, { icon: React.ReactNode; color: string; labe
 };
 
 const NAV_ITEMS: Array<{ id: ActiveView; icon: React.ReactNode; labelEn: string; labelBn: string; roles?: UserRole[] }> = [
-  { id: 'dashboard',    icon: <Sprout className="w-4 h-4" />,    labelEn: 'Dashboard',    labelBn: 'ড্যাশবোর্ড' },
-  { id: 'market_rates', icon: <TrendingUp className="w-4 h-4" />,labelEn: 'Market Rates', labelBn: 'বাজার দর' },
-  { id: 'weather',      icon: <Cloud className="w-4 h-4" />,     labelEn: 'Weather',      labelBn: 'আবহাওয়া' },
-  { id: 'orders',       icon: <Package className="w-4 h-4" />,   labelEn: 'Orders & Settlements', labelBn: 'অর্ডার ও লেনদেন', roles: ['customer', 'farmer', 'businessman', 'supplier'] },
-  { id: 'contacts',     icon: <Users className="w-4 h-4" />,      labelEn: 'Contacts & Network', labelBn: 'যোগাযোগ ও নেটওয়ার্ক' },
-  { id: 'bulletins',    icon: <FileText className="w-4 h-4" />,   labelEn: 'Bulletins', labelBn: 'বুলেটিন', roles: ['farmer', 'customer', 'supplier', 'expert'] },
-  { id: 'ledger',       icon: <Wallet className="w-4 h-4" />,    labelEn: 'Ledger',       labelBn: 'লেজার', roles: ['farmer'] },
+  { id: 'dashboard',    icon: <Sprout className="w-4 h-4" />,    labelEn: 'Marketplace / Dashboard', labelBn: 'ড্যাশবোর্ড', roles: ['farmer', 'supplier', 'customer', 'admin'] },
+  { id: 'orders',       icon: <Package className="w-4 h-4" />,   labelEn: 'Orders & Tracking', labelBn: 'অর্ডার ও ট্র্যাকিং', roles: ['customer', 'farmer', 'supplier'] },
+  { id: 'market_rates', icon: <TrendingUp className="w-4 h-4" />,labelEn: 'Mandi Rates (DAM)', labelBn: 'সরকারি বাজার দর', roles: ['farmer', 'supplier', 'admin'] },
+  { id: 'weather',      icon: <Cloud className="w-4 h-4" />,     labelEn: 'Agri Weather',  labelBn: 'আবহাওয়া পূর্বাভাস', roles: ['farmer'] },
+  { id: 'contacts',     icon: <Users className="w-4 h-4" />,      labelEn: 'Contacts & Network', labelBn: 'যোগাযোগ ও নেটওয়ার্ক', roles: ['farmer', 'supplier'] },
+  { id: 'bulletins',    icon: <FileText className="w-4 h-4" />,   labelEn: 'Bulletins',     labelBn: 'বুলেটিন', roles: ['farmer', 'supplier'] },
+  { id: 'ledger',       icon: <Wallet className="w-4 h-4" />,    labelEn: 'Ledger',        labelBn: 'লেজার', roles: ['farmer'] },
 ];
 
 export const Header: React.FC<HeaderProps> = ({
@@ -75,6 +75,24 @@ export const Header: React.FC<HeaderProps> = ({
 
   const t = (en: string, bn: string) => language === 'bn' ? bn : en;
   const visibleNavItems = NAV_ITEMS.filter(n => !n.roles || n.roles.includes(role));
+
+  const handleNotificationClick = (n: any) => {
+    NotificationStore.markRead(n.id);
+    setShowNotifs(false);
+    if (n.actionUrl) {
+      if (n.actionUrl.includes('contacts') || n.actionUrl.includes('chat') || n.actionUrl.includes('connection')) {
+        onViewChange('contacts');
+      } else if (n.actionUrl.includes('order')) {
+        onViewChange('orders');
+      } else if (n.actionUrl.includes('market')) {
+        onViewChange('market_rates');
+      } else if (n.actionUrl.includes('weather')) {
+        onViewChange('weather');
+      } else {
+        onViewChange('dashboard');
+      }
+    }
+  };
 
   return (
     <header className="sticky top-0 z-40 bg-white border-b border-stone-200 shadow-xs">
@@ -113,9 +131,6 @@ export const Header: React.FC<HeaderProps> = ({
                 <span className="text-base font-extrabold tracking-tight text-stone-900 group-hover:text-emerald-700 transition-colors">
                   NativeBazar
                 </span>
-                <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded">
-                  {t('Pilot', 'পাইলট')}
-                </span>
               </div>
               <p className="text-[10px] text-stone-500 font-medium leading-none">
                 {selectedDistrict} • Bangladesh
@@ -125,25 +140,29 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Desktop Actions */}
           <div className="hidden md:flex items-center gap-2 flex-1 justify-end">
-            {/* AI Crop Doctor Button */}
-            <button
-              onClick={onOpenCropDoctor}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-xs font-semibold transition-colors"
-              title={t('Open AI Crop Doctor', 'এআই ফসলের ডাক্তার খুলুন')}
-            >
-              <Stethoscope className="w-3.5 h-3.5 text-emerald-600" />
-              <span>{t('Crop Doctor', 'ফসলের ডাক্তার')}</span>
-            </button>
+            {/* AI Crop Doctor Button — hidden for consumer */}
+            {role !== 'customer' && (
+              <button
+                onClick={onOpenCropDoctor}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-xs font-semibold transition-colors"
+                title={t('Open AI Crop Doctor', 'এআই ফসলের ডাক্তার খুলুন')}
+              >
+                <Stethoscope className="w-3.5 h-3.5 text-emerald-600" />
+                <span>{t('Crop Doctor', 'ফসলের ডাক্তার')}</span>
+              </button>
+            )}
 
-            {/* Voice Assistant Button */}
-            <button
-              onClick={onOpenVoiceAssistant}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded-lg text-xs font-semibold transition-colors"
-              title={t('Open Voice AI Assistant', 'ভয়েস সহকারী খুলুন')}
-            >
-              <Mic className="w-3.5 h-3.5 text-teal-600" />
-              <span>{t('Voice AI', 'ভয়েস সহকারী')}</span>
-            </button>
+            {/* Voice Assistant Button — hidden for consumer */}
+            {role !== 'customer' && (
+              <button
+                onClick={onOpenVoiceAssistant}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded-lg text-xs font-semibold transition-colors"
+                title={t('Open Voice AI Assistant', 'ভয়েস সহকারী খুলুন')}
+              >
+                <Mic className="w-3.5 h-3.5 text-teal-600" />
+                <span>{t('Voice AI', 'ভয়েস সহকারী')}</span>
+              </button>
+            )}
 
             {/* District Selector */}
             <div className="flex items-center gap-1 bg-stone-100 border border-stone-200 rounded-lg px-2 py-1.5 text-xs">
@@ -217,7 +236,7 @@ export const Header: React.FC<HeaderProps> = ({
                     ) : notifs.map(n => (
                       <div
                         key={n.id}
-                        onClick={() => NotificationStore.markRead(n.id)}
+                        onClick={() => handleNotificationClick(n)}
                         className={`px-4 py-2.5 cursor-pointer hover:bg-stone-50 transition-colors text-xs ${!n.read ? 'bg-emerald-50/60' : ''}`}
                       >
                         <p className="font-semibold text-stone-900 text-xs">{n.title}</p>
@@ -368,20 +387,23 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={() => { onOpenCropDoctor(); setMobileMenuOpen(false); }}
-              className="flex items-center gap-2 p-2 bg-emerald-50 border border-emerald-200 rounded-lg text-xs font-semibold text-emerald-800"
-            >
-              <Stethoscope className="w-4 h-4 text-emerald-600" /> {t('Crop Doctor', 'ফসলের ডাক্তার')}
-            </button>
-            <button
-              onClick={() => { onOpenVoiceAssistant(); setMobileMenuOpen(false); }}
-              className="flex items-center gap-2 p-2 bg-teal-50 border border-teal-200 rounded-lg text-xs font-semibold text-teal-800"
-            >
-              <Mic className="w-4 h-4 text-teal-600" /> {t('Voice AI', 'ভয়েস সহকারী')}
-            </button>
-          </div>
+          {/* Crop Doctor & Voice AI — hidden for consumer role on mobile */}
+          {role !== 'customer' && (
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => { onOpenCropDoctor(); setMobileMenuOpen(false); }}
+                className="flex items-center gap-2 p-2 bg-emerald-50 border border-emerald-200 rounded-lg text-xs font-semibold text-emerald-800"
+              >
+                <Stethoscope className="w-4 h-4 text-emerald-600" /> {t('Crop Doctor', 'ফসলের ডাক্তার')}
+              </button>
+              <button
+                onClick={() => { onOpenVoiceAssistant(); setMobileMenuOpen(false); }}
+                className="flex items-center gap-2 p-2 bg-teal-50 border border-teal-200 rounded-lg text-xs font-semibold text-teal-800"
+              >
+                <Mic className="w-4 h-4 text-teal-600" /> {t('Voice AI', 'ভয়েস সহকারী')}
+              </button>
+            </div>
+          )}
 
           <div className="grid grid-cols-3 gap-2">
             <div className="col-span-2 flex items-center gap-1 bg-stone-100 rounded-lg px-2 py-1.5 text-xs">

@@ -352,10 +352,8 @@ export default function App() {
 
   const roleNavButtons: { role: UserRole; icon: React.ReactNode; labelEn: string; labelBn: string; color: string }[] = [
     { role: 'farmer', icon: <Sprout className="w-3.5 h-3.5" />, labelEn: 'Farmer', labelBn: 'কৃষক', color: 'hover:bg-emerald-50 text-emerald-700' },
-    { role: 'businessman', icon: <Briefcase className="w-3.5 h-3.5" />, labelEn: 'Businessman', labelBn: 'ব্যবসায়ী', color: 'hover:bg-blue-50 text-blue-700' },
     { role: 'supplier', icon: <Store className="w-3.5 h-3.5" />, labelEn: 'Supplier', labelBn: 'সরবরাহকারী', color: 'hover:bg-amber-50 text-amber-700' },
-    { role: 'customer', icon: <ShoppingCart className="w-3.5 h-3.5" />, labelEn: 'Customer', labelBn: 'ভোক্তা', color: 'hover:bg-purple-50 text-purple-700' },
-    { role: 'expert', icon: <Microscope className="w-3.5 h-3.5" />, labelEn: 'Agri Expert', labelBn: 'বিশেষজ্ঞ', color: 'hover:bg-teal-50 text-teal-700' },
+    { role: 'customer', icon: <ShoppingCart className="w-3.5 h-3.5" />, labelEn: 'Consumer', labelBn: 'ভোক্তা', color: 'hover:bg-purple-50 text-purple-700' },
   ];
 
   return (
@@ -401,7 +399,7 @@ export default function App() {
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-3 text-xs overflow-x-auto no-scrollbar">
           <div className="flex items-center gap-1.5 text-[11px] font-bold text-stone-500 whitespace-nowrap">
             <Zap className="w-3.5 h-3.5 text-amber-500" />
-            <span>{language === 'bn' ? '৫টি ভূমিকা তাৎক্ষণিক পরিবর্তন:' : 'Switch 5 Roles:'}</span>
+            <span>{language === 'bn' ? 'ভূমিকা পরিবর্তন:' : 'Switch Role:'}</span>
           </div>
 
           <div className="flex items-center gap-1">

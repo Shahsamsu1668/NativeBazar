@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { User, Language, UserRole, UserConnection, DirectMessage, CallLog } from '../types';
-import { AuthStore, ConnectionStore, MessageStore, CallStore } from '../data/store';
+import { ConnectionStore, MessageStore, CallStore } from '../data/store';
+import { apiService } from '../services/apiService';
 import { BANGLADESH_LOCATIONS } from '../data/mockData';
 import {
   Users,
@@ -23,12 +24,15 @@ import {
   Store,
   ShoppingCart,
   Microscope,
-  ExternalLink,
   ChevronRight,
   User as UserIcon,
   PhoneIncoming,
   PhoneOutgoing,
   PhoneMissed,
+  RefreshCw,
+  AlertCircle,
+  Loader2,
+  X,
 } from 'lucide-react';
 
 interface ContactsViewProps {
@@ -124,150 +128,233 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
     initialChatUserId ? 'chat' : 'directory'
   );
 
-  // Directory filter state
-  const [searchQuery, setSearchQuery] = useState('');
+  // ── Directory state ──────────────────────────────────────────────────
+  const [searchInput, setSearchInput] = useState('');
+  const [appliedSearch, setAppliedSearch] = useState('');
   const [selectedRoleFilter, setSelectedRoleFilter] = useState<UserRole | 'all'>('all');
   const [selectedDistrictFilter, setSelectedDistrictFilter] = useState<string>('all');
+  const [directoryUsers, setDirectoryUsers] = useState<User[]>([]);
+  const [directoryLoading, setDirectoryLoading] = useState(false);
+  const [directoryError, setDirectoryError] = useState<string | null>(null);
+  const [directoryTotal, setDirectoryTotal] = useState(0);
 
-  // Real-time stores data state
-  const [users, setUsers] = useState<User[]>([]);
+  // ── Local fallback: connections & call logs (localStorage) ──────────
   const [connections, setConnections] = useState<UserConnection[]>([]);
   const [callLogs, setCallLogs] = useState<CallLog[]>([]);
 
-  // Active chat state
+  // ── Chat / Inbox state ───────────────────────────────────────────────
   const [activeChatUser, setActiveChatUser] = useState<User | null>(null);
   const [chatMessages, setChatMessages] = useState<DirectMessage[]>([]);
+  const [chatPartners, setChatPartners] = useState<User[]>([]);
   const [messageInput, setMessageInput] = useState('');
+  const [sendingMessage, setSendingMessage] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [chatLoading, setChatLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // ── SSE real-time connection ──────────────────────────────────────────
+  const sseRef = useRef<EventSource | null>(null);
+  const activeChatUserRef = useRef<User | null>(null);
+  activeChatUserRef.current = activeChatUser;
 
   const t = (en: string, bn: string) => (language === 'bn' ? bn : en);
 
-  // Refresh data from persistent store
-  const refreshData = () => {
-    const allUsers = AuthStore.getUsers();
-    setUsers(allUsers);
+  // ── Load directory from backend ──────────────────────────────────────
+  const fetchDirectory = useCallback(async (search?: string) => {
+    setDirectoryLoading(true);
+    setDirectoryError(null);
+    try {
+      const result = await apiService.getUsers({
+        excludeId: currentUser.id,
+        role: selectedRoleFilter !== 'all' ? selectedRoleFilter : undefined,
+        district: selectedDistrictFilter !== 'all' ? selectedDistrictFilter : undefined,
+        search: search ?? appliedSearch,
+      });
+      if (result.success) {
+        setDirectoryUsers(result.users);
+        setDirectoryTotal(result.total);
+      } else {
+        setDirectoryError(t('Failed to load users. Check network.', 'ব্যবহারকারী লোড করতে ব্যর্থ। নেটওয়ার্ক পরীক্ষা করুন।'));
+      }
+    } catch {
+      setDirectoryError(t('Network error loading directory.', 'ডিরেক্টরি লোড করতে নেটওয়ার্ক ত্রুটি।'));
+    } finally {
+      setDirectoryLoading(false);
+    }
+  }, [currentUser.id, selectedRoleFilter, selectedDistrictFilter, appliedSearch]);
+
+  // Re-fetch on filter change
+  useEffect(() => { fetchDirectory(appliedSearch); }, [selectedRoleFilter, selectedDistrictFilter]);
+
+  // ── Local store data ──────────────────────────────────────────────────
+  const refreshLocalData = useCallback(() => {
     setConnections(ConnectionStore.getByUser(currentUser.id));
     setCallLogs(CallStore.getByUser(currentUser.id));
-
-    if (activeChatUser) {
-      setChatMessages(MessageStore.getConversation(currentUser.id, activeChatUser.id));
-      MessageStore.markRead(currentUser.id, activeChatUser.id);
-    }
-  };
-
-  useEffect(() => {
-    refreshData();
   }, [currentUser.id]);
 
-  // Handle initial chat user if passed via props
+  // ── Chat partners from localStorage + backend ─────────────────────────
+  const fetchChatPartners = useCallback(async () => {
+    const localAll = MessageStore.getAll();
+    const partnerIds = new Set<string>();
+    localAll.forEach((m) => {
+      if (m.senderId === currentUser.id) partnerIds.add(m.recipientId);
+      if (m.recipientId === currentUser.id) partnerIds.add(m.senderId);
+    });
+    if (partnerIds.size > 0) {
+      const partners: User[] = [];
+      for (const pid of partnerIds) {
+        const found = directoryUsers.find((u) => u.id === pid);
+        if (found) { partners.push(found); continue; }
+        // Fetch from backend if not in directory
+        const res = await apiService.getUsers({});
+        if (res.success) { const bu = res.users.find((u) => u.id === pid); if (bu) partners.push(bu); }
+      }
+      setChatPartners(partners);
+    }
+  }, [currentUser.id, directoryUsers]);
+
+  // ── Load conversation from backend ────────────────────────────────────
+  const loadConversation = useCallback(async (otherUser: User) => {
+    setChatLoading(true);
+    try {
+      const msgs = await apiService.getMessages(currentUser.id, otherUser.id);
+      setChatMessages(msgs);
+      await apiService.markMessagesRead(currentUser.id, otherUser.id);
+    } catch {
+      setChatMessages(MessageStore.getConversation(currentUser.id, otherUser.id));
+    } finally {
+      setChatLoading(false);
+    }
+  }, [currentUser.id]);
+
+  // ── SSE: real-time message delivery ──────────────────────────────────
+  useEffect(() => {
+    if (!currentUser.id) return;
+    if (sseRef.current) sseRef.current.close();
+    const es = new EventSource(`/api/realtime?userId=${encodeURIComponent(currentUser.id)}`);
+    sseRef.current = es;
+
+    es.addEventListener('new_message', (e: MessageEvent) => {
+      try {
+        const { message } = JSON.parse(e.data) as { message: DirectMessage };
+        if (activeChatUserRef.current &&
+          (message.senderId === activeChatUserRef.current.id || message.recipientId === activeChatUserRef.current.id)) {
+          setChatMessages((prev) => prev.some((m) => m.id === message.id) ? prev : [...prev, message]);
+          apiService.markMessagesRead(currentUser.id, activeChatUserRef.current.id).catch(() => {});
+        }
+        fetchChatPartners();
+      } catch { /* ignore */ }
+    });
+
+    es.addEventListener('message_sent', (e: MessageEvent) => {
+      try {
+        const { message } = JSON.parse(e.data) as { message: DirectMessage };
+        setChatMessages((prev) => prev.some((m) => m.id === message.id) ? prev : [...prev, message]);
+      } catch { /* ignore */ }
+    });
+
+    es.onerror = () => {};
+    return () => { es.close(); sseRef.current = null; };
+  }, [currentUser.id]);
+
+  // ── Initial load ──────────────────────────────────────────────────────
+  useEffect(() => { fetchDirectory(''); refreshLocalData(); }, [currentUser.id]);
+  useEffect(() => { fetchChatPartners(); }, [directoryUsers]);
+
+  // Handle initial chat user from props
   useEffect(() => {
     if (initialChatUserId) {
-      const target = AuthStore.getUsers().find((u) => u.id === initialChatUserId);
-      if (target) {
-        setActiveChatUser(target);
-        setActiveTab('chat');
-        setChatMessages(MessageStore.getConversation(currentUser.id, target.id));
-        MessageStore.markRead(currentUser.id, target.id);
-      }
+      const target = directoryUsers.find((u) => u.id === initialChatUserId);
+      if (target) { setActiveChatUser(target); setActiveTab('chat'); loadConversation(target); }
     }
-  }, [initialChatUserId, currentUser.id]);
+  }, [initialChatUserId, directoryUsers]);
 
-  // Scroll to bottom when new message arrives
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chatMessages]);
+  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatMessages]);
 
-  // Filtered users (excluding current user)
-  const filteredUsers = users.filter((u) => {
-    if (u.id === currentUser.id) return false;
-    if (selectedRoleFilter !== 'all' && u.role !== selectedRoleFilter) return false;
-    if (selectedDistrictFilter !== 'all' && u.district.toLowerCase() !== selectedDistrictFilter.toLowerCase()) return false;
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      const matchName = u.name.toLowerCase().includes(q) || (u.nameBn && u.nameBn.includes(q));
-      const matchPhone = u.phone.includes(q);
-      const matchDistrict = u.district.toLowerCase().includes(q);
-      const matchExtra =
-        (u.businessName && u.businessName.toLowerCase().includes(q)) ||
-        (u.shopName && u.shopName.toLowerCase().includes(q)) ||
-        (u.designation && u.designation.toLowerCase().includes(q)) ||
-        (u.primaryCrops && u.primaryCrops.some((c) => c.toLowerCase().includes(q)));
-      return matchName || matchPhone || matchDistrict || matchExtra;
-    }
-    return true;
-  });
+  // ── Search handlers ───────────────────────────────────────────────────
+  const handleSearch = () => { setAppliedSearch(searchInput); fetchDirectory(searchInput); };
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => { if (e.key === 'Enter') handleSearch(); };
+  const handleResetFilters = () => {
+    setSearchInput(''); setAppliedSearch('');
+    setSelectedRoleFilter('all'); setSelectedDistrictFilter('all');
+    fetchDirectory('');
+  };
 
-  // Recent chat partners
-  const chatPartners = users.filter((u) => {
-    if (u.id === currentUser.id) return false;
-    const conversation = MessageStore.getConversation(currentUser.id, u.id);
-    return conversation.length > 0;
-  });
-
+  // ── Chat handlers ─────────────────────────────────────────────────────
   const handleSelectChat = (contact: User) => {
-    setActiveChatUser(contact);
-    setActiveTab('chat');
-    setChatMessages(MessageStore.getConversation(currentUser.id, contact.id));
-    MessageStore.markRead(currentUser.id, contact.id);
+    setActiveChatUser(contact); setActiveTab('chat'); setSendError(null); loadConversation(contact);
   };
 
-  const handleSendMessage = (e?: React.FormEvent) => {
+  const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!activeChatUser || !messageInput.trim()) return;
-
-    MessageStore.sendMessage({
-      senderId: currentUser.id,
-      senderName: currentUser.name,
-      senderRole: currentUser.role,
-      recipientId: activeChatUser.id,
-      recipientName: activeChatUser.name,
-      recipientRole: activeChatUser.role,
-      content: messageInput.trim(),
-    });
-
-    setMessageInput('');
-    setChatMessages(MessageStore.getConversation(currentUser.id, activeChatUser.id));
+    if (!activeChatUser || !messageInput.trim() || sendingMessage) return;
+    const content = messageInput.trim();
+    setMessageInput(''); setSendingMessage(true); setSendError(null);
+    try {
+      const result = await apiService.sendMessage({
+        senderId: currentUser.id, senderName: currentUser.name, senderRole: currentUser.role,
+        recipientId: activeChatUser.id, recipientName: activeChatUser.name, recipientRole: activeChatUser.role,
+        content,
+      });
+      if (result.success && result.message) {
+        setChatMessages((prev) => prev.some((m) => m.id === result.message!.id) ? prev : [...prev, result.message!]);
+        MessageStore.sendMessage({ senderId: currentUser.id, senderName: currentUser.name, senderRole: currentUser.role,
+          recipientId: activeChatUser.id, recipientName: activeChatUser.name, recipientRole: activeChatUser.role, content });
+        fetchChatPartners();
+      } else {
+        setSendError(result.error || t('Message failed. Try again.', 'বার্তা পাঠানো ব্যর্থ। পুনরায় চেষ্টা করুন।'));
+        setMessageInput(content);
+      }
+    } catch {
+      setSendError(t('Network error. Not sent.', 'নেটওয়ার্ক ত্রুটি। বার্তা পাঠানো হয়নি।'));
+      setMessageInput(content);
+    } finally { setSendingMessage(false); }
   };
 
-  const handleSendQuickMessage = (text: string) => {
-    if (!activeChatUser) return;
-    MessageStore.sendMessage({
-      senderId: currentUser.id,
-      senderName: currentUser.name,
-      senderRole: currentUser.role,
-      recipientId: activeChatUser.id,
-      recipientName: activeChatUser.name,
-      recipientRole: activeChatUser.role,
-      content: text,
-    });
-    setChatMessages(MessageStore.getConversation(currentUser.id, activeChatUser.id));
+  const handleSendQuickMessage = async (text: string) => {
+    if (!activeChatUser || sendingMessage) return;
+    setSendingMessage(true);
+    try {
+      const result = await apiService.sendMessage({
+        senderId: currentUser.id, senderName: currentUser.name, senderRole: currentUser.role,
+        recipientId: activeChatUser.id, recipientName: activeChatUser.name, recipientRole: activeChatUser.role,
+        content: text,
+      });
+      if (result.success && result.message)
+        setChatMessages((prev) => prev.some((m) => m.id === result.message!.id) ? prev : [...prev, result.message!]);
+    } catch { /* ignore */ } finally { setSendingMessage(false); }
   };
 
-  const handleConnectToggle = (targetUser: User) => {
+  // ── Connection handlers ───────────────────────────────────────────────
+  const handleConnectToggle = async (targetUser: User) => {
     const status = ConnectionStore.getStatus(currentUser.id, targetUser.id);
     if (status === 'none') {
-      ConnectionStore.sendRequest(currentUser, targetUser);
-    } else if (status === 'accepted' || status === 'pending_sent') {
-      ConnectionStore.remove(currentUser.id, targetUser.id);
+      const conn = await apiService.sendConnectionRequest(currentUser.id, targetUser.id);
+      if (!conn.success) ConnectionStore.sendRequest(currentUser, targetUser);
+    } else {
+      const allConns = ConnectionStore.getAll();
+      const existing = allConns.find((c) =>
+        (c.requesterId === currentUser.id && c.recipientId === targetUser.id) ||
+        (c.requesterId === targetUser.id && c.recipientId === currentUser.id)
+      );
+      if (existing) { await apiService.deleteConnection(existing.id).catch(() => {}); ConnectionStore.remove(currentUser.id, targetUser.id); }
     }
-    refreshData();
+    refreshLocalData();
   };
 
-  const handleAcceptConnection = (connId: string) => {
-    ConnectionStore.accept(connId);
-    refreshData();
+  const handleAcceptConnection = async (connId: string) => {
+    await apiService.updateConnectionStatus(connId, 'accepted').catch(() => {});
+    ConnectionStore.accept(connId); refreshLocalData();
   };
 
-  const handleRejectConnection = (connId: string) => {
-    ConnectionStore.reject(connId);
-    refreshData();
+  const handleRejectConnection = async (connId: string) => {
+    await apiService.updateConnectionStatus(connId, 'rejected').catch(() => {});
+    ConnectionStore.reject(connId); refreshLocalData();
   };
 
-  const pendingIncomingRequests = connections.filter(
-    (c) => c.recipientId === currentUser.id && c.status === 'pending'
-  );
-
+  const pendingIncomingRequests = connections.filter((c) => c.recipientId === currentUser.id && c.status === 'pending');
   const acceptedConnections = connections.filter((c) => c.status === 'accepted');
+  const unreadCount = MessageStore.getUnreadCount(currentUser.id);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -312,7 +399,7 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
             <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
               activeTab === 'directory' ? 'bg-emerald-800 text-white' : 'bg-stone-200 text-stone-700'
             }`}>
-              {filteredUsers.length}
+              {directoryTotal}
             </span>
           </button>
 
@@ -320,8 +407,7 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
             onClick={() => {
               setActiveTab('chat');
               if (!activeChatUser && chatPartners.length > 0) {
-                setActiveChatUser(chatPartners[0]);
-                setChatMessages(MessageStore.getConversation(currentUser.id, chatPartners[0].id));
+                handleSelectChat(chatPartners[0]);
               }
             }}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
@@ -332,8 +418,10 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
           >
             <MessageSquare className="w-4 h-4" />
             <span>{t('Direct Chat & Messages', 'সরাসরি বার্তা ও চ্যাট')}</span>
-            {MessageStore.getUnreadCount(currentUser.id) > 0 && (
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            {unreadCount > 0 && (
+              <span className="bg-red-500 text-white px-1.5 py-0.5 rounded-full text-[10px] font-bold min-w-[18px] text-center">
+                {unreadCount}
+              </span>
             )}
           </button>
 
@@ -379,19 +467,36 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
           {/* Search & Filters Card */}
           <div className="bg-white rounded-2xl border border-stone-200 p-4 shadow-xs space-y-4">
             <div className="flex flex-col md:flex-row gap-3">
-              {/* Search input */}
-              <div className="flex-1 relative">
-                <Search className="w-4 h-4 text-stone-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder={t(
-                    'Search by name, phone, crop (Potato, Tomato), business or specialty…',
-                    'নাম, মোবাইল নম্বর, ফসল (আলু, টমেটো), ব্যবসা দিয়ে খুঁজুন…'
+              {/* Search input with Bengali Search button */}
+              <div className="flex-1 flex items-center gap-2">
+                <div className="flex-1 relative">
+                  <Search className="w-4 h-4 text-stone-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    id="directory-search-input"
+                    type="text"
+                    value={searchInput}
+                    onChange={(e) => setSearchInput(e.target.value)}
+                    onKeyDown={handleSearchKeyDown}
+                    placeholder={t(
+                      'Search by name, phone, crop (Potato, Tomato), business or specialty…',
+                      'নাম, মোবাইল নম্বর, ফসল (আলু, টমেটো), ব্যবসা দিয়ে খুঁজুন…'
+                    )}
+                    className="w-full pl-10 pr-4 py-2.5 text-xs bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium text-stone-800 transition-all"
+                  />
+                </div>
+                <button
+                  id="directory-search-btn"
+                  onClick={handleSearch}
+                  disabled={directoryLoading}
+                  className="px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-60 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 shrink-0 shadow-xs"
+                >
+                  {directoryLoading ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Search className="w-3.5 h-3.5" />
                   )}
-                  className="w-full pl-10 pr-4 py-2.5 text-xs bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium text-stone-800 transition-all"
-                />
+                  <span>খুঁজুন</span>
+                </button>
               </div>
 
               {/* District Filter */}
@@ -435,29 +540,83 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
                   </button>
                 );
               })}
+              {/* Always-visible Reset Filter button */}
+              <button
+                id="reset-filters-btn"
+                onClick={handleResetFilters}
+                className="ml-auto px-3 py-1 rounded-lg text-xs font-bold bg-stone-100 hover:bg-red-50 hover:text-red-700 text-stone-600 border border-stone-200 hover:border-red-200 transition-all whitespace-nowrap flex items-center gap-1"
+              >
+                <X className="w-3 h-3" />
+                <span>ফিল্টার রিসেট করুন</span>
+              </button>
             </div>
+
+            {/* Active search tag */}
+            {appliedSearch && (
+              <div className="flex items-center gap-2 text-xs text-stone-600">
+                <span className="font-medium">{t('Results for:', 'খোঁজার ফলাফল:')}</span>
+                <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">
+                  "{appliedSearch}"
+                </span>
+                <button onClick={handleResetFilters} className="text-stone-400 hover:text-red-500 transition-colors">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
           </div>
 
-          {/* User Cards Grid */}
-          {filteredUsers.length === 0 ? (
+          {/* Loading state */}
+          {directoryLoading && (
+            <div className="bg-white rounded-2xl border border-stone-200 p-12 text-center space-y-3">
+              <Loader2 className="w-10 h-10 text-emerald-600 mx-auto animate-spin" />
+              <p className="text-sm font-medium text-stone-600">
+                {t('Loading registered users…', 'নিবন্ধিত ব্যবহারকারীদের তালিকা লোড হচ্ছে…')}
+              </p>
+            </div>
+          )}
+
+          {/* Error state */}
+          {!directoryLoading && directoryError && (
+            <div className="bg-red-50 border border-red-200 rounded-2xl p-8 text-center space-y-3">
+              <AlertCircle className="w-10 h-10 text-red-400 mx-auto" />
+              <p className="text-sm font-bold text-red-700">{directoryError}</p>
+              <button
+                onClick={() => fetchDirectory(appliedSearch)}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl transition-colors inline-flex items-center gap-1.5"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                {t('Retry', 'পুনরায় চেষ্টা করুন')}
+              </button>
+            </div>
+          )}
+
+          {/* Empty state */}
+          {!directoryLoading && !directoryError && directoryUsers.length === 0 && (
             <div className="bg-white rounded-2xl border border-stone-200 p-12 text-center space-y-3">
               <Users className="w-12 h-12 text-stone-300 mx-auto" />
               <h3 className="font-bold text-stone-700 text-sm">
-                {t('No stakeholders found matching your filters', 'আপনার ফিল্টারের সাথে কোনো ব্যবহারকারী পাওয়া যায়নি')}
+                {appliedSearch || selectedRoleFilter !== 'all' || selectedDistrictFilter !== 'all'
+                  ? t('No stakeholders found matching your filters', 'আপনার ফিল্টারের সাথে কোনো ব্যবহারকারী পাওয়া যায়নি')
+                  : t('No registered users found', 'কোনো নিবন্ধিত ব্যবহারকারী পাওয়া যায়নি')}
               </h3>
               <p className="text-xs text-stone-400 max-w-sm mx-auto">
-                {t('Try searching with a different term, or reset the role and district filters.', 'অন্য শব্দ দিয়ে অনুসন্ধান করুন অথবা ফিল্টার পরিবর্তন করুন।')}
+                {t('Try a different search term, or reset the role and district filters.', 'অন্য শব্দ দিয়ে অনুসন্ধান করুন অথবা ফিল্টার পরিবর্তন করুন।')}
               </p>
-              <button
-                onClick={() => { setSearchQuery(''); setSelectedRoleFilter('all'); setSelectedDistrictFilter('all'); }}
-                className="mt-2 px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs font-bold rounded-xl transition-colors"
-              >
-                {t('Reset Filters', 'ফিল্টার রিসেট করুন')}
-              </button>
+              {(appliedSearch || selectedRoleFilter !== 'all' || selectedDistrictFilter !== 'all') && (
+                <button
+                  onClick={handleResetFilters}
+                  className="mt-2 px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs font-bold rounded-xl transition-colors"
+                >
+                  {t('Reset Filters', 'ফিল্টার রিসেট করুন')}
+                </button>
+              )}
             </div>
-          ) : (
+          )}
+
+          {/* User Cards Grid */}
+          {!directoryLoading && !directoryError && directoryUsers.length > 0 && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredUsers.map((u) => {
+              {directoryUsers.map((u) => {
                 const meta = ROLE_META[u.role] || ROLE_META.farmer;
                 const connStatus = ConnectionStore.getStatus(currentUser.id, u.id);
 
@@ -485,7 +644,7 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
                               )}
                             </div>
                             <p className="text-[11px] text-stone-500 font-medium">
-                              {u.nameBn || u.email}
+                              {u.nameBn || u.email || ''}
                             </p>
                           </div>
                         </div>
@@ -501,33 +660,28 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
                       <div className="mt-3.5 pt-3 border-t border-stone-100 space-y-1.5 text-xs text-stone-600">
                         <div className="flex items-center gap-1.5 font-medium">
                           <MapPin className="w-3.5 h-3.5 text-stone-400 shrink-0" />
-                          <span>{u.upazila ? `${u.upazila}, ${u.district}` : u.district}</span>
-                        </div>
-
-                        <div className="flex items-center gap-1.5 text-stone-500 font-mono text-[11px]">
-                          <Phone className="w-3.5 h-3.5 text-stone-400 shrink-0" />
-                          <span>{u.phone}</span>
+                          <span>{(u as any).upazila ? `${(u as any).upazila}, ${u.district}` : u.district}</span>
                         </div>
 
                         {/* Role Extra Snippets */}
-                        {u.role === 'farmer' && u.primaryCrops && (
+                        {u.role === 'farmer' && (u as any).primaryCrops && (
                           <div className="pt-1 text-[11px] text-emerald-700 font-medium">
-                            🌱 {t('Crops:', 'ফসল:')} {u.primaryCrops.join(', ')}
+                            🌱 {t('Crops:', 'ফসল:')} {(u as any).primaryCrops.join(', ')}
                           </div>
                         )}
-                        {u.role === 'businessman' && u.businessName && (
+                        {u.role === 'businessman' && (u as any).businessName && (
                           <div className="pt-1 text-[11px] text-blue-700 font-medium truncate">
-                            🏢 {u.businessName}
+                            🏢 {(u as any).businessName}
                           </div>
                         )}
-                        {u.role === 'supplier' && u.shopName && (
+                        {u.role === 'supplier' && (u as any).shopName && (
                           <div className="pt-1 text-[11px] text-amber-700 font-medium truncate">
-                            🏪 {u.shopName}
+                            🏪 {(u as any).shopName}
                           </div>
                         )}
-                        {u.role === 'expert' && u.designation && (
+                        {u.role === 'expert' && (u as any).designation && (
                           <div className="pt-1 text-[11px] text-teal-700 font-medium truncate">
-                            🔬 {u.designation}
+                            🔬 {(u as any).designation}
                           </div>
                         )}
                       </div>
@@ -908,7 +1062,17 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
                   const partnerDistrict = isRequester ? conn.recipientDistrict : conn.requesterDistrict;
                   const partnerPhone = isRequester ? conn.recipientPhone : conn.requesterPhone;
 
-                  const fullUser = users.find((u) => u.id === partnerId);
+                  const fullUser: User = directoryUsers.find((u) => u.id === partnerId) || chatPartners.find((u) => u.id === partnerId) || {
+                    id: partnerId,
+                    name: partnerName,
+                    role: partnerRole,
+                    phone: partnerPhone || '',
+                    email: '',
+                    password: '',
+                    district: partnerDistrict || '',
+                    verified: true,
+                    createdAt: new Date().toISOString(),
+                  };
                   const meta = ROLE_META[partnerRole] || ROLE_META.farmer;
 
                   return (
@@ -986,7 +1150,18 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
                 const otherName = isCaller ? log.receiverName : log.callerName;
                 const otherRole = isCaller ? log.receiverRole : log.callerRole;
                 const otherPhone = isCaller ? log.receiverPhone : '';
-                const otherUser = users.find((u) => u.id === (isCaller ? log.receiverId : log.callerId));
+                const otherId = isCaller ? log.receiverId : log.callerId;
+                const otherUser: User = directoryUsers.find((u) => u.id === otherId) || chatPartners.find((u) => u.id === otherId) || {
+                  id: otherId,
+                  name: otherName,
+                  role: otherRole,
+                  phone: otherPhone || '',
+                  email: '',
+                  password: '',
+                  district: '',
+                  verified: true,
+                  createdAt: new Date().toISOString(),
+                };
 
                 return (
                   <div

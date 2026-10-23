@@ -257,7 +257,7 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
       const transcript = event.results[0][0].transcript;
       setQuery(transcript);
       setIsListening(false);
-      setTimeout(() => handleSendQuery(transcript), 400);
+      // Allows user to review and correct recognized text in the input box before manual submission
     };
 
     recognitionRef.current = recognition;
@@ -329,10 +329,10 @@ export const VoiceAssistantModal: React.FC<VoiceAssistantModalProps> = ({
                   </div>
                 )}
 
-                {/* Suggested clickable action buttons */}
-                {m.actions && m.actions.length > 0 && (
+                {/* Suggested clickable action button - strictly one relevant action without duplicates */}
+                {!m.executeAction && m.actions && m.actions.length > 0 && (
                   <div className="mt-2.5 pt-2 border-t border-stone-200 flex flex-wrap gap-1.5">
-                    {m.actions.map((act, i) => (
+                    {m.actions.slice(0, 1).map((act, i) => (
                       <button
                         key={i}
                         onClick={() => executeActionHandler(act.action)}

@@ -41,6 +41,7 @@ import {
   INITIAL_USERS,
   BANGLADESH_LOCATIONS,
 } from './mockData';
+import { apiService } from '../services/apiService';
 
 // ─── STORAGE KEYS ─────────────────────────────────────────────────────
 const KEYS = {
@@ -83,48 +84,20 @@ export function hashPassword(plainText: string, salt = 'nb_secure_salt_2026'): s
   return `sha256_${hex}_${plainText.length}`;
 }
 
-const INITIAL_LOGIN_AUDIT_LOGS: LoginAuditLog[] = [
-  {
-    id: 'log-101',
-    timestamp: new Date(Date.now() - 3600000 * 4).toISOString(),
-    phone: '01700000000',
-    role: 'admin',
-    status: 'SUCCESS',
-    ip: '192.168.1.10 (Bogura Pilot Telemetry)',
-    device: 'Desktop Chrome / Windows 11',
-    details: '2FA TOTP Verified (883650) • Clearance Level 4 Root Token Issued',
-  },
-  {
-    id: 'log-102',
-    timestamp: new Date(Date.now() - 3600000 * 2).toISOString(),
-    phone: '01712458920',
-    role: 'farmer',
-    status: 'SUCCESS',
-    ip: '103.205.180.45 (Shibganj Mobile Node)',
-    device: 'Android Mobile / Chrome',
-    details: 'Verified Farmer PIN Session Established',
-  },
-  {
-    id: 'log-103',
-    timestamp: new Date(Date.now() - 3600000 * 1.5).toISOString(),
-    phone: '01711209934',
-    role: 'businessman',
-    status: 'SUCCESS',
-    ip: '103.205.180.89 (Dhaka-Bogura Highway Hub)',
-    device: 'Laptop / Edge',
-    details: 'Wholesale Arat Escrow Session Authorized',
-  },
-  {
-    id: 'log-104',
-    timestamp: new Date(Date.now() - 3600000 * 0.5).toISOString(),
-    phone: '01999887766',
-    role: 'customer',
-    status: 'FAILED_PASSWORD',
-    ip: '182.160.112.5 (External Unverified IP)',
-    device: 'Unknown Device',
-    details: 'Unauthorized credential attempt blocked by firewall',
-  },
-];
+// Legacy Demo Accounts & Credentials Blacklist for Cleanup
+const DEMO_USER_IDS = new Set(['f-1', 'f-2', 'b-1', 'b-2', 's-1', 'c-1', 'a-1', 'e-1', 'e-2', 'e-3', 'e-4']);
+const DEMO_PHONES = new Set(['01700000000', '01999887766']);
+const DEMO_EMAILS = new Set([
+  'dummy.fake@nativebazar.com',
+]);
+
+export function isDemoAccount(u: any): boolean {
+  if (!u) return false;
+  if (u.id && DEMO_USER_IDS.has(u.id)) return true;
+  if (u.phone && DEMO_PHONES.has(u.phone.replace(/\D/g, ''))) return true;
+  if (u.email && DEMO_EMAILS.has(u.email.toLowerCase())) return true;
+  return false;
+}
 
 // ─── GENERIC HELPERS ───────────────────────────────────────────────────
 function getItem<T>(key: string, fallback: T): T {
@@ -144,63 +117,64 @@ function setItem<T>(key: string, value: T): void {
   }
 }
 
-// ─── INITIALIZE (runs once to seed data) ────────────────────────────
+// ─── INITIALIZE (runs once, purges all demo accounts, preserves genuine users) ─────
 export function initializeStore(): void {
-  const STORE_VERSION = 'v12_no_hardcoded_experts';
-  // Check if current user is an old hardcoded expert and clear if so
+  const STORE_VERSION = 'v20_real_users_only';
+
+  // 1. Purge demo user if currently logged in
   const currentUserRaw = getItem<User | null>(KEYS.CURRENT_USER, null);
-  if (currentUserRaw && ['e-1', 'e-2', 'e-3', 'e-4'].includes(currentUserRaw.id)) {
+  if (currentUserRaw && isDemoAccount(currentUserRaw)) {
     localStorage.removeItem(KEYS.CURRENT_USER);
   }
 
-  // Always re-run if key changes (bump version to force re-init)
-  if (localStorage.getItem(KEYS.INITIALIZED) === STORE_VERSION) {
-    // Also ensure existing stored users do not contain hardcoded experts
-    const currentUsers = getItem<User[]>(KEYS.USERS, []);
-    const filteredUsers = currentUsers.filter((u) => !['e-1', 'e-2', 'e-3', 'e-4'].includes(u.id));
-    if (filteredUsers.length !== currentUsers.length) {
-      setItem(KEYS.USERS, filteredUsers);
-    }
-    return;
-  }
-
-  // Preserve legitimately registered users while purging hardcoded experts
+  // 2. Clean existing stored users: preserve genuine users while purging all demo accounts
   const existingUsers = getItem<User[]>(KEYS.USERS, []);
-  const cleanExisting = existingUsers.filter((u) => !['e-1', 'e-2', 'e-3', 'e-4'].includes(u.id));
+  const cleanGenuineUsers = existingUsers.filter((u) => !isDemoAccount(u));
+  setItem(KEYS.USERS, cleanGenuineUsers);
 
-  // Compute passwordHash for all initial users (which now contain 0 hardcoded experts)
-  const securedUsers = INITIAL_USERS.map((u) => ({
-    ...u,
-    passwordHash: hashPassword(u.password),
-  }));
+  // 3. Purge fake demo listings, orders, and mock data
+  const existingCrops = getItem<CropListing[]>(KEYS.CROP_LISTINGS, []).filter(
+    (c) => !['crop-101', 'crop-102', 'crop-103'].includes(c.id) && !['f-1', 'f-2'].includes(c.farmerId)
+  );
+  setItem(KEYS.CROP_LISTINGS, existingCrops);
 
-  // Merge any newly registered users with secured initial users
-  const mergedUsers: User[] = [...securedUsers];
-  for (const existing of cleanExisting) {
-    if (!mergedUsers.some((u) => u.id === existing.id || u.phone === existing.phone || (u.email && u.email === existing.email))) {
-      mergedUsers.push(existing.passwordHash ? existing : { ...existing, passwordHash: hashPassword(existing.password) });
-    }
-  }
+  const existingSupplierProducts = getItem<SupplierProduct[]>(KEYS.SUPPLIER_PRODUCTS, []).filter(
+    (p) => !['sup-301', 'sup-302', 'sup-303', 'sup-304', 'sup-305'].includes(p.id) && p.supplierId !== 's-1'
+  );
+  setItem(KEYS.SUPPLIER_PRODUCTS, existingSupplierProducts);
 
-  setItem(KEYS.USERS,            mergedUsers);
-  // Start with empty data — no demo transactions
-  setItem(KEYS.CROP_LISTINGS,    []);
-  setItem(KEYS.BUSINESS_DEMANDS, []);
-  setItem(KEYS.SUPPLIER_PRODUCTS,[]);
-  setItem(KEYS.CUSTOMER_PRODUCTS,[]);
-  setItem(KEYS.MARKET_RATES,     INITIAL_MARKET_RATES);
-  setItem(KEYS.TRADE_ORDERS,     []);
-  setItem(KEYS.ADVISORIES,       []);
-  setItem(KEYS.AI_MATCHES,       []);
-  setItem(KEYS.LOGIN_AUDIT,      []);
-  setItem(KEYS.FAILED_ATTEMPTS,  {});
-  setItem(KEYS.ORDERS,           []);
-  setItem(KEYS.CART,             []);
-  setItem(KEYS.EXPENSE_LEDGER,   []);
-  setItem(KEYS.NEGOTIATIONS,     []);
-  setItem(KEYS.NOTIFICATIONS,    []);
+  const existingOrders = getItem<CustomerOrder[]>(KEYS.ORDERS, []).filter(
+    (o) => !o.customerId || !DEMO_USER_IDS.has(o.customerId)
+  );
+  setItem(KEYS.ORDERS, existingOrders);
 
+  // Clean login audit logs from fake entries
+  const cleanLogs = getItem<LoginAuditLog[]>(KEYS.LOGIN_AUDIT, []).filter(
+    (l) => !['log-101', 'log-102', 'log-103', 'log-104'].includes(l.id)
+  );
+  setItem(KEYS.LOGIN_AUDIT, cleanLogs);
+
+  setItem(KEYS.MARKET_RATES, INITIAL_MARKET_RATES);
   localStorage.setItem(KEYS.INITIALIZED, STORE_VERSION);
+
+  // 4. Asynchronously synchronize with persistent backend database
+  apiService.getCrops().then((crops) => {
+    if (crops && crops.length > 0) {
+      setItem(KEYS.CROP_LISTINGS, crops);
+    }
+  }).catch(() => {});
+
+  apiService.getSupplierProducts().then((products) => {
+    if (products && products.length > 0) {
+      setItem(KEYS.SUPPLIER_PRODUCTS, products);
+    }
+  }).catch(() => {});
+
+  apiService.getOrders().then((orders) => {
+    if (orders && orders.length > 0) {
+      setItem(KEYS.ORDERS, orders);
+    }
+  }).catch(() => {});
 }
 
 export interface LoginResult {
@@ -216,42 +190,12 @@ export interface LoginResult {
 // ─── AUTH & SECURITY ENGINE ───────────────────────────────────────────
 export const AuthStore = {
   getUsers: (): User[] => {
-    let users = getItem<User[]>(KEYS.USERS, INITIAL_USERS);
-    // Filter out any stale hardcoded expert accounts
-    users = users.filter((u) => !['e-1', 'e-2', 'e-3', 'e-4'].includes(u.id));
-
-    let hasAdmin = false;
-    users = users.map((u) => {
-      if (u.role === 'admin') {
-        hasAdmin = true;
-        return {
-          ...u,
-          phone: 'NativeBazarSJS',
-          email: 'NativeBazarSJS',
-          password: '12345678',
-          passwordHash: hashPassword('12345678'),
-          twoFactorEnabled: false,
-        };
-      }
-      return u.passwordHash ? u : { ...u, passwordHash: hashPassword(u.password) };
-    });
-
-    if (!hasAdmin) {
-      const adminInit = INITIAL_USERS.find((u) => u.role === 'admin');
-      if (adminInit) {
-        users.push({
-          ...adminInit,
-          phone: 'NativeBazarSJS',
-          email: 'NativeBazarSJS',
-          password: '12345678',
-          passwordHash: hashPassword('12345678'),
-          twoFactorEnabled: false,
-        });
-      }
-    }
-
+    let users = getItem<User[]>(KEYS.USERS, []);
+    // Filter out any stale demo or expert accounts
+    users = users.filter((u) => !isDemoAccount(u));
     return users;
   },
+
 
   getCurrentUser: (): User | null => {
     const user = getItem<User | null>(KEYS.CURRENT_USER, null);
@@ -267,6 +211,10 @@ export const AuthStore = {
       return null;
     }
     return user;
+  },
+
+  setCurrentUser(user: User): void {
+    setItem(KEYS.CURRENT_USER, user);
   },
 
   getAuditLogs: (): LoginAuditLog[] =>
@@ -725,55 +673,58 @@ export const PrefStore = {
 
 // ─── CROP LISTINGS ─────────────────────────────────────────────────────
 export const CropStore = {
-  getAll: (): CropListing[] => getItem<CropListing[]>(KEYS.CROP_LISTINGS, INITIAL_CROP_LISTINGS),
+  getAll: (): CropListing[] => getItem<CropListing[]>(KEYS.CROP_LISTINGS, []),
 
   add(listing: CropListing): void {
     const all = this.getAll();
     setItem(KEYS.CROP_LISTINGS, [listing, ...all]);
+    apiService.createCrop(listing).catch((err) => console.warn('Crop backend sync warning:', err));
   },
 
   update(id: string, updates: Partial<CropListing>): void {
-    const all = this.getAll().map(c => c.id === id ? { ...c, ...updates } : c);
+    const all = this.getAll().map((c) => (c.id === id ? { ...c, ...updates } : c));
     setItem(KEYS.CROP_LISTINGS, all);
+    apiService.updateCrop(id, updates).catch((err) => console.warn('Crop update backend sync warning:', err));
   },
 
   delete(id: string): void {
-    setItem(KEYS.CROP_LISTINGS, this.getAll().filter(c => c.id !== id));
+    setItem(KEYS.CROP_LISTINGS, this.getAll().filter((c) => c.id !== id));
+    apiService.deleteCrop(id).catch((err) => console.warn('Crop delete backend sync warning:', err));
   },
 
   getByFarmer(farmerId: string): CropListing[] {
-    return this.getAll().filter(c => c.farmerId === farmerId);
+    return this.getAll().filter((c) => c.farmerId === farmerId);
   },
 
   getAvailable(): CropListing[] {
-    return this.getAll().filter(c => c.status !== 'Sold');
+    return this.getAll().filter((c) => c.status !== 'Sold');
   },
 };
 
 // ─── BUSINESS DEMANDS ──────────────────────────────────────────────────
 export const DemandStore = {
-  getAll: (): BusinessDemand[] => getItem<BusinessDemand[]>(KEYS.BUSINESS_DEMANDS, INITIAL_BUSINESS_DEMANDS),
+  getAll: (): BusinessDemand[] => getItem<BusinessDemand[]>(KEYS.BUSINESS_DEMANDS, []),
 
   add(demand: BusinessDemand): void {
     setItem(KEYS.BUSINESS_DEMANDS, [demand, ...this.getAll()]);
   },
 
   update(id: string, updates: Partial<BusinessDemand>): void {
-    const all = this.getAll().map(d => d.id === id ? { ...d, ...updates } : d);
+    const all = this.getAll().map((d) => (d.id === id ? { ...d, ...updates } : d));
     setItem(KEYS.BUSINESS_DEMANDS, all);
   },
 
   delete(id: string): void {
-    setItem(KEYS.BUSINESS_DEMANDS, this.getAll().filter(d => d.id !== id));
+    setItem(KEYS.BUSINESS_DEMANDS, this.getAll().filter((d) => d.id !== id));
   },
 
   getByBuyer(buyerId: string): BusinessDemand[] {
-    return this.getAll().filter(d => d.buyerId === buyerId);
+    return this.getAll().filter((d) => d.buyerId === buyerId);
   },
 
   recordFulfillment(demandId: string, quantityKg: number): void {
     const all = this.getAll();
-    const idx = all.findIndex(d => d.id === demandId);
+    const idx = all.findIndex((d) => d.id === demandId);
     if (idx >= 0) {
       all[idx].fulfilledKg = Math.min(all[idx].quantityKgNeeded, (all[idx].fulfilledKg || 0) + quantityKg);
       setItem(KEYS.BUSINESS_DEMANDS, all);
@@ -781,40 +732,83 @@ export const DemandStore = {
   },
 };
 
-// ─── SUPPLIER PRODUCTS ─────────────────────────────────────────────────
+// ─── SUPPLIER PRODUCTS (ORGANIC FOCUS) ─────────────────────────────────
 export const SupplierStore = {
-  getAll: (): SupplierProduct[] => getItem<SupplierProduct[]>(KEYS.SUPPLIER_PRODUCTS, INITIAL_SUPPLIER_PRODUCTS),
+  getAll: (): SupplierProduct[] => getItem<SupplierProduct[]>(KEYS.SUPPLIER_PRODUCTS, []),
 
   add(product: SupplierProduct): void {
     setItem(KEYS.SUPPLIER_PRODUCTS, [product, ...this.getAll()]);
+    apiService.createSupplierProduct(product).catch((err) => console.warn('Supplier product sync warning:', err));
   },
 
   update(id: string, updates: Partial<SupplierProduct>): void {
-    const all = this.getAll().map(p => p.id === id ? { ...p, ...updates } : p);
+    const all = this.getAll().map((p) => (p.id === id ? { ...p, ...updates } : p));
     setItem(KEYS.SUPPLIER_PRODUCTS, all);
+    apiService.updateSupplierProduct(id, updates).catch((err) => console.warn('Supplier update sync warning:', err));
   },
 
   delete(id: string): void {
-    setItem(KEYS.SUPPLIER_PRODUCTS, this.getAll().filter(p => p.id !== id));
+    setItem(KEYS.SUPPLIER_PRODUCTS, this.getAll().filter((p) => p.id !== id));
+    apiService.deleteSupplierProduct(id).catch((err) => console.warn('Supplier delete sync warning:', err));
   },
 
   getBySupplierId(supplierId: string): SupplierProduct[] {
-    return this.getAll().filter(p => p.supplierId === supplierId);
+    return this.getAll().filter((p) => p.supplierId === supplierId);
   },
 };
 
-// ─── CUSTOMER PRODUCTS ─────────────────────────────────────────────────
+// ─── CUSTOMER MARKETPLACE PRODUCTS (DERIVED FROM REAL FARMER CROPS) ────
 export const CustomerProductStore = {
-  getAll: (): CustomerProduct[] => getItem<CustomerProduct[]>(KEYS.CUSTOMER_PRODUCTS, INITIAL_CUSTOMER_PRODUCTS),
+  getAll: (): CustomerProduct[] => {
+    // Real farmer crop listings automatically feed the customer marketplace
+    const activeCrops = CropStore.getAvailable();
+    const cropProducts: CustomerProduct[] = activeCrops.map((c) => ({
+      id: c.id,
+      farmerName: c.farmerName,
+      farmerId: c.farmerId,
+      farmerLocation: `${c.upazila ? c.upazila + ', ' : ''}${c.district}`,
+      cropName: c.cropName,
+      banglaName: c.cropBangla || c.cropName,
+      pricePerKg: c.expectedPricePerKg,
+      marketPricePerKg: c.marketBenchmarkPrice || c.expectedPricePerKg + 6,
+      availableKg: c.quantityKg,
+      harvestStatus: c.status === 'Ready to Harvest' ? 'Harvested Today' : 'Pre-Order: Harvests in 3 Days',
+      imageUrl: c.imageUrl,
+      organicCertified: !!c.organicCertified,
+      farmerCutPercent: 88,
+      qualityGrade: c.qualityGrade || 'A',
+    }));
+
+    // Merge with any direct customer product additions that don't collide
+    const custom = getItem<CustomerProduct[]>(KEYS.CUSTOMER_PRODUCTS, []).filter(
+      (p) => !cropProducts.some((cp) => cp.id === p.id)
+    );
+
+    return [...cropProducts, ...custom];
+  },
+
   add(p: CustomerProduct): void {
     setItem(KEYS.CUSTOMER_PRODUCTS, [p, ...this.getAll()]);
   },
+
   update(id: string, updates: Partial<CustomerProduct>): void {
-    setItem(KEYS.CUSTOMER_PRODUCTS, this.getAll().map(p => p.id === id ? { ...p, ...updates } : p));
+    setItem(KEYS.CUSTOMER_PRODUCTS, this.getAll().map((p) => (p.id === id ? { ...p, ...updates } : p)));
   },
+
   deductStock(productId: string, quantityKg: number): boolean {
-    const products = this.getAll();
-    const idx = products.findIndex(p => p.id === productId);
+    // Deduct in CropStore if it originates from a farmer listing
+    const crop = CropStore.getAll().find((c) => c.id === productId);
+    if (crop) {
+      const remaining = Math.max(0, crop.quantityKg - quantityKg);
+      CropStore.update(productId, {
+        quantityKg: remaining,
+        status: remaining === 0 ? 'Sold' : crop.status,
+      });
+      return true;
+    }
+
+    const products = getItem<CustomerProduct[]>(KEYS.CUSTOMER_PRODUCTS, []);
+    const idx = products.findIndex((p) => p.id === productId);
     if (idx >= 0) {
       products[idx].availableKg = Math.max(0, products[idx].availableKg - quantityKg);
       setItem(KEYS.CUSTOMER_PRODUCTS, products);
@@ -823,6 +817,7 @@ export const CustomerProductStore = {
     return false;
   },
 };
+
 
 // ─── CART ──────────────────────────────────────────────────────────────
 export const CartStore = {
@@ -863,16 +858,21 @@ export const OrderStore = {
 
   add(order: CustomerOrder): void {
     setItem(KEYS.ORDERS, [order, ...this.getAll()]);
+    apiService.createOrder(order).catch((err) => console.warn('Order sync warning:', err));
   },
 
   update(id: string, updates: Partial<CustomerOrder>): void {
-    setItem(KEYS.ORDERS, this.getAll().map(o => o.id === id ? { ...o, ...updates } : o));
+    setItem(KEYS.ORDERS, this.getAll().map((o) => (o.id === id ? { ...o, ...updates } : o)));
+    if (updates.status) {
+      apiService.updateOrderStatus(id, updates.status).catch((err) => console.warn('Order status sync warning:', err));
+    }
   },
 
   getByCustomer(customerId: string): CustomerOrder[] {
-    return this.getAll().filter(o => o.customerId === customerId);
+    return this.getAll().filter((o) => o.customerId === customerId);
   },
 };
+
 
 // ─── TWO-WAY TRADE & SUPPLIER ORDER STORE ──────────────────────────────
 export const TradeOrderStore = {
@@ -912,8 +912,7 @@ export const MarketRateStore = {
   getByDistrict: (district: string): MarketRate[] => {
     const all = MarketRateStore.getAll();
     const query = (district || '').trim().toLowerCase();
-    const filtered = all.filter((r) => r.district.toLowerCase() === query);
-    return filtered.length > 0 ? filtered : all.filter((r) => r.district.toLowerCase() === 'bogura');
+    return all.filter((r) => r.district.toLowerCase() === query);
   },
 
   update: (id: string, updates: Partial<MarketRate>): void => {

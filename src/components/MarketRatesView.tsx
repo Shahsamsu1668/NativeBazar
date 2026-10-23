@@ -44,7 +44,7 @@ export const MarketRatesView: React.FC<MarketRatesViewProps> = ({
     return MarketRateStore.getAll();
   }, []);
 
-  // Filter rates by district
+  // Filter rates by district - Strict zero-fabrication (never silently substitute Bogura)
   const districtRates = useMemo(() => {
     const directMatches = allRates.filter(
       (r) => r.district.toLowerCase() === activeDistrict.toLowerCase()
@@ -52,9 +52,7 @@ export const MarketRatesView: React.FC<MarketRatesViewProps> = ({
     if (directMatches.length > 0) {
       return { rates: directMatches, isFallback: false };
     }
-    // Verified fallback if no direct DAM report exists for this area
-    const fallback = allRates.filter((r) => r.district.toLowerCase() === 'bogura');
-    return { rates: fallback, isFallback: true };
+    return { rates: [], isFallback: true };
   }, [allRates, activeDistrict]);
 
   // Apply category and search filter
@@ -161,21 +159,37 @@ export const MarketRatesView: React.FC<MarketRatesViewProps> = ({
 
       {/* Fallback Notice if exact district sub-office data is not filed today */}
       {districtRates.isFallback && (
-        <div className="p-4 bg-amber-50 border border-amber-300 rounded-2xl flex items-start gap-3 text-xs text-amber-900 shadow-xs">
-          <Info className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-          <div className="space-y-1">
-            <strong className="font-bold text-sm block">
-              {t(
-                `Direct local mandi bulletin unavailable for "${activeDistrict}" today`,
-                `"${activeDistrict}" এলাকার জন্য আজকের স্থানীয় আড়ত রিপোর্ট এখনো জমা হয়নি`
-              )}
-            </strong>
-            <p>
-              {t(
-                `Per strict NativeBazar zero-fabrication standards, we do not fabricate estimated prices. We are displaying verified morning price rates from the nearest regional hub (Bogura Northern Mandi Hub).`,
-                `নেটিভবাজারের নির্ভরযোগ্যতার নিয়ম অনুযায়ী কোনো কাল্পনিক বা অনুমানভিত্তিক দর তৈরি করা হয় না। তাই নিকটবর্তী প্রধান আঞ্চলিক বাজার কেন্দ্র (বগুড়া উত্তরবঙ্গ পাইকারি আড়ত) এর যাচাইকৃত বাস্তব বাজার দর প্রদর্শন করা হচ্ছে।`
-              )}
-            </p>
+        <div className="p-5 bg-amber-50 border border-amber-300 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs text-amber-900 shadow-xs">
+          <div className="flex items-start gap-3">
+            <Info className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <strong className="font-bold text-sm block">
+                {t(
+                  `Direct local mandi bulletin unavailable for "${activeDistrict}" today`,
+                  `"${activeDistrict}" জেলার জন্য আজকের সরকারি স্থানীয় বাজার দর এখনো সংযুক্ত হয়নি`
+                )}
+              </strong>
+              <p>
+                {t(
+                  `Per strict NativeBazar zero-fabrication standards, we never invent or simulate prices. You can view verified regional hub benchmarks below:`,
+                  `নেটিভবাজারের নির্ভরযোগ্যতার নিয়ম অনুযায়ী কোনো কাল্পনিক বা অনুমানভিত্তিক দর দেখানো হয় না। আপনি নিকটবর্তী প্রধান মোকামের যাচাইকৃত দর দেখতে পারেন:`
+                )}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => handleDistrictSelect('Bogura')}
+              className="px-3 py-1.5 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition"
+            >
+              বগুড়া মোকাম
+            </button>
+            <button
+              onClick={() => handleDistrictSelect('Dhaka')}
+              className="px-3 py-1.5 bg-stone-700 text-white rounded-xl font-bold hover:bg-stone-800 transition"
+            >
+              ঢাকা কারওয়ান বাজার
+            </button>
           </div>
         </div>
       )}
