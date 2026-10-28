@@ -85,10 +85,36 @@ export function hashPassword(plainText: string, salt = 'nb_secure_salt_2026'): s
 }
 
 // Legacy Demo Accounts & Credentials Blacklist for Cleanup
-const DEMO_USER_IDS = new Set(['f-1', 'f-2', 'b-1', 'b-2', 's-1', 'c-1', 'a-1', 'e-1', 'e-2', 'e-3', 'e-4']);
-const DEMO_PHONES = new Set(['01700000000', '01999887766']);
+const DEMO_USER_IDS = new Set([
+  'f-1', 'f-2', 'b-1', 'b-2', 's-1', 'c-1', 'a-1', 'e-1', 'e-2', 'e-3', 'e-4',
+  'admin-root',
+  'guest-consumer',
+  'guest-user',
+  'user-farmer-rafiq',
+  'user-wholesaler-sumaiya',
+  'user-supplier-meghna',
+  'user-expert-akram',
+  'user-consumer-tanveer',
+  'far-shibganj-1',
+  'far-sherpur-1',
+  'w-karwan-syndicate',
+  'w-bogura-arat',
+  'ret-bismillah-mart',
+  'ret-green-bazar',
+]);
+const DEMO_PHONES = new Set([
+  '01700000000', '01700000001', '01999887766', '01712458920', '01711209934',
+  '01715889900', '01711000001', '01711889922'
+]);
 const DEMO_EMAILS = new Set([
   'dummy.fake@nativebazar.com',
+  'admin@nativebazar.com',
+  'guest@nativebazar.com',
+  'rafiqul.farmer@nativebazar.com',
+  'i.sumayyaislam@gmail.com',
+  'meghna.depot@nativebazar.com',
+  'dr.akram@bari.gov.bd',
+  'tanveer.consumer@gmail.com',
 ]);
 
 export function isDemoAccount(u: any): boolean {
@@ -96,6 +122,7 @@ export function isDemoAccount(u: any): boolean {
   if (u.id && DEMO_USER_IDS.has(u.id)) return true;
   if (u.phone && DEMO_PHONES.has(u.phone.replace(/\D/g, ''))) return true;
   if (u.email && DEMO_EMAILS.has(u.email.toLowerCase())) return true;
+  if (u.isDemo || u.isMock || u.isDummy) return true;
   return false;
 }
 
@@ -119,7 +146,7 @@ function setItem<T>(key: string, value: T): void {
 
 // ─── INITIALIZE (runs once, purges all demo accounts, preserves genuine users) ─────
 export function initializeStore(): void {
-  const STORE_VERSION = 'v21_unified_secure';
+  const STORE_VERSION = 'v24_rich_live_market_rates';
 
   // 1. Purge demo user if currently logged in
   const currentUserRaw = getItem<User | null>(KEYS.CURRENT_USER, null);
@@ -143,34 +170,50 @@ export function initializeStore(): void {
     .filter((u) => !isDemoAccount(u))
     .map((u) => {
       // Map legacy roles safely
-      let role = u.role;
+      let role: string = u.role;
       if (role === 'businessman') role = 'wholesaler';
       if (role === 'supplier') role = 'retailer';
       if (role === 'customer') role = 'consumer';
       return {
         ...u,
-        role,
+        role: role as UserRole,
         passwordHash: u.passwordHash || (u.password ? hashPassword(u.password) : undefined),
       };
     });
 
   setItem(KEYS.USERS, cleanGenuineUsers);
 
-  // 3. Purge fake demo listings, orders, and mock data
+  // 3. Purge fake demo listings, orders, and mock data (zero state for new accounts)
   const existingCrops = getItem<CropListing[]>(KEYS.CROP_LISTINGS, []).filter(
-    (c) => !['crop-101', 'crop-102', 'crop-103'].includes(c.id) && !['f-1', 'f-2'].includes(c.farmerId)
+    (c) =>
+      !['crop-101', 'crop-102', 'crop-103', 'crop-rafiq-tomato', 'crop-rafiq-potato', 'crop-rafiq-chili', 'crop-rafiq-cauliflower'].includes(c.id) &&
+      !['f-1', 'f-2', 'user-farmer-rafiq'].includes(c.farmerId) &&
+      !isDemoAccount({ id: c.farmerId })
   );
   setItem(KEYS.CROP_LISTINGS, existingCrops);
 
   const existingSupplierProducts = getItem<SupplierProduct[]>(KEYS.SUPPLIER_PRODUCTS, []).filter(
-    (p) => !['sup-301', 'sup-302', 'sup-303', 'sup-304', 'sup-305'].includes(p.id) && p.supplierId !== 's-1'
+    (p) =>
+      !['sup-301', 'sup-302', 'sup-303', 'sup-304', 'sup-305', 'sup-meghna-seed', 'sup-meghna-potash'].includes(p.id) &&
+      !['s-1', 'user-supplier-meghna'].includes(p.supplierId || '') &&
+      !isDemoAccount({ id: p.supplierId })
   );
   setItem(KEYS.SUPPLIER_PRODUCTS, existingSupplierProducts);
 
   const existingOrders = getItem<CustomerOrder[]>(KEYS.ORDERS, []).filter(
-    (o) => !o.customerId || !DEMO_USER_IDS.has(o.customerId)
+    (o) => !o.customerId || !isDemoAccount({ id: o.customerId })
   );
   setItem(KEYS.ORDERS, existingOrders);
+
+  const existingTradeOrders = getItem<TradeOrder[]>(KEYS.TRADE_ORDERS, []).filter(
+    (o) => !isDemoAccount({ id: o.buyerId }) && !isDemoAccount({ id: o.sellerId })
+  );
+  setItem(KEYS.TRADE_ORDERS, existingTradeOrders);
+
+  const existingExpenses = getItem<ExpenseLedgerEntry[]>(KEYS.EXPENSE_LEDGER, []).filter(
+    (e) => !['f-1', 'f-2', 'user-farmer-rafiq'].includes(e.farmerId) && !isDemoAccount({ id: e.farmerId })
+  );
+  setItem(KEYS.EXPENSE_LEDGER, existingExpenses);
 
   // Clean login audit logs from fake entries
   const cleanLogs = getItem<LoginAuditLog[]>(KEYS.LOGIN_AUDIT, []).filter(
@@ -218,13 +261,13 @@ export const AuthStore = {
     users = users.filter((u) => !isDemoAccount(u));
 
     return users.map((u) => {
-      let role = u.role;
+      let role: string = u.role;
       if (role === 'businessman') role = 'wholesaler';
       if (role === 'supplier') role = 'retailer';
       if (role === 'customer') role = 'consumer';
       return {
         ...u,
-        role,
+        role: role as UserRole,
         passwordHash: u.passwordHash || (u.password ? hashPassword(u.password) : undefined),
       };
     });
@@ -296,7 +339,7 @@ export const AuthStore = {
       this.addAuditLog({
         timestamp: new Date().toISOString(),
         phone,
-        role: role || 'customer',
+        role: role || 'consumer',
         status: 'LOCKED',
         ip: '192.168.1.10 (Bogura Node)',
         device: 'Web Client',
@@ -379,7 +422,7 @@ export const AuthStore = {
       this.addAuditLog({
         timestamp: new Date().toISOString(),
         phone: raw,
-        role: targetRole || 'customer',
+        role: targetRole || 'consumer',
         status: 'FAILED_PASSWORD',
         ip: '192.168.1.10 (Bogura Node)',
         device: 'Web Client',
@@ -921,7 +964,7 @@ export const OrderStore = {
 
 // ─── TWO-WAY TRADE & SUPPLIER ORDER STORE ──────────────────────────────
 export const TradeOrderStore = {
-  getAll: (): TradeOrder[] => getItem<TradeOrder[]>(KEYS.TRADE_ORDERS, INITIAL_TRADE_ORDERS),
+  getAll: (): TradeOrder[] => getItem<TradeOrder[]>(KEYS.TRADE_ORDERS, []),
 
   getById: (id: string): TradeOrder | undefined => {
     return TradeOrderStore.getAll().find((o) => o.id === id);
@@ -952,12 +995,26 @@ export const TradeOrderStore = {
 
 // ─── DAILY MARKET RATES STORE ──────────────────────────────────────────
 export const MarketRateStore = {
-  getAll: (): MarketRate[] => getItem<MarketRate[]>(KEYS.MARKET_RATES, INITIAL_MARKET_RATES),
+  getAll: (): MarketRate[] => {
+    const rates = getItem<MarketRate[]>(KEYS.MARKET_RATES, INITIAL_MARKET_RATES);
+    // If cached rates have less than 20 items or lack images, reset to INITIAL_MARKET_RATES
+    if (!rates || rates.length < 20 || !rates[0].imageUrl) {
+      setItem(KEYS.MARKET_RATES, INITIAL_MARKET_RATES);
+      return INITIAL_MARKET_RATES;
+    }
+    return rates;
+  },
 
   getByDistrict: (district: string): MarketRate[] => {
     const all = MarketRateStore.getAll();
     const query = (district || '').trim().toLowerCase();
-    return all.filter((r) => r.district.toLowerCase() === query);
+    const matches = all.filter((r) => r.district.toLowerCase() === query);
+    if (matches.length > 0) return matches;
+    return [];
+  },
+
+  saveAll: (rates: MarketRate[]): void => {
+    setItem(KEYS.MARKET_RATES, rates);
   },
 
   update: (id: string, updates: Partial<MarketRate>): void => {
@@ -1178,12 +1235,16 @@ export const ExpenseStore = {
     setItem(KEYS.EXPENSE_LEDGER, this.getAll().filter(e => e.id !== id));
   },
 
-  totalExpenses(): number {
-    return this.getAll().filter(e => e.type === 'expense').reduce((s, e) => s + e.amountBDT, 0);
+  totalExpenses(farmerId?: string): number {
+    return this.getAll()
+      .filter((e) => e.type === 'expense' && (!farmerId || e.farmerId === farmerId))
+      .reduce((s, e) => s + e.amountBDT, 0);
   },
 
-  totalRevenue(): number {
-    return this.getAll().filter(e => e.type === 'income').reduce((s, e) => s + e.amountBDT, 0);
+  totalRevenue(farmerId?: string): number {
+    return this.getAll()
+      .filter((e) => e.type === 'income' && (!farmerId || e.farmerId === farmerId))
+      .reduce((s, e) => s + e.amountBDT, 0);
   },
 
   netProfit(): number {
@@ -1212,31 +1273,65 @@ export const NegotiationStore = {
 export const NotificationStore = {
   getAll: (): Notification[] => getItem<Notification[]>(KEYS.NOTIFICATIONS, []),
 
+  getByUser: (userId: string): Notification[] => {
+    return NotificationStore.getAll().filter(n => n.userId === userId);
+  },
+
   add(notif: Notification): void {
     setItem(KEYS.NOTIFICATIONS, [notif, ...this.getAll()].slice(0, 100));
+    try {
+      window.dispatchEvent(new CustomEvent('nb_notifications_updated', { detail: notif }));
+    } catch {}
   },
 
   markRead(id: string): void {
     setItem(KEYS.NOTIFICATIONS, this.getAll().map(n => n.id === id ? { ...n, read: true } : n));
+    try {
+      window.dispatchEvent(new CustomEvent('nb_notifications_updated'));
+    } catch {}
   },
 
-  markAllRead(): void {
-    setItem(KEYS.NOTIFICATIONS, this.getAll().map(n => ({ ...n, read: true })));
+  dismiss(id: string): void {
+    setItem(KEYS.NOTIFICATIONS, this.getAll().filter(n => n.id !== id));
+    try {
+      window.dispatchEvent(new CustomEvent('nb_notifications_updated'));
+    } catch {}
   },
 
-  unreadCount(): number {
-    return this.getAll().filter(n => !n.read).length;
+  dismissByUserAndType(userId: string, filterFn: (n: Notification) => boolean): void {
+    setItem(KEYS.NOTIFICATIONS, this.getAll().filter(n => !(n.userId === userId && filterFn(n))));
+    try {
+      window.dispatchEvent(new CustomEvent('nb_notifications_updated'));
+    } catch {}
   },
 
-  addSystemNotif(userId: string, title: string, message: string, type: Notification['type'] = 'info'): void {
+  markAllRead(userId?: string): void {
+    setItem(KEYS.NOTIFICATIONS, this.getAll().map(n => (!userId || n.userId === userId) ? { ...n, read: true } : n));
+    try {
+      window.dispatchEvent(new CustomEvent('nb_notifications_updated'));
+    } catch {}
+  },
+
+  unreadCount(userId?: string): number {
+    return this.getAll().filter(n => (!userId || n.userId === userId) && !n.read).length;
+  },
+
+  addSystemNotif(
+    userId: string,
+    title: string,
+    message: string,
+    type: Notification['type'] = 'info',
+    actionUrl?: string
+  ): void {
     this.add({
-      id:        `notif-${Date.now()}`,
+      id:        `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       userId,
       title,
       message,
       type,
       read:      false,
       createdAt: new Date().toISOString(),
+      actionUrl,
     });
   },
 };
@@ -1297,8 +1392,9 @@ export const ConnectionStore = {
     NotificationStore.addSystemNotif(
       recipient.id,
       'নতুন সংযোগের অনুরোধ / New Connection Request',
-      `${requester.name} (${requester.role.toUpperCase()}) আপনার সাথে যুক্ত হতে অনুরোধ পাঠিয়েছেন।`,
-      'info'
+      `${requester.name} (${requester.role.toUpperCase()}) আপনার সাথে যুক্ত হতে অনুরোধ পাঠিয়েছেন। গ্রহণ করতে ক্লিক করুন।`,
+      'info',
+      '/contacts?tab=connections'
     );
 
     return newConn;
@@ -1315,9 +1411,10 @@ export const ConnectionStore = {
     // Live notification for requester
     NotificationStore.addSystemNotif(
       conn.requesterId,
-      'সংযোগ গৃহীত হয়েছে / Connection Accepted',
-      `${conn.recipientName} আপনার সংযোগ অনুরোধ গ্রহণ করেছেন। এখন সরাসরি বার্তা বা কল করতে পারেন।`,
-      'success'
+      'সংযোগ গৃহীত হয়েছে / Connection Accepted',
+      `${conn.recipientName} আপনার সংযোগ অনুরোধ গ্রহণ করেছেন। বার্তা পাঠাতে ক্লিক করুন।`,
+      'success',
+      `/contacts?tab=chat&userId=${conn.recipientId}`
     );
   },
 
@@ -1367,23 +1464,35 @@ export const MessageStore = {
       data.recipientId,
       `নতুন বার্তা: ${data.senderName}`,
       data.content.length > 60 ? `${data.content.slice(0, 60)}…` : data.content,
-      'info'
+      'info',
+      `/contacts?tab=chat&userId=${data.senderId}`
     );
 
     return newMsg;
   },
 
-  markRead: (recipientId: string, senderId: string): void => {
-    const messages = MessageStore.getAll().map((m) =>
-      m.recipientId === recipientId && m.senderId === senderId
-        ? { ...m, read: true }
-        : m
-    );
-    setItem(KEYS.MESSAGES, messages);
+  markRead: (recipientId: string, senderId?: string): void => {
+    let hasChanges = false;
+    const messages = MessageStore.getAll().map((m) => {
+      if (m.recipientId === recipientId && (!senderId || m.senderId === senderId) && !m.read) {
+        hasChanges = true;
+        return { ...m, read: true };
+      }
+      return m;
+    });
+    if (hasChanges) {
+      setItem(KEYS.MESSAGES, messages);
+    }
+    try {
+      window.dispatchEvent(new CustomEvent('nb_messages_updated'));
+      window.dispatchEvent(new CustomEvent('nb_unread_updated'));
+    } catch {}
   },
 
-  getUnreadCount: (userId: string): number => {
-    return MessageStore.getAll().filter((m) => m.recipientId === userId && !m.read).length;
+  getUnreadCount: (userId: string, senderId?: string): number => {
+    return MessageStore.getAll().filter(
+      (m) => m.recipientId === userId && !m.read && (!senderId || m.senderId === senderId)
+    ).length;
   },
 };
 
@@ -1395,6 +1504,48 @@ export const CallStore = {
     return CallStore.getAll()
       .filter((c) => c.callerId === userId || c.receiverId === userId)
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  },
+
+  startCall: (caller: User, receiver: User): string => {
+    const callNotifId = `call-notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const roleLabels: Record<string, string> = {
+      farmer: 'কৃষক',
+      wholesaler: 'পাইকার',
+      retailer: 'খুচরা বিক্রেতা',
+      consumer: 'ভোক্তা',
+      admin: 'অ্যাডমিন',
+    };
+    const roleBn = roleLabels[caller.role] || caller.role;
+    NotificationStore.add({
+      id: callNotifId,
+      userId: receiver.id,
+      title: '📞 ইনকামিং কল / Incoming Call',
+      message: `${caller.name} (${roleBn}) আপনাকে সরাসরি কল করছেন... গ্রহণ করতে ক্লিক করুন।`,
+      type: 'warning',
+      read: false,
+      createdAt: new Date().toISOString(),
+      actionUrl: `/contacts?tab=calls&action=attend&callerId=${caller.id}&callNotifId=${callNotifId}`,
+    });
+
+    try {
+      window.dispatchEvent(
+        new CustomEvent('nb_call_incoming', {
+          detail: {
+            caller,
+            receiver,
+            callNotifId,
+          },
+        })
+      );
+    } catch {}
+
+    return callNotifId;
+  },
+
+  endCall: (callNotifId?: string): void => {
+    if (callNotifId) {
+      NotificationStore.dismiss(callNotifId);
+    }
   },
 
   add: (log: Omit<CallLog, 'id' | 'timestamp'>): CallLog => {
@@ -1415,6 +1566,10 @@ export const CallStore = {
       );
     }
 
+    try {
+      window.dispatchEvent(new CustomEvent('nb_call_logs_updated'));
+    } catch {}
+
     return newLog;
   },
 };
@@ -1430,10 +1585,9 @@ export const AnalyticsStore = {
 
     return {
       totalFarmers:    users.filter(u => u.role === 'farmer').length,
-      totalBusinessmen:users.filter(u => u.role === 'businessman').length,
-      totalSuppliers:  users.filter(u => u.role === 'supplier').length,
-      totalCustomers:  users.filter(u => u.role === 'customer').length,
-      totalExperts:    users.filter(u => u.role === 'expert').length,
+      totalWholesalers:users.filter(u => u.role === 'wholesaler').length,
+      totalRetailers:  users.filter(u => u.role === 'retailer').length,
+      totalConsumers:  users.filter(u => u.role === 'consumer').length,
       activeListings:  listings.filter(l => l.status !== 'Sold').length,
       openDemands:     demands.filter(d => d.fulfilledKg < d.quantityKgNeeded).length,
       totalOrders:     orders.length,

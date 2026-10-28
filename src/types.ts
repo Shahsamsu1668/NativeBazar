@@ -1,7 +1,7 @@
 // ─── CORE TYPES ────────────────────────────────────────────────────────
 
 export type CanonicalRole = 'farmer' | 'wholesaler' | 'retailer' | 'consumer' | 'admin';
-export type UserRole = CanonicalRole | 'businessman' | 'supplier' | 'customer' | 'expert';
+export type UserRole = CanonicalRole;
 
 export function normalizeRole(role: UserRole | string | undefined | null): CanonicalRole {
   if (!role) return 'consumer';
@@ -47,20 +47,13 @@ export interface User {
   // Farmer extras
   farmSizeAcres?: number;
   primaryCrops?: string[];
-  // Wholesaler / Businessman extras
+  // Wholesaler extras
   businessName?: string;
   businessType?: string;
-  // Retailer / Supplier extras
+  // Retailer extras
   shopName?: string;
   licenseNumber?: string;
   tradeAddress?: string;
-  // Legacy / Expert extras
-  designation?: string;
-  institution?: string;
-  specialization?: string[];
-  certificatePhotoUrl?: string;
-  nidPhotoUrl?: string;
-  nidNumber?: string;
 }
 
 // ─── CROP LISTING ────────────────────────────────────────────────────────
@@ -151,6 +144,7 @@ export interface MarketRate {
   trend: 'up' | 'down' | 'stable';
   source: string;         // 'Department of Agricultural Marketing (DAM)'
   lastUpdated: string;
+  imageUrl?: string;
 }
 
 // ─── UNIFIED MARKETPLACE PRODUCT ──────────────────────────────────────────

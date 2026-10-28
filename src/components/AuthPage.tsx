@@ -330,7 +330,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
             <Sprout className="w-7 h-7 text-emerald-300" />
           </div>
           <h1 className="text-xl sm:text-2xl font-black tracking-tight">
-            NativeBazar • {t('Agricultural Platform', 'নেটিভবাজার কৃষি প্ল্যাটফর্ম')}
+            {language === 'bn' ? 'আমার হাট' : 'Amar Haat'} • {t('Agricultural Platform', 'আমার হাট কৃষি প্ল্যাটফর্ম')}
           </h1>
           <p className="text-xs text-emerald-100/80 mt-1 max-w-sm mx-auto">
             {t(
@@ -822,7 +822,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
             {/* Restricted Administrator Portal Link */}
             <div className="pt-4 border-t border-stone-100 flex items-center justify-between text-[11px] text-stone-400">
-              <span>NativeBazar Pilot • Bangladesh</span>
+              <span>{language === 'bn' ? 'আমার হাট পাইলট • বাংলাদেশ' : 'Amar Haat Pilot • Bangladesh'}</span>
               <button
                 type="button"
                 onClick={() => { setIsAdminMode(true); setError(''); }}

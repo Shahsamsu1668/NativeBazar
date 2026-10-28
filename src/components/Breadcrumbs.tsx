@@ -29,10 +29,6 @@ const ROLE_TITLES: Record<UserRole, { en: string; bn: string }> = {
   wholesaler: { en: 'Wholesale Arat Hub', bn: 'পাইকারি আড়ত হাব' },
   retailer: { en: 'Retailer Store Hub', bn: 'খুচরা বিক্রেতা হাব' },
   consumer: { en: 'Fresh Consumer Marketplace', bn: 'ভোক্তা বাজার' },
-  businessman: { en: 'Wholesale Buyer Hub', bn: 'পাইকারি ট্রেডার হাব' },
-  supplier: { en: 'Retailer Store Hub', bn: 'খুচরা বিক্রেতা হাব' },
-  customer: { en: 'Fresh Consumer Marketplace', bn: 'ভোক্তা বাজার' },
-  expert: { en: 'Agronomy Expert Hub', bn: 'কৃষি বিশেষজ্ঞ হাব' },
   admin: { en: 'Central Admin Telemetry', bn: 'প্রশাসন কন্ট্রোল সেন্টার' },
 };
 
@@ -138,7 +134,7 @@ export const Breadcrumbs: React.FC<BreadcrumbsProps> = ({
         {/* Current Context Pill */}
         <div className="hidden md:flex items-center gap-2 text-[11px] text-stone-500 shrink-0 font-medium">
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span>NativeBazar Pilot Node</span>
+          <span>{language === 'bn' ? 'আমার হাট নোড' : 'Amar Haat Pilot Node'}</span>
         </div>
       </div>
     </nav>

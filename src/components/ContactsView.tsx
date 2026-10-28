@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { User, Language, UserRole, UserConnection, DirectMessage, CallLog } from '../types';
-import { ConnectionStore, MessageStore, CallStore } from '../data/store';
+import { ConnectionStore, MessageStore, CallStore, AuthStore, NotificationStore, isDemoAccount } from '../data/store';
+import { toBanglaNumber } from './Header';
 import { apiService } from '../services/apiService';
 import { BANGLADESH_LOCATIONS } from '../data/mockData';
 import {
@@ -72,34 +73,6 @@ const ROLE_META: Record<UserRole, { labelEn: string; labelBn: string; color: str
     badge: 'bg-purple-100 text-purple-800 border-purple-200',
     icon: <ShoppingCart className="w-3.5 h-3.5" />,
   },
-  businessman: {
-    labelEn: 'Wholesaler',
-    labelBn: 'ব্যবসায়ী',
-    color: 'text-blue-700',
-    badge: 'bg-blue-100 text-blue-800 border-blue-200',
-    icon: <Briefcase className="w-3.5 h-3.5" />,
-  },
-  supplier: {
-    labelEn: 'Retailer',
-    labelBn: 'সরবরাহকারী',
-    color: 'text-amber-700',
-    badge: 'bg-amber-100 text-amber-800 border-amber-200',
-    icon: <Store className="w-3.5 h-3.5" />,
-  },
-  customer: {
-    labelEn: 'Consumer',
-    labelBn: 'ভোক্তা',
-    color: 'text-purple-700',
-    badge: 'bg-purple-100 text-purple-800 border-purple-200',
-    icon: <ShoppingCart className="w-3.5 h-3.5" />,
-  },
-  expert: {
-    labelEn: 'Agri Expert',
-    labelBn: 'কৃষি বিশেষজ্ঞ',
-    color: 'text-teal-700',
-    badge: 'bg-teal-100 text-teal-800 border-teal-200',
-    icon: <Microscope className="w-3.5 h-3.5" />,
-  },
   admin: {
     labelEn: 'Admin',
     labelBn: 'অ্যাডমিন',
@@ -128,22 +101,6 @@ const SUGGESTED_MESSAGES: Record<UserRole, { en: string; bn: string }[]> = {
   consumer: [
     { en: 'Is fresh delivery available today?', bn: 'আজকে কি সরাসরি ডেলিভারি পাওয়া যাবে?' },
     { en: 'What is the minimum order quantity?', bn: 'সর্বনিম্ন কত কেজি অর্ডার দেওয়া যাবে?' },
-  ],
-  businessman: [
-    { en: 'I am interested in your seasonal demand.', bn: 'আপনার মৌসুমী ক্রয়ের চাহিদায় আগ্রহী।' },
-    { en: 'Can we arrange escrow payment for harvest contract?', bn: 'এসক্রো পেমেন্টে ফসল চুক্তি করা যাবে কি?' },
-    { en: 'What is your required delivery schedule?', bn: 'ডেলিভারির নির্ধারিত সময়সূচী কি?' },
-  ],
-  supplier: [
-    { en: 'Do you have inventory currently in stock?', bn: 'পণ্য কি বর্তমানে স্টকে আছে?' },
-    { en: 'What is the bulk price for seed varieties?', bn: 'উন্নত বীজের পাইকারি মূল্য কত?' },
-  ],
-  customer: [
-    { en: 'Is fresh farm delivery available today?', bn: 'আজকে কি সরাসরি ফার্ম থেকে ডেলিভারি পাওয়া যাবে?' },
-    { en: 'What is the minimum order quantity?', bn: 'সর্বনিম্ন কত কেজি অর্ডার দেওয়া যাবে?' },
-  ],
-  expert: [
-    { en: 'Need advice on pest attack in crop field.', bn: 'ফসলে পোকার আক্রমণের প্রতিকার কি?' },
   ],
   admin: [
     { en: 'Inquiry regarding account verification.', bn: 'অ্যাকাউন্ট ভেরিফিকেশন সংক্রান্ত তথ্য জানতে চাই।' },
@@ -177,6 +134,7 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
 
   // ── Chat / Inbox state ───────────────────────────────────────────────
   const [activeChatUser, setActiveChatUser] = useState<User | null>(null);
+  const [unreadCount, setUnreadCount] = useState<number>(() => MessageStore.getUnreadCount(currentUser.id));
   const [chatMessages, setChatMessages] = useState<DirectMessage[]>([]);
   const [chatPartners, setChatPartners] = useState<User[]>([]);
   const [messageInput, setMessageInput] = useState('');
@@ -192,7 +150,7 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
 
   const t = (en: string, bn: string) => (language === 'bn' ? bn : en);
 
-  // ── Load directory from backend ──────────────────────────────────────
+  // ── Load directory (ONLY real registered users, NO mock/dummy users) ──
   const fetchDirectory = useCallback(async (search?: string) => {
     setDirectoryLoading(true);
     setDirectoryError(null);
@@ -203,14 +161,52 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
         district: selectedDistrictFilter !== 'all' ? selectedDistrictFilter : undefined,
         search: search ?? appliedSearch,
       });
-      if (result.success) {
-        setDirectoryUsers(result.users);
-        setDirectoryTotal(result.total);
-      } else {
-        setDirectoryError(t('Failed to load users. Check network.', 'ব্যবহারকারী লোড করতে ব্যর্থ। নেটওয়ার্ক পরীক্ষা করুন।'));
+
+      // Merge backend users with local AuthStore registered users
+      const localUsers = AuthStore.getUsers();
+      const userMap = new Map<string, User>();
+      localUsers.forEach((u) => userMap.set(u.id, u));
+      if (result.success && Array.isArray(result.users)) {
+        result.users.forEach((u) => userMap.set(u.id, { ...userMap.get(u.id), ...u }));
       }
+
+      // Strict filter: EXCLUDE ALL DEMO/MOCK/DUMMY USERS, ADMINS, AND CURRENT USER
+      const query = (search ?? appliedSearch).trim().toLowerCase();
+      const realUsers = Array.from(userMap.values()).filter((u) => {
+        if (!u || !u.id) return false;
+        if (u.id === currentUser.id) return false;
+        if (u.role === 'admin') return false;
+        if (isDemoAccount(u)) return false;
+
+        // Role filter
+        if (selectedRoleFilter !== 'all' && u.role !== selectedRoleFilter) return false;
+
+        // District filter
+        if (selectedDistrictFilter !== 'all' && u.district && u.district.toLowerCase() !== selectedDistrictFilter.toLowerCase()) {
+          return false;
+        }
+
+        // Search query
+        if (query) {
+          const matchName = (u.name && u.name.toLowerCase().includes(query)) || (u.nameBn && u.nameBn.includes(query));
+          const matchPhone = u.phone && u.phone.includes(query);
+          const matchDistrict = u.district && u.district.toLowerCase().includes(query);
+          const matchBiz = (u as any).businessName && (u as any).businessName.toLowerCase().includes(query);
+          const matchShop = (u as any).shopName && (u as any).shopName.toLowerCase().includes(query);
+          if (!matchName && !matchPhone && !matchDistrict && !matchBiz && !matchShop) return false;
+        }
+
+        return true;
+      });
+
+      setDirectoryUsers(realUsers);
+      setDirectoryTotal(realUsers.length);
     } catch {
-      setDirectoryError(t('Network error loading directory.', 'ডিরেক্টরি লোড করতে নেটওয়ার্ক ত্রুটি।'));
+      const realUsers = AuthStore.getUsers().filter(
+        (u) => u.id !== currentUser.id && u.role !== 'admin' && !isDemoAccount(u)
+      );
+      setDirectoryUsers(realUsers);
+      setDirectoryTotal(realUsers.length);
     } finally {
       setDirectoryLoading(false);
     }
@@ -235,12 +231,18 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
     });
     if (partnerIds.size > 0) {
       const partners: User[] = [];
+      const allRegistered = AuthStore.getUsers();
       for (const pid of partnerIds) {
-        const found = directoryUsers.find((u) => u.id === pid);
-        if (found) { partners.push(found); continue; }
-        // Fetch from backend if not in directory
+        const found = directoryUsers.find((u) => u.id === pid) || allRegistered.find((u) => u.id === pid);
+        if (found) {
+          if (!isDemoAccount(found)) partners.push(found);
+          continue;
+        }
         const res = await apiService.getUsers({});
-        if (res.success) { const bu = res.users.find((u) => u.id === pid); if (bu) partners.push(bu); }
+        if (res.success) {
+          const bu = res.users.find((u) => u.id === pid);
+          if (bu && !isDemoAccount(bu)) partners.push(bu);
+        }
       }
       setChatPartners(partners);
     }
@@ -258,6 +260,20 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
     } finally {
       setChatLoading(false);
     }
+
+    // Mark messages as seen in local MessageStore
+    MessageStore.markRead(currentUser.id, otherUser.id);
+
+    // Dismiss / mark read any notifications related to this conversation
+    const notifs = NotificationStore.getAll();
+    notifs.forEach((n) => {
+      if (n.userId === currentUser.id && !n.read && n.actionUrl?.includes(otherUser.id)) {
+        NotificationStore.markRead(n.id);
+      }
+    });
+
+    // Reset unread count badge immediately
+    setUnreadCount(MessageStore.getUnreadCount(currentUser.id));
   }, [currentUser.id]);
 
   // ── SSE: real-time message delivery ──────────────────────────────────
@@ -274,6 +290,10 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
           (message.senderId === activeChatUserRef.current.id || message.recipientId === activeChatUserRef.current.id)) {
           setChatMessages((prev) => prev.some((m) => m.id === message.id) ? prev : [...prev, message]);
           apiService.markMessagesRead(currentUser.id, activeChatUserRef.current.id).catch(() => {});
+          MessageStore.markRead(currentUser.id, activeChatUserRef.current.id);
+          setUnreadCount(MessageStore.getUnreadCount(currentUser.id));
+        } else {
+          setUnreadCount(MessageStore.getUnreadCount(currentUser.id));
         }
         fetchChatPartners();
       } catch { /* ignore */ }
@@ -290,6 +310,59 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
     return () => { es.close(); sseRef.current = null; };
   }, [currentUser.id]);
 
+  // ── URL Navigation & Notification Redirection ───────────────────────
+  const handleUrlNavigation = useCallback(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get('tab');
+    const targetUserId = params.get('userId');
+    const action = params.get('action');
+    const callerId = params.get('callerId');
+    const callNotifId = params.get('callNotifId');
+
+    if (tab === 'calls' || action === 'attend') {
+      setActiveTab('calls');
+      if (callNotifId) {
+        NotificationStore.dismiss(callNotifId);
+      }
+      NotificationStore.dismissByUserAndType(currentUser.id, (n) =>
+        n.title.includes('কল') || n.title.includes('Call') || (n.actionUrl?.includes('calls') ?? false)
+      );
+      if (action === 'attend' && callerId) {
+        const allRegistered = AuthStore.getUsers();
+        const caller = directoryUsers.find((u) => u.id === callerId) || allRegistered.find((u) => u.id === callerId);
+        if (caller) {
+          handleInitiateCall(caller);
+        }
+      }
+    } else if (tab === 'connections') {
+      setActiveTab('connections');
+    } else if (tab === 'chat') {
+      setActiveTab('chat');
+      if (targetUserId) {
+        const allRegistered = AuthStore.getUsers();
+        const target = directoryUsers.find((u) => u.id === targetUserId) || allRegistered.find((u) => u.id === targetUserId);
+        if (target) {
+          handleSelectChat(target);
+        }
+      }
+    }
+  }, [directoryUsers, loadConversation, currentUser.id]);
+
+  // Auto-dismiss call notifications when viewing Calls tab
+  useEffect(() => {
+    if (activeTab === 'calls') {
+      NotificationStore.dismissByUserAndType(currentUser.id, (n) =>
+        n.title.includes('কল') || n.title.includes('Call') || (n.actionUrl?.includes('calls') ?? false)
+      );
+    }
+  }, [activeTab, currentUser.id]);
+
+  useEffect(() => {
+    handleUrlNavigation();
+    window.addEventListener('popstate', handleUrlNavigation);
+    return () => window.removeEventListener('popstate', handleUrlNavigation);
+  }, [handleUrlNavigation]);
+
   // ── Initial load ──────────────────────────────────────────────────────
   useEffect(() => { fetchDirectory(''); refreshLocalData(); }, [currentUser.id]);
   useEffect(() => { fetchChatPartners(); }, [directoryUsers]);
@@ -297,10 +370,68 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
   // Handle initial chat user from props
   useEffect(() => {
     if (initialChatUserId) {
-      const target = directoryUsers.find((u) => u.id === initialChatUserId);
+      const allRegistered = AuthStore.getUsers();
+      const target = directoryUsers.find((u) => u.id === initialChatUserId) || allRegistered.find((u) => u.id === initialChatUserId);
       if (target) { setActiveChatUser(target); setActiveTab('chat'); loadConversation(target); }
     }
-  }, [initialChatUserId, directoryUsers]);
+  }, [initialChatUserId, directoryUsers, loadConversation]);
+
+  // ── Real-time Cross-tab Sync & Fast Updates ──────────────────────────
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'nb_messages_v1') {
+        if (activeChatUserRef.current) {
+          const msgs = MessageStore.getConversation(currentUser.id, activeChatUserRef.current.id);
+          setChatMessages(msgs);
+        }
+        fetchChatPartners();
+        setUnreadCount(MessageStore.getUnreadCount(currentUser.id));
+      }
+      if (e.key === 'nb_connections_v1' || e.key === 'nb_notifications') {
+        refreshLocalData();
+      }
+    };
+
+    const handleMessagesUpdated = () => {
+      setUnreadCount(MessageStore.getUnreadCount(currentUser.id));
+      fetchChatPartners();
+    };
+
+    const handleUnreadUpdated = () => {
+      setUnreadCount(MessageStore.getUnreadCount(currentUser.id));
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('nb_messages_updated', handleMessagesUpdated);
+    window.addEventListener('nb_unread_updated', handleUnreadUpdated);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('nb_messages_updated', handleMessagesUpdated);
+      window.removeEventListener('nb_unread_updated', handleUnreadUpdated);
+    };
+  }, [currentUser.id, fetchChatPartners, refreshLocalData]);
+
+  // Live polling for conversation while chat window is active
+  useEffect(() => {
+    if (!activeChatUser) return;
+    const interval = setInterval(() => {
+      const msgs = MessageStore.getConversation(currentUser.id, activeChatUser.id);
+      setChatMessages((prev) => {
+        if (msgs.length !== prev.length || (msgs.length > 0 && prev.length > 0 && msgs[msgs.length - 1].id !== prev[prev.length - 1].id)) {
+          return msgs;
+        }
+        return prev;
+      });
+      const hasUnread = msgs.some((m) => m.senderId === activeChatUser.id && !m.read);
+      if (hasUnread) {
+        MessageStore.markRead(currentUser.id, activeChatUser.id);
+        setUnreadCount(MessageStore.getUnreadCount(currentUser.id));
+      }
+      refreshLocalData();
+    }, 1500);
+    return () => clearInterval(interval);
+  }, [currentUser.id, activeChatUser?.id, refreshLocalData]);
 
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatMessages]);
 
@@ -313,64 +444,132 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
     fetchDirectory('');
   };
 
+  // ── Call Handler with Real-time Notification ─────────────────────────
+  const handleInitiateCall = (contact: User) => {
+    // 1. Trigger call notification in store for target user
+    CallStore.startCall(currentUser, contact);
+
+    // 2. Dispatch real-time call signal to backend
+    apiService.sendCallSignal({
+      toUserId: contact.id,
+      fromUserId: currentUser.id,
+      fromUserName: currentUser.name,
+      fromUserRole: currentUser.role,
+      type: 'call_offer',
+    }).catch(() => {});
+
+    // 3. Open Interactive VoIP Call Modal
+    onInitiateCall(contact);
+  };
+
   // ── Chat handlers ─────────────────────────────────────────────────────
   const handleSelectChat = (contact: User) => {
-    setActiveChatUser(contact); setActiveTab('chat'); setSendError(null); loadConversation(contact);
+    setActiveChatUser(contact);
+    setActiveTab('chat');
+    setSendError(null);
+    MessageStore.markRead(currentUser.id, contact.id);
+    setUnreadCount(MessageStore.getUnreadCount(currentUser.id));
+    loadConversation(contact);
   };
 
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!activeChatUser || !messageInput.trim() || sendingMessage) return;
     const content = messageInput.trim();
-    setMessageInput(''); setSendingMessage(true); setSendError(null);
+    setMessageInput('');
+    setSendingMessage(true);
+    setSendError(null);
+
+    // Save locally and deliver persistent notification with chat link to recipient
+    const localMsg = MessageStore.sendMessage({
+      senderId: currentUser.id,
+      senderName: currentUser.name,
+      senderRole: currentUser.role,
+      recipientId: activeChatUser.id,
+      recipientName: activeChatUser.name,
+      recipientRole: activeChatUser.role,
+      content,
+    });
+    setChatMessages((prev) => (prev.some((m) => m.id === localMsg.id) ? prev : [...prev, localMsg]));
+    fetchChatPartners();
+
+    // Also sync via backend API and dispatch SSE
     try {
-      const result = await apiService.sendMessage({
-        senderId: currentUser.id, senderName: currentUser.name, senderRole: currentUser.role,
-        recipientId: activeChatUser.id, recipientName: activeChatUser.name, recipientRole: activeChatUser.role,
+      await apiService.sendMessage({
+        senderId: currentUser.id,
+        senderName: currentUser.name,
+        senderRole: currentUser.role,
+        recipientId: activeChatUser.id,
+        recipientName: activeChatUser.name,
+        recipientRole: activeChatUser.role,
         content,
       });
-      if (result.success && result.message) {
-        setChatMessages((prev) => prev.some((m) => m.id === result.message!.id) ? prev : [...prev, result.message!]);
-        MessageStore.sendMessage({ senderId: currentUser.id, senderName: currentUser.name, senderRole: currentUser.role,
-          recipientId: activeChatUser.id, recipientName: activeChatUser.name, recipientRole: activeChatUser.role, content });
-        fetchChatPartners();
-      } else {
-        setSendError(result.error || t('Message failed. Try again.', 'বার্তা পাঠানো ব্যর্থ। পুনরায় চেষ্টা করুন।'));
-        setMessageInput(content);
-      }
     } catch {
-      setSendError(t('Network error. Not sent.', 'নেটওয়ার্ক ত্রুটি। বার্তা পাঠানো হয়নি।'));
-      setMessageInput(content);
-    } finally { setSendingMessage(false); }
+      // Offline / network fallback: already stored and notified locally
+    } finally {
+      setSendingMessage(false);
+    }
   };
 
   const handleSendQuickMessage = async (text: string) => {
     if (!activeChatUser || sendingMessage) return;
     setSendingMessage(true);
+    const localMsg = MessageStore.sendMessage({
+      senderId: currentUser.id,
+      senderName: currentUser.name,
+      senderRole: currentUser.role,
+      recipientId: activeChatUser.id,
+      recipientName: activeChatUser.name,
+      recipientRole: activeChatUser.role,
+      content: text,
+    });
+    setChatMessages((prev) => (prev.some((m) => m.id === localMsg.id) ? prev : [...prev, localMsg]));
+    fetchChatPartners();
+
     try {
-      const result = await apiService.sendMessage({
-        senderId: currentUser.id, senderName: currentUser.name, senderRole: currentUser.role,
-        recipientId: activeChatUser.id, recipientName: activeChatUser.name, recipientRole: activeChatUser.role,
+      await apiService.sendMessage({
+        senderId: currentUser.id,
+        senderName: currentUser.name,
+        senderRole: currentUser.role,
+        recipientId: activeChatUser.id,
+        recipientName: activeChatUser.name,
+        recipientRole: activeChatUser.role,
         content: text,
       });
-      if (result.success && result.message)
-        setChatMessages((prev) => prev.some((m) => m.id === result.message!.id) ? prev : [...prev, result.message!]);
-    } catch { /* ignore */ } finally { setSendingMessage(false); }
+    } catch {} finally {
+      setSendingMessage(false);
+    }
   };
 
   // ── Connection handlers ───────────────────────────────────────────────
   const handleConnectToggle = async (targetUser: User) => {
     const status = ConnectionStore.getStatus(currentUser.id, targetUser.id);
     if (status === 'none') {
-      const conn = await apiService.sendConnectionRequest(currentUser.id, targetUser.id);
-      if (!conn.success) ConnectionStore.sendRequest(currentUser, targetUser);
+      // Send connection request in store & notify target user
+      ConnectionStore.sendRequest(currentUser, targetUser);
+      try {
+        await apiService.sendConnectionRequest(currentUser.id, targetUser.id);
+      } catch {}
+    } else if (status === 'pending_received') {
+      // Accept incoming request directly
+      const allConns = ConnectionStore.getAll();
+      const existing = allConns.find(
+        (c) => c.requesterId === targetUser.id && c.recipientId === currentUser.id
+      );
+      if (existing) {
+        handleAcceptConnection(existing.id);
+        return;
+      }
     } else {
       const allConns = ConnectionStore.getAll();
       const existing = allConns.find((c) =>
         (c.requesterId === currentUser.id && c.recipientId === targetUser.id) ||
         (c.requesterId === targetUser.id && c.recipientId === currentUser.id)
       );
-      if (existing) { await apiService.deleteConnection(existing.id).catch(() => {}); ConnectionStore.remove(currentUser.id, targetUser.id); }
+      if (existing) {
+        await apiService.deleteConnection(existing.id).catch(() => {});
+        ConnectionStore.remove(currentUser.id, targetUser.id);
+      }
     }
     refreshLocalData();
   };
@@ -387,7 +586,6 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
 
   const pendingIncomingRequests = connections.filter((c) => c.recipientId === currentUser.id && c.status === 'pending');
   const acceptedConnections = connections.filter((c) => c.status === 'accepted');
-  const unreadCount = MessageStore.getUnreadCount(currentUser.id);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -400,14 +598,14 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
           </div>
           <h1 className="text-2xl md:text-3xl font-black tracking-tight leading-snug">
             {t(
-              'Connect, Message & Call Any Agricultural Stakeholder',
-              'কৃষক, ব্যবসায়ী ও বিশেষজ্ঞদের সাথে সরাসরি সংযোগ, বার্তা ও কল'
+              'Connect, Message & Call Farmers, Wholesalers, Retailers & Consumers',
+              'কৃষক, পাইকার, খুচরা বিক্রেতা ও ভোক্তাদের সাথে সরাসরি সংযোগ, বার্তা ও কল'
             )}
           </h1>
           <p className="text-stone-300 text-xs md:text-sm leading-relaxed max-w-2xl">
             {t(
-              'Interact securely with verified farmers, arat wholesalers, fertilizer suppliers, and agricultural extension officers across Bangladesh.',
-              'সারাদেশের যাচাইকৃত কৃষক, পাইকারি আড়তদার, সার বিক্রেতা এবং কৃষি কর্মকর্তাদের সাথে ফোন বা সরাসরি চ্যাটের মাধ্যমে যোগাযোগ করুন।'
+              'Interact securely with verified farmers, wholesalers, retailers, and consumers across Bangladesh.',
+              'সারাদেশের যাচাইকৃত কৃষক, পাইকারি আড়তদার, খুচরা বিক্রেতা ও ভোক্তাদের সাথে ফোন বা সরাসরি চ্যাটের মাধ্যমে যোগাযোগ করুন।'
             )}
           </p>
         </div>
@@ -452,8 +650,8 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
             <MessageSquare className="w-4 h-4" />
             <span>{t('Direct Chat & Messages', 'সরাসরি বার্তা ও চ্যাট')}</span>
             {unreadCount > 0 && (
-              <span className="bg-red-500 text-white px-1.5 py-0.5 rounded-full text-[10px] font-bold min-w-[18px] text-center">
-                {unreadCount}
+              <span className="bg-red-500 text-white px-1.5 py-0.5 rounded-full text-[10px] font-bold min-w-[18px] text-center animate-pulse">
+                {language === 'bn' ? toBanglaNumber(unreadCount) : unreadCount}
               </span>
             )}
           </button>
@@ -555,7 +753,7 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
               <span className="text-[11px] font-bold text-stone-400 uppercase tracking-wider shrink-0 mr-1">
                 {t('Role:', 'ভূমিকা:')}
               </span>
-              {(['all', 'farmer', 'businessman', 'supplier', 'customer', 'expert'] as const).map((r) => {
+              {(['all', 'farmer', 'wholesaler', 'retailer', 'consumer'] as const).map((r) => {
                 const isSelected = selectedRoleFilter === r;
                 return (
                   <button
@@ -702,19 +900,14 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
                             🌱 {t('Crops:', 'ফসল:')} {(u as any).primaryCrops.join(', ')}
                           </div>
                         )}
-                        {u.role === 'businessman' && (u as any).businessName && (
+                        {u.role === 'wholesaler' && (u as any).businessName && (
                           <div className="pt-1 text-[11px] text-blue-700 font-medium truncate">
                             🏢 {(u as any).businessName}
                           </div>
                         )}
-                        {u.role === 'supplier' && (u as any).shopName && (
+                        {u.role === 'retailer' && (u as any).shopName && (
                           <div className="pt-1 text-[11px] text-amber-700 font-medium truncate">
                             🏪 {(u as any).shopName}
-                          </div>
-                        )}
-                        {u.role === 'expert' && (u as any).designation && (
-                          <div className="pt-1 text-[11px] text-teal-700 font-medium truncate">
-                            🔬 {(u as any).designation}
                           </div>
                         )}
                       </div>
@@ -734,7 +927,7 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
 
                         {/* Call Now Button */}
                         <button
-                          onClick={() => onInitiateCall(u)}
+                          onClick={() => handleInitiateCall(u)}
                           className="flex items-center justify-center gap-1.5 px-3 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-bold transition-colors shadow-2xs"
                         >
                           <Phone className="w-3.5 h-3.5 text-emerald-400" />
@@ -827,16 +1020,25 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
                   const lastMsg = msgs[msgs.length - 1];
                   const meta = ROLE_META[partner.role] || ROLE_META.farmer;
 
+                  const partnerUnread = MessageStore.getUnreadCount(currentUser.id, partner.id);
+
                   return (
                     <div
                       key={partner.id}
                       onClick={() => handleSelectChat(partner)}
-                      className={`p-3.5 cursor-pointer transition-colors flex items-center gap-3 ${
+                      className={`p-3.5 cursor-pointer transition-colors flex items-center gap-3 relative ${
                         isSelected ? 'bg-emerald-50/80 border-l-4 border-emerald-600' : 'hover:bg-stone-100/70'
                       }`}
                     >
-                      <div className="w-10 h-10 rounded-xl bg-stone-800 text-white flex items-center justify-center font-bold text-sm shrink-0">
-                        {partner.name.charAt(0)}
+                      <div className="relative shrink-0">
+                        <div className="w-10 h-10 rounded-xl bg-stone-800 text-white flex items-center justify-center font-bold text-sm">
+                          {partner.name.charAt(0)}
+                        </div>
+                        {partnerUnread > 0 && !isSelected && (
+                          <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center border-2 border-white animate-pulse">
+                            {language === 'bn' ? toBanglaNumber(partnerUnread) : partnerUnread}
+                          </span>
+                        )}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-1">
@@ -849,7 +1051,7 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
                         </div>
                         {lastMsg && (
                           <p className="text-[11px] text-stone-500 truncate mt-0.5">
-                            {lastMsg.senderId === currentUser.id ? 'You: ' : ''}
+                            {lastMsg.senderId === currentUser.id ? (language === 'bn' ? 'আপনি: ' : 'You: ') : ''}
                             {lastMsg.content}
                           </p>
                         )}
@@ -887,7 +1089,7 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
                   {/* Actions in Chat Header */}
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={() => onInitiateCall(activeChatUser)}
+                      onClick={() => handleInitiateCall(activeChatUser)}
                       className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold transition-colors shadow-2xs"
                       title={t('Voice Call Contact', 'সরাসরি কল করুন')}
                     >
@@ -993,8 +1195,8 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
                 </h3>
                 <p className="text-xs text-stone-400 max-w-sm">
                   {t(
-                    'Direct communication allows instant negotiation with farmers, businesses, and certified agronomists.',
-                    'কৃষক, ব্যবসায়ী এবং কৃষিবিদদের সাথে তাৎক্ষণিক যোগাযোগ ও চুক্তি সম্পাদনের সুযোগ।'
+                    'Direct communication allows instant negotiation between farmers, wholesalers, retailers, and consumers.',
+                    'কৃষক, পাইকার, খুচরা বিক্রেতা ও ভোক্তাদের সাথে তাৎক্ষণিক যোগাযোগ ও চুক্তি সম্পাদনের সুযোগ।'
                   )}
                 </p>
                 <button
@@ -1082,7 +1284,7 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
                   {t('No connected partners yet', 'এখনো কোনো সংযুক্ত অংশীজন নেই')}
                 </p>
                 <p className="text-[11px] text-stone-400 max-w-sm mx-auto">
-                  {t('Connect with farmers, wholesale merchants, and agricultural specialists to build your supply chain network.', 'আপনার সরবরাহ চেইনের সুবিধার্থে কৃষক ও ব্যবসায়ীদের সাথে যুক্ত হোন।')}
+                  {t('Connect with farmers, wholesalers, and retailers to build your supply chain network.', 'আপনার সরবরাহ চেইনের সুবিধার্থে কৃষক, পাইকার ও খুচরা বিক্রেতাদের সাথে যুক্ত হোন।')}
                 </p>
               </div>
             ) : (
@@ -1135,7 +1337,7 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
                         </button>
                         <button
                           onClick={() => {
-                            if (fullUser) onInitiateCall(fullUser);
+                            if (fullUser) handleInitiateCall(fullUser);
                           }}
                           className="p-2 bg-stone-900 hover:bg-stone-800 text-white rounded-lg transition-colors shadow-2xs"
                           title="Call"
@@ -1233,7 +1435,7 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
                     <div className="flex items-center gap-2">
                       {otherUser && (
                         <button
-                          onClick={() => onInitiateCall(otherUser)}
+                          onClick={() => handleInitiateCall(otherUser)}
                           className="flex items-center gap-1 px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-lg text-xs font-bold transition-colors"
                         >
                           <Phone className="w-3.5 h-3.5 text-emerald-600" />

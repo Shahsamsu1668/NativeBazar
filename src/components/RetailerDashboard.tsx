@@ -6,6 +6,7 @@ import {
   SupplyChainOrder,
 } from '../types';
 import { productApi, orderApi } from '../services/api';
+import { toBanglaNumber } from './Header';
 import { NotificationStore } from '../data/store';
 import {
   Store,
@@ -101,15 +102,17 @@ export const RetailerDashboard: React.FC<RetailerDashboardProps> = ({
     setRetailProductsLoading(true);
     try {
       const res = await productApi.getProducts({
+        sellerId: currentUser.id,
         sellerRole: 'retailer',
         targetRole: 'consumer',
       });
-      const mine = res.products.filter(
+      const mine = (res.products || []).filter(
         (p) => p.sellerId === currentUser.id || p.sellerName === currentUser.name
       );
-      setMyRetailProducts(mine.length > 0 ? mine : res.products);
+      setMyRetailProducts(mine);
     } catch (e) {
       console.error('Failed to load retail products', e);
+      setMyRetailProducts([]);
     } finally {
       setRetailProductsLoading(false);
     }
@@ -345,11 +348,11 @@ export const RetailerDashboard: React.FC<RetailerDashboardProps> = ({
             <Package className="w-4 h-4 text-teal-600" />
           </div>
           <div className="mt-2 text-xl sm:text-2xl font-black text-stone-900">
-            {totalRetailKg.toLocaleString()}{' '}
-            <span className="text-xs font-normal text-stone-500">kg</span>
+            {language === 'bn' ? toBanglaNumber(totalRetailKg.toLocaleString()) : totalRetailKg.toLocaleString()}{' '}
+            <span className="text-xs font-normal text-stone-500">{language === 'bn' ? 'কেজি' : 'kg'}</span>
           </div>
           <p className="text-[11px] text-stone-500 mt-1">
-            {myRetailProducts.length} {t('Active items on Consumer Feed', 'টি পণ্য ফিডে লাইভ')}
+            {language === 'bn' ? toBanglaNumber(myRetailProducts.length) : myRetailProducts.length} {t('Active items on Consumer Feed', 'টি পণ্য ফিডে লাইভ')}
           </p>
         </div>
 
@@ -359,9 +362,9 @@ export const RetailerDashboard: React.FC<RetailerDashboardProps> = ({
             <ShoppingBag className="w-4 h-4 text-emerald-600" />
           </div>
           <div className="mt-2 text-xl sm:text-2xl font-black text-emerald-700">
-            {consumerOrders.length}
+            {language === 'bn' ? toBanglaNumber(consumerOrders.length) : consumerOrders.length}
           </div>
-          <p className="text-[11px] text-stone-500 mt-1">Guest & Registered shoppers</p>
+          <p className="text-[11px] text-stone-500 mt-1">{t('Guest & Registered shoppers', 'গ্রাহকদের কাছ থেকে প্রাপ্ত অর্ডার')}</p>
         </div>
 
         <div className="bg-white p-4 sm:p-5 rounded-2xl border border-stone-200 shadow-2xs">
@@ -370,9 +373,9 @@ export const RetailerDashboard: React.FC<RetailerDashboardProps> = ({
             <DollarSign className="w-4 h-4 text-blue-600" />
           </div>
           <div className="mt-2 text-xl sm:text-2xl font-black text-blue-700">
-            ৳{totalSalesVolume.toLocaleString()}
+            ৳{language === 'bn' ? toBanglaNumber(totalSalesVolume.toLocaleString()) : totalSalesVolume.toLocaleString()}
           </div>
-          <p className="text-[11px] text-stone-500 mt-1">Delivered & confirmed</p>
+          <p className="text-[11px] text-stone-500 mt-1">{t('Delivered & confirmed', 'সম্পন্ন খুচরা বিক্রয়')}</p>
         </div>
 
         <div className="bg-white p-4 sm:p-5 rounded-2xl border border-stone-200 shadow-2xs">

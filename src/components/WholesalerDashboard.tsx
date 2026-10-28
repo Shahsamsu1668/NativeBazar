@@ -8,6 +8,7 @@ import {
 } from '../types';
 import { productApi, orderApi, intelligenceApi } from '../services/api';
 import { NotificationStore } from '../data/store';
+import { toBanglaNumber } from './Header';
 import {
   Building2,
   Package,
@@ -127,15 +128,17 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
     setMyListingsLoading(true);
     try {
       const res = await productApi.getProducts({
+        sellerId: currentUser.id,
         sellerRole: 'wholesaler',
         targetRole: 'retailer',
       });
-      const mine = res.products.filter(
+      const mine = (res.products || []).filter(
         (p) => p.sellerId === currentUser.id || p.sellerName === currentUser.name
       );
-      setMyWholesaleListings(mine.length > 0 ? mine : res.products);
+      setMyWholesaleListings(mine);
     } catch (e) {
       console.error('Failed to load wholesaler listings', e);
+      setMyWholesaleListings([]);
     } finally {
       setMyListingsLoading(false);
     }
@@ -385,12 +388,12 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
             <Package className="w-4 h-4 text-blue-600" />
           </div>
           <div className="mt-2 text-xl sm:text-2xl font-black text-blue-700">
-            {myWholesaleListings
-              .reduce((s, p) => s + (p.availableKg || 0), 0)
-              .toLocaleString()}{' '}
-            <span className="text-xs font-normal text-stone-500">kg</span>
+            {language === 'bn'
+              ? toBanglaNumber(myWholesaleListings.reduce((s, p) => s + (p.availableKg || 0), 0).toLocaleString())
+              : myWholesaleListings.reduce((s, p) => s + (p.availableKg || 0), 0).toLocaleString()}{' '}
+            <span className="text-xs font-normal text-stone-500">{language === 'bn' ? 'কেজি' : 'kg'}</span>
           </div>
-          <p className="text-[11px] text-stone-500 mt-1">Listed for Retailer purchase</p>
+          <p className="text-[11px] text-stone-500 mt-1">{t('Listed for Retailer purchase', 'খুচরা বিক্রেতাদের ক্রয়ের জন্য প্রস্তুত')}</p>
         </div>
 
         <div className="bg-white p-4 sm:p-5 rounded-2xl border border-stone-200 shadow-2xs">
@@ -399,9 +402,9 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
             <Truck className="w-4 h-4 text-amber-600" />
           </div>
           <div className="mt-2 text-xl sm:text-2xl font-black text-amber-700">
-            {retailerOrders.length}
+            {language === 'bn' ? toBanglaNumber(retailerOrders.length) : retailerOrders.length}
           </div>
-          <p className="text-[11px] text-stone-500 mt-1">Orders from retail shops</p>
+          <p className="text-[11px] text-stone-500 mt-1">{t('Orders from retail shops', 'খুচরা দোকান থেকে প্রাপ্ত অর্ডার')}</p>
         </div>
 
         <div className="bg-white p-4 sm:p-5 rounded-2xl border border-stone-200 shadow-2xs">
@@ -411,11 +414,11 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
           </div>
           <div className="mt-2 text-xl sm:text-2xl font-black text-stone-900">
             ৳
-            {retailerOrders
-              .reduce((s, o) => s + (o.totalBDT || 0), 0)
-              .toLocaleString()}
+            {language === 'bn'
+              ? toBanglaNumber(retailerOrders.reduce((s, o) => s + (o.totalBDT || 0), 0).toLocaleString())
+              : retailerOrders.reduce((s, o) => s + (o.totalBDT || 0), 0).toLocaleString()}
           </div>
-          <p className="text-[11px] text-stone-500 mt-1">Processed order volume</p>
+          <p className="text-[11px] text-stone-500 mt-1">{t('Processed order volume', 'সম্পন্ন লেনদেনের মোট পরিমাণ')}</p>
         </div>
       </div>
 

@@ -28,10 +28,6 @@ const ROLE_META: Record<UserRole, { en: string; bn: string; icon: React.ReactNod
   wholesaler: { en: 'Wholesaler / Aratdar', bn: 'পাইকার / আড়তদার', icon: <Briefcase className="w-5 h-5 text-blue-600" />, color: 'blue' },
   retailer: { en: 'Retailer Store', bn: 'খুচরা বিক্রেতা', icon: <Store className="w-5 h-5 text-amber-600" />, color: 'amber' },
   consumer: { en: 'Consumer', bn: 'ভোক্তা / ক্রেতা', icon: <ShoppingCart className="w-5 h-5 text-purple-600" />, color: 'purple' },
-  businessman: { en: 'Wholesaler', bn: 'ব্যবসায়ী / পাইকার', icon: <Briefcase className="w-5 h-5 text-blue-600" />, color: 'blue' },
-  supplier: { en: 'Retailer', bn: 'খুচরা বিক্রেতা', icon: <Store className="w-5 h-5 text-amber-600" />, color: 'amber' },
-  customer: { en: 'Consumer', bn: 'ভোক্তা / ক্রেতা', icon: <ShoppingCart className="w-5 h-5 text-purple-600" />, color: 'purple' },
-  expert: { en: 'Agricultural Expert', bn: 'কৃষি বিশেষজ্ঞ', icon: <Microscope className="w-5 h-5 text-teal-600" />, color: 'teal' },
   admin: { en: 'Platform Administrator', bn: 'প্ল্যাটফর্ম অ্যাডমিন', icon: <ShieldCheck className="w-5 h-5 text-slate-700" />, color: 'slate' },
 };
 
@@ -95,8 +91,8 @@ export const NoRoleAccountModal: React.FC<NoRoleAccountModalProps> = ({
           </p>
           <p className="text-[11px] text-stone-500 leading-normal">
             {t(
-              'NativeBazar allows you to maintain multiple role profiles under the same email. You can instantly create a linked profile for this role now.',
-              'NativeBazar এ একই ব্যবহারকারী কৃষক, ব্যবসায়ী বা ভোক্তা হিসেবে একাধিক অ্যাকাউন্ট বজায় রাখতে পারেন।'
+              'Amar Haat allows you to maintain multiple role profiles under the same email. You can instantly create a linked profile for this role now.',
+              'আমার হাটে একই ব্যবহারকারী কৃষক, পাইকার বা ভোক্তা হিসেবে একাধিক অ্যাকাউন্ট বজায় রাখতে পারেন।'
             )}
           </p>
         </div>

@@ -13,7 +13,7 @@ export interface RegisterPayload {
   phone: string;
   email?: string;
   password: string;
-  role: 'farmer' | 'supplier' | 'customer';
+  role: 'farmer' | 'wholesaler' | 'retailer' | 'consumer';
   district: string;
   upazila?: string;
   farmSizeAcres?: number;

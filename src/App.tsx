@@ -23,9 +23,11 @@ import {
   MatchStore,
   ThemeStore,
   NotificationStore,
+  CallStore,
 } from './data/store';
+import { apiService } from './services/apiService';
 
-import { Header } from './components/Header';
+import { Header, toBanglaDistrict, toBanglaNumber } from './components/Header';
 import { AuthPage } from './components/AuthPage';
 import { AdminVerificationModal } from './components/AdminVerificationModal';
 import { FarmerDashboard } from './components/FarmerDashboard';
@@ -34,7 +36,6 @@ import { RetailerDashboard } from './components/RetailerDashboard';
 import { CustomerMarketplace } from './components/CustomerMarketplace';
 import { AdminDashboard } from './components/AdminDashboard';
 import { MarketRatesView } from './components/MarketRatesView';
-import { WeatherView } from './components/WeatherView';
 import { OrdersView } from './components/OrdersView';
 import { ProfileModal } from './components/ProfileModal';
 import { UserProfilePage } from './components/UserProfilePage';
@@ -44,8 +45,7 @@ import { ContactsView } from './components/ContactsView';
 import { CallModal } from './components/CallModal';
 import { NoRoleAccountModal } from './components/NoRoleAccountModal';
 import { CreateRoleModal } from './components/CreateRoleModal';
-import { BulletinsPage } from './components/BulletinsPage';
-import { CheckCircle2, ShieldCheck } from 'lucide-react';
+import { CheckCircle2, ShieldCheck, Phone, PhoneOff } from 'lucide-react';
 
 export default function App() {
   // Ensure store is seeded once without demo users
@@ -61,7 +61,22 @@ export default function App() {
   });
 
   const [language, setLanguage] = useState<Language>('bn');
-  const [selectedDistrict, setSelectedDistrict] = useState<string>('Bogura');
+
+  // Separate viewDistrict (filtering only) from currentUser.district (saved profile)
+  // Initial state comes from the logged-in user's saved profile district (defaulting to 'Bogura')
+  const [viewDistrict, setViewDistrict] = useState<string>(() => {
+    initializeStore();
+    const user = AuthStore.getCurrentUser();
+    return user?.district || 'Bogura';
+  });
+
+  // When currentUser changes (e.g. login, switch role), sync the filter to their profile district
+  useEffect(() => {
+    if (currentUser?.district) {
+      setViewDistrict(currentUser.district);
+    }
+  }, [currentUser?.id, currentUser?.district]);
+
   const [activeView, setActiveView] = useState<ActiveView>('dashboard');
 
   // Auth Modal State (When guest clicks Sign In / Register)
@@ -86,7 +101,88 @@ export default function App() {
 
   // Contact & Calling state
   const [callingUser, setCallingUser] = useState<User | null>(null);
+  const [incomingCall, setIncomingCall] = useState<{ caller: User; callNotifId?: string } | null>(null);
   const [initialChatUserId, setInitialChatUserId] = useState<string | null>(null);
+
+  const handleStartCall = (target: User) => {
+    if (!currentUser) return;
+    const notifId = CallStore.startCall(currentUser, target);
+    apiService.sendCallSignal({
+      toUserId: target.id,
+      fromUserId: currentUser.id,
+      fromUserName: currentUser.name,
+      fromUserRole: currentUser.role,
+      type: 'call_offer',
+    }).catch(() => {});
+    setCallingUser(target);
+  };
+
+  // Real-time incoming call listener
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const handleIncomingCallEvent = (e: any) => {
+      const { caller, receiver, callNotifId } = e.detail || {};
+      if (receiver?.id === currentUser.id && caller) {
+        setIncomingCall({ caller, callNotifId });
+      }
+    };
+
+    window.addEventListener('nb_call_incoming', handleIncomingCallEvent);
+
+    let es: EventSource | null = null;
+    try {
+      es = new EventSource(`/api/realtime?userId=` + encodeURIComponent(currentUser.id));
+      es.addEventListener('call_signal', (e: MessageEvent) => {
+        try {
+          const data = JSON.parse(e.data);
+          if (data.type === 'call_offer') {
+            const allUsers = AuthStore.getUsers();
+            const caller = allUsers.find((u) => u.id === data.fromUserId) || ({
+              id: data.fromUserId,
+              name: data.fromUserName || 'Caller',
+              role: data.fromUserRole || 'farmer',
+              phone: '',
+              district: '',
+              verified: true,
+              createdAt: new Date().toISOString(),
+            } as User);
+
+            const notifs = NotificationStore.getByUser(currentUser.id);
+            const existing = notifs.find((n) => n.actionUrl && n.actionUrl.includes(caller.id));
+            let callNotifId = existing ? existing.id : undefined;
+            if (!existing) {
+              callNotifId = 'call-notif-' + Date.now();
+              NotificationStore.add({
+                id: callNotifId,
+                userId: currentUser.id,
+                title: language === 'bn' ? '📞 ইনকামিং কল' : '📞 Incoming Call',
+                message: language === 'bn'
+                  ? caller.name + ' আপনাকে কল করছেন... গ্রহণ করতে ক্লিক করুন।'
+                  : caller.name + ' is calling you... Click to accept.',
+                type: 'warning',
+                read: false,
+                createdAt: new Date().toISOString(),
+                actionUrl: '/contacts?tab=calls&action=attend&callerId=' + caller.id + '&callNotifId=' + callNotifId,
+              });
+            }
+            setIncomingCall({ caller, callNotifId });
+          } else if (data.type === 'call_end' || data.type === 'call_reject') {
+            setIncomingCall(null);
+            window.dispatchEvent(new CustomEvent('nb_call_ended', { detail: data }));
+            if (callingUser && callingUser.id === data.fromUserId) {
+              setCallingUser(null);
+            }
+          }
+        } catch {}
+      });
+    } catch {}
+
+    return () => {
+      window.removeEventListener('nb_call_incoming', handleIncomingCallEvent);
+      if (es) es.close();
+    };
+  }, [currentUser?.id, callingUser?.id, language]);
 
   // Multi-role account modals (restricted to 4 public roles)
   const [noRoleModalOpen, setNoRoleModalOpen] = useState(false);
@@ -204,6 +300,24 @@ export default function App() {
     );
   };
 
+  const handleLogout = () => {
+    AuthStore.logout();
+    setCurrentUser(null);
+    setIsAuthOpen(true);
+    setActiveView('dashboard');
+    showToast(
+      language === 'bn' ? 'লগআউট সম্পন্ন হয়েছে।' : 'Signed out successfully.'
+    );
+  };
+
+  useEffect(() => {
+    const handleLogoutEvent = () => {
+      handleLogout();
+    };
+    window.addEventListener('nb_logout', handleLogoutEvent);
+    return () => window.removeEventListener('nb_logout', handleLogoutEvent);
+  }, []);
+
   // If Auth modal is triggered by user clicking "Sign In / Register"
   if (isAuthOpen) {
     return (
@@ -236,7 +350,6 @@ export default function App() {
     );
   }
 
-
   return (
     <div className="min-h-screen bg-stone-100/70 text-stone-900 flex flex-col font-sans transition-colors">
       {/* Toast Notification */}
@@ -252,8 +365,8 @@ export default function App() {
         currentUser={currentUser}
         language={language}
         onLanguageToggle={() => setLanguage((prev) => (prev === 'bn' ? 'en' : 'bn'))}
-        selectedDistrict={selectedDistrict}
-        onDistrictChange={setSelectedDistrict}
+        selectedDistrict={viewDistrict}
+        onDistrictChange={setViewDistrict}
         onOpenCropDoctor={() => setIsCropDoctorOpen(true)}
         onOpenVoiceAssistant={() => setIsVoiceAssistantOpen(true)}
         activeView={activeView}
@@ -266,20 +379,13 @@ export default function App() {
           }
         }}
         cartCount={cart.reduce((acc, c) => acc + c.quantityKg, 0)}
-        onLogout={() => {
-          AuthStore.logout();
-          setCurrentUser(null);
-          setActiveView('dashboard');
-          showToast(
-            language === 'bn' ? 'লগআউট সম্পন্ন হয়েছে।' : 'Signed out successfully.'
-          );
-        }}
+        onLogout={handleLogout}
+        onCallUser={handleStartCall}
         onOpenProfile={() => setViewedUser(currentUser)}
         onOpenAuth={() => setIsAuthOpen(true)}
         theme={theme}
         onThemeToggle={() => setTheme(ThemeStore.toggle())}
       />
-
 
       {/* Main View Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-6">
@@ -305,7 +411,7 @@ export default function App() {
               setViewedUser(null);
               setActiveView('contacts');
             }}
-            onCallUser={(u) => setCallingUser(u)}
+            onCallUser={handleStartCall}
           />
         ) : (
           <>
@@ -314,7 +420,7 @@ export default function App() {
                 currentUser={currentUser}
                 language={language}
                 onViewUser={(u) => setViewedUser(u)}
-                onInitiateCall={(c) => setCallingUser(c)}
+                onInitiateCall={handleStartCall}
                 initialChatUserId={initialChatUserId}
               />
             )}
@@ -323,31 +429,13 @@ export default function App() {
               <MarketRatesView
                 rates={INITIAL_MARKET_RATES}
                 language={language}
-                selectedDistrict={selectedDistrict}
-                onDistrictChange={setSelectedDistrict}
+                selectedDistrict={viewDistrict}
+                onDistrictChange={setViewDistrict}
               />
-            )}
-
-            {activeView === 'weather' && (
-              <WeatherView district={selectedDistrict} language={language} />
             )}
 
             {activeView === 'orders' && (
               <OrdersView currentUser={currentUser} language={language} />
-            )}
-
-            {activeView === 'bulletins' && (
-              <BulletinsPage language={language} selectedDistrict={selectedDistrict} />
-            )}
-
-            {activeView === 'ledger' && currentUser && canonicalRole === 'farmer' && (
-              <FarmerDashboard
-                currentUser={currentUser}
-                suppliers={supplierProducts}
-                language={language}
-                onOpenCropDoctor={() => setIsCropDoctorOpen(true)}
-                onOpenVoiceAssistant={() => setIsVoiceAssistantOpen(true)}
-              />
             )}
 
             {/* Default Dashboard / Marketplace View */}
@@ -426,7 +514,7 @@ export default function App() {
         }}
         onCallExpert={(expert) => {
           setIsCropDoctorOpen(false);
-          setCallingUser(expert);
+          handleStartCall(expert);
         }}
       />
 
@@ -436,7 +524,7 @@ export default function App() {
         onClose={() => setIsVoiceAssistantOpen(false)}
         language={language}
         currentRole={canonicalRole}
-        selectedDistrict={selectedDistrict}
+        selectedDistrict={viewDistrict}
         onNavigate={(view) => setActiveView(view)}
         onOpenCropDoctor={() => setIsCropDoctorOpen(true)}
         onSwitchRole={switchRole}
@@ -495,7 +583,7 @@ export default function App() {
             <div className="flex gap-2">
               <button
                 onClick={confirmRoleSwitch}
-                className="flex-1 bg-stone-900 text-white py-2.5 rounded-xl text-sm font-bold hover:bg-stone-800 transition-all"
+                className="flex-1 bg-stone-900 text-white py-2.5 rounded-xl text-sm font-bold hover:bg-stone-800 transition-all cursor-pointer"
               >
                 {language === 'bn' ? 'যাচাই করুন' : 'Verify & Switch'}
               </button>
@@ -505,7 +593,7 @@ export default function App() {
                   setRoleSwitchPwd('');
                   setRoleSwitchError('');
                 }}
-                className="px-4 py-2.5 bg-stone-100 text-stone-700 rounded-xl text-sm font-bold hover:bg-stone-200"
+                className="px-4 py-2.5 bg-stone-100 text-stone-700 rounded-xl text-sm font-bold hover:bg-stone-200 cursor-pointer"
               >
                 {language === 'bn' ? 'বাতিল' : 'Cancel'}
               </button>
@@ -521,6 +609,69 @@ export default function App() {
         onSuccess={handleAdminVerifySuccess}
         language={language}
       />
+
+      {/* Real-time Incoming Call Floating Alert Banner */}
+      {incomingCall && currentUser && (
+        <div className="fixed top-20 right-4 z-50 max-w-sm w-full bg-stone-900/95 text-white p-4 rounded-2xl shadow-2xl border-2 border-emerald-500/80 backdrop-blur-md animate-bounce-once">
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white font-extrabold text-base shadow-md">
+                {incomingCall.caller.name.charAt(0)}
+              </div>
+              <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-emerald-400 animate-ping" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <p className="text-[11px] font-bold text-emerald-400 uppercase tracking-wide">
+                  {language === 'bn' ? 'ইনকামিং এগ্রি-কল' : 'INCOMING CALL'}
+                </p>
+              </div>
+              <h4 className="font-extrabold text-sm truncate text-white mt-0.5">
+                {incomingCall.caller.name}
+              </h4>
+              <p className="text-[11px] text-stone-300">
+                {incomingCall.caller.role} {incomingCall.caller.district ? '• ' + incomingCall.caller.district : ''}
+              </p>
+            </div>
+          </div>
+          <div className="mt-3.5 flex items-center gap-2 pt-2 border-t border-stone-800">
+            <button
+              onClick={() => {
+                if (incomingCall.callNotifId) {
+                  NotificationStore.dismiss(incomingCall.callNotifId);
+                }
+                const caller = incomingCall.caller;
+                setIncomingCall(null);
+                setCallingUser(caller);
+              }}
+              className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-md active:scale-95"
+            >
+              <Phone className="w-3.5 h-3.5 animate-bounce" />
+              <span>{language === 'bn' ? 'গ্রহণ করুন' : 'Accept'}</span>
+            </button>
+            <button
+              onClick={() => {
+                if (incomingCall.callNotifId) {
+                  NotificationStore.dismiss(incomingCall.callNotifId);
+                }
+                apiService.sendCallSignal({
+                  toUserId: incomingCall.caller.id,
+                  fromUserId: currentUser.id,
+                  fromUserName: currentUser.name,
+                  fromUserRole: currentUser.role,
+                  type: 'call_reject',
+                }).catch(() => {});
+                setIncomingCall(null);
+              }}
+              className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 bg-red-600/90 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-all shadow-md active:scale-95"
+            >
+              <PhoneOff className="w-3.5 h-3.5" />
+              <span>{language === 'bn' ? 'বাতিল' : 'Decline'}</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Interactive VoIP Voice Call Modal */}
       {callingUser && currentUser && (
@@ -552,8 +703,7 @@ export default function App() {
           onLoginDifferentAccount={() => {
             setNoRoleModalOpen(false);
             setPendingRole(null);
-            AuthStore.logout();
-            setCurrentUser(null);
+            handleLogout();
           }}
         />
       )}
@@ -588,13 +738,17 @@ export default function App() {
       <footer className="bg-white border-t border-stone-200 mt-12 py-6 text-xs text-stone-500">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <span className="font-bold text-stone-800">NativeBazar (নেটিভবাজার)</span>
+            <span className="font-bold text-stone-800">{language === 'bn' ? 'আমার হাট (Amar Haat)' : 'Amar Haat (আমার হাট)'}</span>
             <span>•</span>
-            <span>Local Agriculture, Business & Supply Chain Platform</span>
+            <span>{language === 'bn' ? 'স্থানীয় কৃষি, ব্যবসা ও সরবরাহ চেইন প্ল্যাটফর্ম' : 'Local Agriculture, Business & Supply Chain Platform'}</span>
           </div>
 
           <div className="text-center sm:text-right">
-            <span>Bangladesh Agricultural Platform • Bogura Pilot Node • Department of Agricultural Marketing (DAM)</span>
+            <span>
+              {language === 'bn'
+                ? `বাংলাদেশ কৃষি প্ল্যাটফর্ম • ${toBanglaDistrict(currentUser?.district || viewDistrict || 'Bogura')} নোড • কৃষি বিপণন অধিদপ্তর (DAM)`
+                : `Bangladesh Agricultural Platform • ${currentUser?.district || viewDistrict || 'Bogura'} Node • Department of Agricultural Marketing (DAM)`}
+            </span>
           </div>
         </div>
       </footer>

@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { User, Language, UserRole } from '../types';
-import { CallStore } from '../data/store';
+import { CallStore, NotificationStore } from '../data/store';
+import { apiService } from '../services/apiService';
+import { toBanglaNumber } from './Header';
 import {
   Phone,
   PhoneOff,
@@ -30,10 +32,6 @@ const ROLE_ICONS: Record<UserRole, React.ReactNode> = {
   wholesaler: <Briefcase className="w-3.5 h-3.5" />,
   retailer: <Store className="w-3.5 h-3.5" />,
   consumer: <ShoppingCart className="w-3.5 h-3.5" />,
-  businessman: <Briefcase className="w-3.5 h-3.5" />,
-  supplier: <Store className="w-3.5 h-3.5" />,
-  customer: <ShoppingCart className="w-3.5 h-3.5" />,
-  expert: <Microscope className="w-3.5 h-3.5" />,
   admin: <ShieldCheck className="w-3.5 h-3.5" />,
 };
 
@@ -42,10 +40,6 @@ const ROLE_NAMES: Record<UserRole, { en: string; bn: string }> = {
   wholesaler: { en: 'Wholesaler', bn: 'পাইকার' },
   retailer: { en: 'Retailer', bn: 'খুচরা বিক্রেতা' },
   consumer: { en: 'Consumer', bn: 'ভোক্তা' },
-  businessman: { en: 'Trader / Buyer', bn: 'ব্যবসায়ী' },
-  supplier: { en: 'Agri Supplier', bn: 'সরবরাহকারী' },
-  customer: { en: 'Consumer', bn: 'ভোক্তা' },
-  expert: { en: 'Agri Expert', bn: 'কৃষি বিশেষজ্ঞ' },
   admin: { en: 'Platform Admin', bn: 'অ্যাডমিন' },
 };
 
@@ -111,12 +105,49 @@ export const CallModal: React.FC<CallModalProps> = ({
       status: seconds > 0 ? 'completed' : 'cancelled',
       durationSeconds: seconds,
     });
+
+    // Notify backend and peer that call has ended
+    apiService.sendCallSignal({
+      toUserId: contactUser.id,
+      fromUserId: currentUser.id,
+      fromUserName: currentUser.name,
+      fromUserRole: currentUser.role,
+      type: 'call_end',
+    }).catch(() => {});
+
+    // Dismiss any pending incoming call notifications for this call
+    NotificationStore.dismissByUserAndType(contactUser.id, (n) =>
+      n.actionUrl?.includes(currentUser.id) ?? false
+    );
+    NotificationStore.dismissByUserAndType(currentUser.id, (n) =>
+      n.actionUrl?.includes(contactUser.id) ?? false
+    );
+
     setTimeout(() => {
       onClose();
       setCallStatus('ringing');
       setSeconds(0);
     }, 500);
   };
+
+  // Remote call termination listener
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleRemoteEnd = (e: any) => {
+      const data = e.detail;
+      if (data && (data.type === 'call_end' || data.type === 'call_reject')) {
+        setCallStatus('ended');
+        setTimeout(() => {
+          onClose();
+          setCallStatus('ringing');
+          setSeconds(0);
+        }, 500);
+      }
+    };
+
+    window.addEventListener('nb_call_ended', handleRemoteEnd);
+    return () => window.removeEventListener('nb_call_ended', handleRemoteEnd);
+  }, [isOpen, onClose]);
 
   const cleanPhone = contactUser.phone.replace(/\D/g, '');
 

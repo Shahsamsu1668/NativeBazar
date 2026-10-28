@@ -45,15 +45,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ matches, languag
           <div>
             <div className="inline-flex items-center gap-1.5 bg-stone-800/80 border border-stone-600 px-3 py-1 rounded-full text-xs font-semibold text-stone-200 mb-2">
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-              <span>{language === 'bn' ? 'নেটিভবাজার কেন্দ্রীয় প্রশাসন ও এআই নজরদারি' : 'NativeBazar Central Operations & AI Telemetry'}</span>
+              <span>{language === 'bn' ? 'আমার হাট কেন্দ্রীয় প্রশাসন ও এআই নজরদারি' : 'Amar Haat Central Operations & AI Telemetry'}</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
               {language === 'bn' ? 'বগুড়া পাইলট ইকোসিস্টেম কন্ট্রোল সেন্টার' : 'Bogura Pilot Ecosystem Operations'}
             </h1>
             <p className="text-stone-300 text-sm mt-1 max-w-2xl">
               {language === 'bn'
-                ? '৬টি ব্যবহারকারী রোল ও ৩-মুখী সরবরাহ শৃঙ্খলের রিয়েল-টাইম এআই ডেটা সংযোগ এবং বাজার ভারসাম্য বিশ্লেষণ।'
-                : 'Real-time telemetry monitoring the 6-role ecosystem: Farmer ↔ Businessman ↔ Supplier ↔ Customer.'}
+                ? '৪টি ব্যবহারকারী রোল ও সরবরাহ শৃঙ্খলের রিয়েল-টাইম এআই ডেটা সংযোগ এবং বাজার ভারসাম্য বিশ্লেষণ।'
+                : 'Real-time telemetry monitoring the 4-role ecosystem: Farmer ↔ Wholesaler ↔ Retailer ↔ Consumer.'}
             </p>
           </div>
 
@@ -80,7 +80,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ matches, languag
 
         <div className="bg-white p-5 rounded-xl border border-stone-200 shadow-xs">
           <div className="flex items-center justify-between text-stone-500 text-xs font-semibold uppercase">
-            <span>{language === 'bn' ? 'ব্যবসায়ী ও পাইকার' : 'Traders & Businesses'}</span>
+            <span>{language === 'bn' ? 'পাইকার ও আড়তদার' : 'Wholesalers & Aratdars'}</span>
             <TrendingUp className="w-4 h-4 text-blue-600" />
           </div>
           <div className="mt-2 text-2xl font-bold text-blue-700">
@@ -91,7 +91,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ matches, languag
 
         <div className="bg-white p-5 rounded-xl border border-stone-200 shadow-xs">
           <div className="flex items-center justify-between text-stone-500 text-xs font-semibold uppercase">
-            <span>{language === 'bn' ? 'অনুমোদিত সার/বীজ ডিলার' : 'Agro-Input Suppliers'}</span>
+            <span>{language === 'bn' ? 'খুচরা বিক্রেতা' : 'Retail Stores'}</span>
             <Database className="w-4 h-4 text-amber-600" />
           </div>
           <div className="mt-2 text-2xl font-bold text-amber-700">
@@ -102,7 +102,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ matches, languag
 
         <div className="bg-white p-5 rounded-xl border border-stone-200 shadow-xs">
           <div className="flex items-center justify-between text-stone-500 text-xs font-semibold uppercase">
-            <span>{language === 'bn' ? 'সরাসরি ভোক্তা গ্রাহক' : 'Direct Consumers'}</span>
+            <span>{language === 'bn' ? 'ভোক্তা' : 'Direct Consumers'}</span>
             <Sparkles className="w-4 h-4 text-purple-600" />
           </div>
           <div className="mt-2 text-2xl font-bold text-purple-700">
@@ -124,7 +124,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ matches, languag
               </h2>
               <p className="text-xs text-stone-500">
                 {language === 'bn'
-                  ? 'কৃষকের উৎপাদিত ফসলের পরিমাণের সাথে ব্যবসায়ীদের ক্রয়ের অনুপাত'
+                  ? 'কৃষকের উৎপাদিত ফসলের পরিমাণের সাথে পাইকারদের ক্রয়ের অনুপাত'
                   : 'Predictive equilibrium to prevent market crashes and sudden shortages'}
               </p>
             </div>
@@ -166,7 +166,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ matches, languag
           </div>
 
           <div className="mt-4 p-3 bg-stone-50 rounded-xl border border-stone-200 text-xs text-stone-600 leading-relaxed">
-            <strong>System Intelligence:</strong> When Tomato surplus reaches +14%, NativeBazar automatically opens inter-district export corridors to Dhaka and notifies food processors (e.g. Pran) to absorb volume before price crashes.
+            <strong>System Intelligence:</strong> When Tomato surplus reaches +14%, Amar Haat automatically opens inter-district export corridors to Dhaka and notifies food processors (e.g. Pran) to absorb volume before price crashes.
           </div>
         </div>
 
@@ -357,7 +357,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ matches, languag
           {language === 'bn' ? 'সামাজিক ও অর্থনৈতিক প্রভাব সূচক (Impact Metrics)' : 'Demonstrated Pilot Economic Impact in Bogura'}
         </h3>
         <p className="text-xs text-stone-600 mb-4">
-          Key performance indicators proving the feasibility of NativeBazar over traditional disconnected models:
+          Key performance indicators proving the feasibility of Amar Haat over traditional disconnected models:
         </p>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

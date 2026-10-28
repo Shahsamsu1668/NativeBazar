@@ -98,38 +98,6 @@ const roleConfig: Record<
     label: 'Consumer',
     labelBn: 'ভোক্তা',
   },
-  businessman: {
-    color: 'text-blue-700',
-    bg: 'bg-blue-50',
-    border: 'border-blue-200',
-    icon: <Briefcase className="w-5 h-5" />,
-    label: 'Wholesaler',
-    labelBn: 'ব্যবসায়ী',
-  },
-  supplier: {
-    color: 'text-amber-700',
-    bg: 'bg-amber-50',
-    border: 'border-amber-200',
-    icon: <Store className="w-5 h-5" />,
-    label: 'Retailer',
-    labelBn: 'সরবরাহকারী',
-  },
-  customer: {
-    color: 'text-purple-700',
-    bg: 'bg-purple-50',
-    border: 'border-purple-200',
-    icon: <ShoppingCart className="w-5 h-5" />,
-    label: 'Consumer',
-    labelBn: 'ভোক্তা',
-  },
-  expert: {
-    color: 'text-teal-700',
-    bg: 'bg-teal-50',
-    border: 'border-teal-200',
-    icon: <Microscope className="w-5 h-5" />,
-    label: 'Agri Expert',
-    labelBn: 'কৃষি বিশেষজ্ঞ',
-  },
   admin: {
     color: 'text-slate-700',
     bg: 'bg-slate-50',
@@ -234,7 +202,7 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({
   const [editFarmSize, setEditFarmSize] = useState(user.farmSizeAcres || 4.5);
   const [editBusinessName, setEditBusinessName] = useState(user.businessName || '');
   const [editShopName, setEditShopName] = useState(user.shopName || '');
-  const [editDesignation, setEditDesignation] = useState(user.designation || '');
+
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [connStatus, setConnStatus] = useState<'none' | 'pending_sent' | 'pending_received' | 'accepted'>(
     currentUser ? ConnectionStore.getStatus(currentUser.id, user.id) : 'none'
@@ -266,13 +234,16 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({
   // Normalise role aliases to keys that exist in roleConfig
   const normaliseRole = (role: string): UserRole => {
     const map: Record<string, UserRole> = {
+      farmer: 'farmer',
+      wholesaler: 'wholesaler',
       businessman: 'wholesaler',
-      supplier: 'wholesaler',
-      customer: 'consumer',
       retailer: 'retailer',
-      expert: 'admin',
+      supplier: 'retailer',
+      consumer: 'consumer',
+      customer: 'consumer',
+      admin: 'admin',
     };
-    return (map[role] || role) as UserRole;
+    return (map[role] || 'consumer') as UserRole;
   };
   const rc = roleConfig[normaliseRole(user.role)] ?? roleConfig['farmer'];
 
@@ -285,7 +256,7 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({
         { label: language === 'bn' ? 'জমির আকার' : 'Farm Size', value: `${user.farmSizeAcres || editFarmSize} acres`, icon: <MapPin className="w-4 h-4" />, color: 'text-amber-600' },
         { label: language === 'bn' ? 'ট্রেড অর্ডার' : 'Trade Orders', value: tradeOrders.length, icon: <Package className="w-4 h-4" />, color: 'text-purple-600' },
       ];
-    } else if (user.role === 'businessman') {
+    } else if (user.role === 'wholesaler') {
       const totalDemandValue = businessDemands.reduce((s, d) => s + d.targetPricePerKg * d.quantityKgNeeded, 0);
       return [
         { label: language === 'bn' ? 'চাহিদার তালিকা' : 'Purchase Demands', value: businessDemands.length, icon: <FileText className="w-4 h-4" />, color: 'text-blue-600' },
@@ -293,7 +264,7 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({
         { label: language === 'bn' ? 'ব্যবসার নাম' : 'Business', value: user.businessName || '–', icon: <Briefcase className="w-4 h-4" />, color: 'text-amber-600' },
         { label: language === 'bn' ? 'ট্রেড অর্ডার' : 'Trade Orders', value: tradeOrders.length, icon: <Package className="w-4 h-4" />, color: 'text-purple-600' },
       ];
-    } else if (user.role === 'supplier') {
+    } else if (user.role === 'retailer') {
       const inStock = supplierProducts.filter((p) => p.inStock).length;
       const avgRating = supplierProducts.reduce((s, p) => s + (p.rating || 0), 0) / (supplierProducts.length || 1);
       return [
@@ -302,7 +273,7 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({
         { label: language === 'bn' ? 'গড় রেটিং' : 'Avg. Rating', value: `${avgRating.toFixed(1)} ★`, icon: <Star className="w-4 h-4" />, color: 'text-yellow-600' },
         { label: language === 'bn' ? 'দোকান' : 'Shop', value: user.shopName || '–', icon: <Store className="w-4 h-4" />, color: 'text-blue-600' },
       ];
-    } else if (user.role === 'customer') {
+    } else if (user.role === 'consumer') {
       const totalSpent = orders.reduce((s, o) => s + o.totalBDT, 0);
       const delivered = orders.filter((o) => o.status === 'Delivered').length;
       return [
@@ -310,14 +281,6 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({
         { label: language === 'bn' ? 'মোট ব্যয়' : 'Total Spent', value: formatBDT(totalSpent), icon: <TrendingUp className="w-4 h-4" />, color: 'text-blue-600' },
         { label: language === 'bn' ? 'ডেলিভারি হয়েছে' : 'Delivered', value: delivered, icon: <CheckCircle2 className="w-4 h-4" />, color: 'text-emerald-600' },
         { label: language === 'bn' ? 'পেন্ডিং' : 'Pending', value: orders.length - delivered, icon: <Clock className="w-4 h-4" />, color: 'text-amber-600' },
-      ];
-    } else if (user.role === 'expert') {
-      const urgent = advisories.filter((a) => a.severity === 'Urgent').length;
-      return [
-        { label: language === 'bn' ? 'পরামর্শ' : 'Advisories', value: advisories.length, icon: <MessageSquare className="w-4 h-4" />, color: 'text-teal-600' },
-        { label: language === 'bn' ? 'জরুরি সতর্কতা' : 'Urgent Alerts', value: urgent, icon: <AlertTriangle className="w-4 h-4" />, color: 'text-red-600' },
-        { label: language === 'bn' ? 'পদবী' : 'Designation', value: (user.designation || 'Officer').split(',')[0], icon: <Award className="w-4 h-4" />, color: 'text-amber-600' },
-        { label: language === 'bn' ? 'বিশেষত্ব' : 'Specialization', value: (user.specialization || ['Crop Science'])[0], icon: <BookOpen className="w-4 h-4" />, color: 'text-blue-600' },
       ];
     } else {
       const allOrders = OrderStore.getAll();
@@ -338,9 +301,8 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({
       education: editEducation,
     };
     if (user.role === 'farmer') updates.farmSizeAcres = editFarmSize;
-    if (user.role === 'businessman') updates.businessName = editBusinessName;
-    if (user.role === 'supplier') updates.shopName = editShopName;
-    if (user.role === 'expert') updates.designation = editDesignation;
+    if (user.role === 'wholesaler') updates.businessName = editBusinessName;
+    if (user.role === 'retailer') updates.shopName = editShopName;
     const updated = AuthStore.updateProfile(updates);
     if (updated && onUpdateUser) {
       onUpdateUser(updated);
@@ -585,7 +547,7 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({
                 </>
               )}
 
-              {user.role === 'businessman' && (
+              {user.role === 'wholesaler' && (
                 <>
                   <SectionHeader icon={<FileText className="w-4 h-4 text-blue-600" />} title={language === 'bn' ? 'আমার ক্রয় চাহিদা' : 'My Purchase Demands'} />
                   {businessDemands.length === 0 ? (
@@ -612,7 +574,7 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({
                 </>
               )}
 
-              {user.role === 'supplier' && (
+              {user.role === 'retailer' && (
                 <>
                   <SectionHeader icon={<Package className="w-4 h-4 text-amber-600" />} title={language === 'bn' ? 'আমার পণ্য ক্যাটালগ' : 'My Product Catalog'} />
                   {supplierProducts.length === 0 ? (
@@ -644,7 +606,7 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({
                 </>
               )}
 
-              {user.role === 'customer' && (
+              {user.role === 'consumer' && (
                 <>
                   <SectionHeader icon={<ShoppingBag className="w-4 h-4 text-purple-600" />} title={language === 'bn' ? 'আমার অর্ডার ইতিহাস' : 'My Order History'} />
                   {orders.length === 0 ? (
@@ -668,43 +630,6 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({
                           </div>
                           <p className="text-[11px] text-stone-400 mt-0.5">{formatDate(o.orderDate)}</p>
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </>
-              )}
-
-              {user.role === 'expert' && (
-                <>
-                  <SectionHeader icon={<MessageSquare className="w-4 h-4 text-teal-600" />} title={language === 'bn' ? 'প্রকাশিত কৃষি পরামর্শ' : 'Published Advisories'} />
-                  {advisories.length === 0 ? (
-                    <EmptyState message={language === 'bn' ? 'এখনো কোনো পরামর্শ প্রকাশিত হয়নি' : 'No advisories published yet'} />
-                  ) : (
-                    <div className="space-y-2">
-                      {advisories.map((a) => (
-                        <div key={a.id} className="p-3 bg-stone-50 rounded-xl border border-stone-200 text-xs">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="font-bold text-stone-900">{a.title}</span>
-                            <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
-                              a.severity === 'Urgent' ? 'bg-red-100 text-red-800' :
-                              a.severity === 'Warning' ? 'bg-amber-100 text-amber-800' :
-                              'bg-blue-100 text-blue-800'
-                            }`}>{a.severity}</span>
-                          </div>
-                          <p className="text-stone-600 line-clamp-2">{a.message || a.messageBn}</p>
-                          <p className="text-[11px] text-stone-400 mt-0.5">{a.category} • {a.district}</p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
-                    <InfoCard label={language === 'bn' ? 'পদবী' : 'Designation'} value={user.designation || 'Scientific Officer, BARI'} icon={<Award className="w-4 h-4 text-teal-500" />} />
-                    <InfoCard label={language === 'bn' ? 'প্রতিষ্ঠান' : 'Institution'} value={user.institution || 'BARI'} icon={<BookOpen className="w-4 h-4 text-blue-500" />} />
-                  </div>
-                  {(user.specialization || []).length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mt-2">
-                      {(user.specialization || []).map((s) => (
-                        <span key={s} className="bg-teal-50 border border-teal-200 text-teal-800 text-[11px] font-bold px-2.5 py-1 rounded-full">{s}</span>
                       ))}
                     </div>
                   )}
@@ -784,7 +709,7 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({
                       <span className="text-[11px] text-stone-400">{c.createdAt ? formatDate(c.createdAt) : 'Recent'}</span>
                     </div>
                   ))}
-                  {user.role === 'customer' && orders.length > 0 && orders.slice(0, 5).map((o) => (
+                  {user.role === 'consumer' && orders.length > 0 && orders.slice(0, 5).map((o) => (
                     <div key={o.id} className="flex items-center gap-2.5 p-3 bg-stone-50 rounded-xl border border-stone-200 text-xs">
                       <ShoppingBag className="w-4 h-4 text-purple-600 shrink-0" />
                       <div className="flex-1">
@@ -794,17 +719,7 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({
                       <span className="text-[11px] text-stone-400">{formatDate(o.orderDate)}</span>
                     </div>
                   ))}
-                  {user.role === 'expert' && advisories.length > 0 && advisories.slice(0, 5).map((a) => (
-                    <div key={a.id} className="flex items-center gap-2.5 p-3 bg-stone-50 rounded-xl border border-stone-200 text-xs">
-                      <MessageSquare className="w-4 h-4 text-teal-600 shrink-0" />
-                      <div className="flex-1">
-                        <span className="font-semibold text-stone-800">{a.title}</span>
-                        <p className="text-stone-500 text-[11px]">{a.severity} • {a.category}</p>
-                      </div>
-                      <span className="text-[11px] text-stone-400">{a.date}</span>
-                    </div>
-                  ))}
-                  {cropListings.length + orders.length + advisories.length === 0 && (
+                  {cropListings.length + orders.length === 0 && (
                     <EmptyState message={language === 'bn' ? 'কোনো কার্যক্রম পাওয়া যায়নি' : 'No activity recorded yet'} />
                   )}
                 </>
@@ -874,7 +789,7 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({
                 </div>
               )}
 
-              <SectionHeader icon={<Package className="w-4 h-4 text-indigo-600" />} title={language === 'bn' ? 'সরবরাহকারী ও বাণিজ্য অর্ডার' : 'Supplier & B2B Trade Orders'} />
+              <SectionHeader icon={<Package className="w-4 h-4 text-indigo-600" />} title={language === 'bn' ? 'পাইকারি ও বাণিজ্য অর্ডার' : 'Wholesale & B2B Trade Orders'} />
               {tradeOrders.length === 0 ? (
                 <EmptyState message={language === 'bn' ? 'কোনো ট্রেড অর্ডার নেই' : 'No trade orders found'} />
               ) : (
@@ -927,14 +842,11 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({
                 {user.role === 'farmer' && (
                   <EditField label={language === 'bn' ? 'জমির আকার (একর)' : 'Farm Size (acres)'} value={String(editFarmSize)} onChange={(v) => setEditFarmSize(parseFloat(v) || 0)} type="number" disabled={!isEditing} />
                 )}
-                {user.role === 'businessman' && (
+                {user.role === 'wholesaler' && (
                   <EditField label={language === 'bn' ? 'ব্যবসার নাম' : 'Business Name'} value={editBusinessName} onChange={setEditBusinessName} disabled={!isEditing} />
                 )}
-                {user.role === 'supplier' && (
+                {user.role === 'retailer' && (
                   <EditField label={language === 'bn' ? 'দোকানের নাম' : 'Shop Name'} value={editShopName} onChange={setEditShopName} disabled={!isEditing} />
-                )}
-                {user.role === 'expert' && (
-                  <EditField label={language === 'bn' ? 'পদবী' : 'Designation'} value={editDesignation} onChange={setEditDesignation} disabled={!isEditing} />
                 )}
               </div>
 

@@ -5,6 +5,7 @@ import {
   User,
 } from '../types';
 import { orderApi } from '../services/api';
+import { toBanglaNumber } from './Header';
 import {
   Package,
   Truck,
@@ -44,10 +45,15 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ currentUser, language })
   const loadOrders = async () => {
     setLoading(true);
     try {
-      const res = await orderApi.getOrders();
+      const res = await orderApi.getOrders(
+        currentUser && currentUser.role !== 'admin'
+          ? { userId: currentUser.id }
+          : undefined
+      );
       setOrders(res.orders || []);
     } catch (e) {
       console.error('Failed to load orders', e);
+      setOrders([]);
     } finally {
       setLoading(false);
     }
@@ -64,36 +70,16 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ currentUser, language })
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  const isOrderInTab = (o: SupplyChainOrder, tab: OrderTabId) => {
+  const isOrderInTab = (o: SupplyChainOrder) => {
     const ot = (o.orderType || '').toLowerCase();
     const sRole = (o.sellerRole || '').toLowerCase();
     const bRole = (o.buyerRole || '').toLowerCase();
 
-    if (tab === 'farmer_to_wholesaler') {
-      return (
-        ot === 'farmer_to_wholesaler' ||
-        ot === '1st_tier' ||
-        ot === 'supplier_input' ||
-        (sRole === 'farmer' && (bRole === 'wholesaler' || bRole === 'businessman'))
-      );
-    }
-    if (tab === 'wholesaler_to_retailer') {
-      return (
-        ot === 'wholesaler_to_retailer' ||
-        ot === '2nd_tier' ||
-        ot === 'b2b_trade' ||
-        ((sRole === 'wholesaler' || sRole === 'businessman') && (bRole === 'retailer' || bRole === 'supplier'))
-      );
-    }
-    if (tab === 'retailer_to_consumer') {
-      return (
-        ot === 'retailer_to_consumer' ||
-        ot === '3rd_tier' ||
-        ot === 'consumer_retail' ||
-        ((sRole === 'retailer' || sRole === 'supplier') && (bRole === 'consumer' || bRole === 'customer'))
-      );
-    }
-    return false;
+    return (
+      ot === 'farmer_to_wholesaler' ||
+      ot === '1st_tier' ||
+      (sRole === 'farmer' && bRole === 'wholesaler')
+    );
   };
 
   const handleUpdateStatus = async (
@@ -109,8 +95,8 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ currentUser, language })
     }
   };
 
-  // Filter orders by active tab
-  const filteredOrders = orders.filter((o) => isOrderInTab(o, activeTab));
+  // Farmer direct trade only: Strictly Farmer -> Wholesaler transactions
+  const filteredOrders = orders.filter(isOrderInTab);
 
   const getStatusBadge = (status: SupplyChainOrder['status']) => {
     switch (status) {
@@ -166,18 +152,12 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ currentUser, language })
         <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           <div className="space-y-2 max-w-2xl">
             <div className="inline-flex items-center gap-1.5 bg-emerald-900/70 border border-emerald-400/30 px-3 py-1 rounded-full text-xs font-semibold text-emerald-300">
-              <Package className="w-3.5 h-3.5 text-emerald-400" />
-              <span>{t('Strict Supply Chain Order Registry', 'নিয়ন্ত্রিত চার-স্তর সরবরাহ ও লেনদেন খতিয়ান')}</span>
+              <Sprout className="w-3.5 h-3.5 text-emerald-400" />
+              <span>{t('Farmer & Wholesaler Trade Registry', 'কৃষক ও পাইকার সরাসরি বাণিজ্য খতিয়ান')}</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
               {t('Agricultural Trade & Order Registry', 'কৃষি বাণিজ্য ও অর্ডার রেজিস্ট্রি')}
             </h1>
-            <p className="text-stone-300 text-xs sm:text-sm leading-relaxed">
-              {t(
-                'Complete traceability across all 3 permitted trade tiers: Farmer to Wholesaler, Wholesaler to Retailer, and Retailer to Consumer. Real-time stock reservation and payment status.',
-                'অনুমোদিত ৩টি স্তরের সম্পূর্ণ ট্রেসেবিলিটি: কৃষক থেকে পাইকার, পাইকার থেকে খুচরা এবং খুচরা থেকে ভোক্তা।'
-              )}
-            </p>
           </div>
 
           <button
@@ -201,47 +181,12 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ currentUser, language })
       {/* Tabs */}
       <div className="flex items-center gap-2 border-b border-stone-200 pb-2 overflow-x-auto no-scrollbar">
         <button
-          onClick={() => setActiveTab('farmer_to_wholesaler')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all ${
-            activeTab === 'farmer_to_wholesaler'
-              ? 'bg-emerald-600 text-white shadow-sm'
-              : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'
-          }`}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all bg-emerald-600 text-white shadow-sm cursor-default"
         >
           <Sprout className="w-4 h-4" />
-          <span>{t('Tier 1: Farmer → Wholesaler', '১ম স্তর: কৃষক → পাইকার')}</span>
+          <span>{t('Farmer-Wholesaler Trade', 'কৃষক-পাইকার বাণিজ্য')}</span>
           <span className="bg-stone-900 text-white text-[10px] px-1.5 py-0.2 rounded-full">
-            {orders.filter((o) => isOrderInTab(o, 'farmer_to_wholesaler')).length}
-          </span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('wholesaler_to_retailer')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all ${
-            activeTab === 'wholesaler_to_retailer'
-              ? 'bg-blue-600 text-white shadow-sm'
-              : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'
-          }`}
-        >
-          <Building className="w-4 h-4" />
-          <span>{t('Tier 2: Wholesaler → Retailer', '২য় স্তর: পাইকার → খুচরা')}</span>
-          <span className="bg-stone-900 text-white text-[10px] px-1.5 py-0.2 rounded-full">
-            {orders.filter((o) => isOrderInTab(o, 'wholesaler_to_retailer')).length}
-          </span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('retailer_to_consumer')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all ${
-            activeTab === 'retailer_to_consumer'
-              ? 'bg-purple-600 text-white shadow-sm'
-              : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'
-          }`}
-        >
-          <ShoppingCart className="w-4 h-4" />
-          <span>{t('Tier 3: Retailer → Consumer', '৩য় স্তর: খুচরা → ভোক্তা')}</span>
-          <span className="bg-stone-900 text-white text-[10px] px-1.5 py-0.2 rounded-full">
-            {orders.filter((o) => isOrderInTab(o, 'retailer_to_consumer')).length}
+            {language === 'bn' ? toBanglaNumber(filteredOrders.length) : filteredOrders.length}
           </span>
         </button>
       </div>
@@ -259,10 +204,10 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ currentUser, language })
           <div className="text-center py-16 bg-white rounded-3xl border border-stone-200 p-8 space-y-2">
             <Package className="w-10 h-10 text-stone-300 mx-auto" />
             <h4 className="font-bold text-stone-800 text-sm">
-              {t('No orders found for this tier', 'এই স্তরে কোনো অর্ডার পাওয়া যায়নি')}
+              {t('No Farmer ↔ Wholesaler trades found', 'কোনো সক্রিয় কৃষক ও পাইকার লেনদেন পাওয়া যায়নি')}
             </h4>
             <p className="text-xs text-stone-500 max-w-sm mx-auto">
-              Transactions are created automatically when buyers place orders in their respective supply chain dashboards.
+              Direct trade contracts appear here when Wholesalers procure harvest lots directly from Farmers at agreed fixed prices.
             </p>
           </div>
         )}

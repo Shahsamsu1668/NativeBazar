@@ -81,6 +81,7 @@ export const productApi = {
   async getProducts(params?: {
     targetRole?: string;
     sellerRole?: string;
+    sellerId?: string;
     district?: string;
     category?: string;
     search?: string;
@@ -88,6 +89,7 @@ export const productApi = {
     const query = new URLSearchParams();
     if (params?.targetRole) query.set('targetRole', params.targetRole);
     if (params?.sellerRole) query.set('sellerRole', params.sellerRole);
+    if (params?.sellerId) query.set('sellerId', params.sellerId);
     if (params?.district && params.district !== 'All') query.set('district', params.district);
     if (params?.category && params.category !== 'All') query.set('category', params.category);
     if (params?.search) query.set('search', params.search);

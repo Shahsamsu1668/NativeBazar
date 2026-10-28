@@ -165,8 +165,8 @@ export function initDatabase() {
   seedDemoUsers();
   seedOfficialMarketPrices();
   seedWholesalerOffers();
-  seedInitialProductCatalogs();
-  seedInitialOrders();
+  // seedInitialProductCatalogs();
+  // seedInitialOrders();
 }
 
 // ─── PASSWORD HASHING HELPER ────────────────────────────────────────────────
@@ -954,25 +954,21 @@ export function validateSupplyChainTrade(buyerRole: string, sellerRole: string) 
   const bRole = (buyerRole || '').toLowerCase();
   const sRole = (sellerRole || '').toLowerCase();
 
-  // 1. Farmer -> Wholesaler: Only wholesalers purchase from farmers
+  // 1. Farmer Direct Trade Rule: Farmers can ONLY trade directly with Wholesalers
   if (sRole === 'farmer') {
     if (bRole !== 'wholesaler') {
-      throw new Error(`Rule Violation: Only Wholesalers are authorized to purchase directly from Farmers. Retailers and Consumers cannot buy from farmers.`);
+      throw new Error(`Rule Violation: Farmers (কৃষক) can ONLY trade directly with Wholesalers (পাইকার). Direct sales to Retailers or Consumers are strictly prohibited.`);
     }
   }
-  // 2. Wholesaler -> Retailer: Only retailers purchase from wholesalers
-  else if (sRole === 'wholesaler') {
-    if (bRole !== 'retailer') {
-      throw new Error(`Rule Violation: Only Retailers are authorized to purchase wholesale stock from Wholesalers. Consumers cannot buy from wholesalers.`);
-    }
+
+  // 2. Farmers CANNOT buy from anyone (producers only)
+  if (bRole === 'farmer') {
+    throw new Error(`Rule Violation: Farmers (কৃষক) are producers and cannot purchase crop stock.`);
   }
-  // 3. Retailer -> Consumer: Retailers sell to consumers
-  else if (sRole === 'retailer') {
-    if (bRole !== 'consumer' && bRole !== 'customer') {
-      throw new Error(`Rule Violation: Wholesalers and Farmers cannot purchase from Retailers.`);
-    }
-  } else {
-    throw new Error(`Invalid seller role: "${sellerRole}". Must be farmer, wholesaler, or retailer.`);
+
+  // 3. Retailers and Consumers cannot transact directly with Farmers
+  if ((bRole === 'retailer' || bRole === 'consumer') && sRole === 'farmer') {
+    throw new Error(`Rule Violation: Retailers and Consumers are strictly barred from buying from Farmers.`);
   }
 
   return true;

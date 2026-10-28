@@ -84,7 +84,7 @@ async function callGemini(contents: any, config?: any, timeoutMs = 15000) {
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
-    service: 'NativeBazar Backend (Persistent SQLite)',
+    service: 'Amar Haat Backend (Persistent SQLite)',
     aiEnabled: !!ai,
     database: 'SQLite WAL Mode',
     models: ['gemini-2.5-flash', 'gemini-3.1-flash-lite'],
@@ -306,7 +306,7 @@ app.post('/api/auth/admin-login', (req, res) => {
 // Wholesalers ONLY see Farmer products
 app.get('/api/products', (req, res) => {
   try {
-    const { targetRole, sellerRole, district, category, search, minAvailable = 0 } = req.query as any;
+    const { targetRole, sellerRole, sellerId, district, category, search, minAvailable = 0 } = req.query as any;
 
     let query = 'SELECT * FROM products WHERE available_kg > ?';
     const params: any[] = [Number(minAvailable) || 0];
@@ -319,6 +319,10 @@ app.get('/api/products', (req, res) => {
     if (sellerRole) {
       query += ' AND seller_role = ?';
       params.push(sellerRole);
+    }
+    if (sellerId) {
+      query += ' AND seller_id = ?';
+      params.push(sellerId);
     }
     if (district && district !== 'All') {
       query += ' AND district = ?';
@@ -957,7 +961,7 @@ app.post('/api/ai/predict-demand', async (req, res) => {
     keyRiskFactor: language === 'bn'
       ? 'বৃষ্টিপাতের সম্ভাবনা রয়েছে, ফসল দ্রুত শুকিয়ে গ্রেডিং নিশ্চিত করুন।'
       : 'Intermittent rainfall forecasted; ensure post-harvest curing and proper crate packing.',
-    suggestedAction: 'List on NativeBazar forward-contracts for guaranteed ৳41/kg rate',
+    suggestedAction: 'List on Amar Haat forward-contracts for guaranteed ৳41/kg rate',
   };
 
   if (!ai) {
@@ -1106,9 +1110,46 @@ app.get('/api/users', (req, res) => {
     jsonUsers.forEach((u: any) => userMap.set(u.id, u));
     sqliteUsers.forEach((u: any) => userMap.set(u.id, { ...userMap.get(u.id), ...u }));
 
+    const dummyIds = new Set([
+      'f-1', 'f-2', 'b-1', 'b-2', 's-1', 'c-1', 'a-1', 'e-1', 'e-2', 'e-3', 'e-4',
+      'admin-root',
+      'guest-consumer',
+      'guest-user',
+      'user-farmer-rafiq',
+      'user-wholesaler-sumaiya',
+      'user-supplier-meghna',
+      'user-expert-akram',
+      'user-consumer-tanveer',
+      'far-shibganj-1',
+      'far-sherpur-1',
+      'w-karwan-syndicate',
+      'w-bogura-arat',
+      'ret-bismillah-mart',
+      'ret-green-bazar',
+    ]);
+    const dummyPhones = new Set([
+      '01700000000', '01700000001', '01999887766', '01712458920', '01711209934',
+      '01715889900', '01711000001', '01711889922'
+    ]);
+    const dummyEmails = new Set([
+      'dummy.fake@nativebazar.com',
+      'admin@nativebazar.com',
+      'guest@nativebazar.com',
+      'rafiqul.farmer@nativebazar.com',
+      'i.sumayyaislam@gmail.com',
+      'meghna.depot@nativebazar.com',
+      'dr.akram@bari.gov.bd',
+      'tanveer.consumer@gmail.com',
+    ]);
+
     let users = Array.from(userMap.values()).filter((u: any) => {
       // Never expose admin accounts in directory
       if (u.role === 'admin') return false;
+      // Filter out all demo / dummy users
+      if (dummyIds.has(u.id)) return false;
+      if (u.phone && dummyPhones.has(u.phone.replace(/\D/g, ''))) return false;
+      if (u.email && dummyEmails.has(u.email.toLowerCase())) return false;
+      if (u.isDemo || u.isMock || u.isDummy) return false;
       // Exclude the requesting user themselves
       if (excludeId && u.id === String(excludeId)) return false;
       return true;
@@ -1473,7 +1514,7 @@ app.post('/api/messages', (req, res) => {
       senderRole: senderRole || 'farmer',
       recipientId,
       recipientName: recipientName || 'User',
-      recipientRole: recipientRole || 'businessman',
+      recipientRole: recipientRole || 'wholesaler',
       content: content.trim(),
       replyToId,
     });
@@ -1781,58 +1822,210 @@ function resolveContextAwareAssistant(
 ): VoiceAssistantResult {
   const q = (query || '').toLowerCase().trim();
 
-  // 1. Check for explicit navigation commands
-  const isNavIntent =
-    q.includes('খোলো') ||
-    q.includes('খুলুন') ||
-    q.includes('যাও') ||
-    q.includes('যাব') ||
-    q.includes('দেখাও') ||
-    q.includes('open') ||
-    q.includes('go to') ||
-    q.includes('show') ||
-    q.includes('navigate');
-
-  if (isNavIntent) {
-    if (q.includes('বাজার') || q.includes('দাম') || q.includes('দর') || q.includes('rate') || q.includes('market')) {
-      return {
-        intent: 'NAVIGATE',
-        reply: language === 'bn' ? 'বাজার দর পৃষ্ঠা দেখতে নিচের লিঙ্কে চাপ দিন।' : 'Click the button below to view live market rates.',
-        action: { label: language === 'bn' ? 'বাজার দর পৃষ্ঠা দেখুন' : 'View Market Rates', action: 'OPEN_MARKET', route: '/market-rates' },
-      };
-    }
-    if (q.includes('ডাক্তার') || q.includes('রোগ') || q.includes('doctor') || q.includes('disease')) {
-      return {
-        intent: 'NAVIGATE',
-        reply: language === 'bn' ? 'ফসলের ডাক্তার খুলতে নিচের লিঙ্কে চাপ দিন।' : 'Click below to open AI Crop Doctor.',
-        action: { label: language === 'bn' ? 'ফসলের ডাক্তার খুলুন' : 'Open Crop Doctor', action: 'OPEN_DOCTOR', route: '/crop-doctor' },
-      };
-    }
-    if (q.includes('আবহাওয়া') || q.includes('weather') || q.includes('বৃষ্টি') || q.includes('বৃষ্টিপাত')) {
-      return {
-        intent: 'NAVIGATE',
-        reply: language === 'bn' ? '৭ দিনের আবহাওয়া ও কৃষি সতর্কতা দেখতে নিচের বাটনে চাপ দিন।' : 'Click below to view the weather forecast.',
-        action: { label: language === 'bn' ? 'আবহাওয়া পূর্বাভাস দেখুন' : 'View Weather Forecast', action: 'OPEN_WEATHER', route: '/weather' },
-      };
-    }
-    if (q.includes('অর্ডার') || q.includes('order') || q.includes('লেনদেন') || q.includes('ট্র্যাকিং')) {
-      return {
-        intent: 'NAVIGATE',
-        reply: language === 'bn' ? 'আপনার সকল অর্ডার ও ট্র্যাকিং দেখতে নিচের বাটনে চাপ দিন।' : 'Click below to view your orders.',
-        action: { label: language === 'bn' ? 'অর্ডার তালিকা দেখুন' : 'View Orders', action: 'OPEN_ORDERS', route: '/orders' },
-      };
-    }
-    if (q.includes('ড্যাশবোর্ড') || q.includes('dashboard') || q.includes('হোম') || q.includes('home')) {
-      return {
-        intent: 'NAVIGATE',
-        reply: language === 'bn' ? 'আপনার ড্যাশবোর্ডে যেতে নিচের বাটনে চাপ দিন।' : 'Click below to go to your dashboard.',
-        action: { label: language === 'bn' ? 'ড্যাশবোর্ডে প্রবেশ করুন' : 'Go to Dashboard', action: 'OPEN_DASHBOARD', route: '/dashboard' },
-      };
-    }
+  // 1. LOGOUT & AUTH EXIT INTENT (Checked first to avoid confusing with navigation or questions)
+  if (
+    q.includes('লগআউট') ||
+    q.includes('লগ আউট') ||
+    q.includes('লগ-আউট') ||
+    q.includes('সাইনআউট') ||
+    q.includes('সাইন আউট') ||
+    q.includes('সাইন-আউট') ||
+    q.includes('logout') ||
+    q.includes('log out') ||
+    q.includes('sign out') ||
+    q.includes('signout') ||
+    ((q.includes('বের') || q.includes('exit')) &&
+      (q.includes('অ্যাকাউন্ট') || q.includes('account') || q.includes('লগইন') || q.includes('লগিন') || q.includes('login') || q.includes('অ্যাপ') || q.includes('হব')))
+  ) {
+    return {
+      intent: 'NAVIGATE',
+      reply: language === 'bn'
+        ? 'আপনার অ্যাকাউন্ট থেকে নিরাপদে লগআউট করতে নিচের বাটনে চাপ দিন।'
+        : 'Click the button below to safely log out of your Amar Haat account.',
+      action: {
+        label: language === 'bn' ? '🚪 লগআউট করুন' : '🚪 Log Out',
+        action: 'LOGOUT',
+        route: '/logout',
+      },
+    };
   }
 
-  // 2. Real Authenticated User Orders lookup
-  if (q.includes('অর্ডার') || q.includes('order') || q.includes('ডেলিভারি') || q.includes('অবস্থা')) {
+  // 2. CROP DOCTOR & DISEASE DIAGNOSIS (Check before add crop if disease/health is mentioned)
+  const isCropHealth =
+    q.includes('ডাক্তার') ||
+    q.includes('রোগ') ||
+    q.includes('পোকা') ||
+    q.includes('ধসা') ||
+    q.includes('ব্লাইট') ||
+    q.includes('কীটনাশক') ||
+    q.includes('চিকিৎসা') ||
+    q.includes('পাতা হলুদ') ||
+    q.includes('doctor') ||
+    q.includes('disease') ||
+    q.includes('pest') ||
+    q.includes('blight');
+
+  if (isCropHealth) {
+    return {
+      intent: 'NAVIGATE',
+      reply: language === 'bn'
+        ? 'ফসলের রোগ বা পোকার আক্রমণের সঠিক চিকিৎসা ও অনুমোদিত ওষুধের তালিকা পেতে এআই ক্রপ ডক্টরে আক্রান্ত পাতার ছবি আপলোড করুন।'
+        : 'Upload leaf photos in AI Crop Doctor to receive approved remedies, disease diagnosis, and safety dosages.',
+      action: {
+        label: language === 'bn' ? '🩺 ফসলের ডাক্তার খুলুন' : '🩺 Open Crop Doctor',
+        action: 'OPEN_DOCTOR',
+        route: '/crop-doctor',
+      },
+    };
+  }
+
+  // 3. ADD / SELL / LIST NEW CROP INTENT
+  const hasCrop = q.includes('ফসল') || q.includes('ফসলের') || q.includes('crop') || q.includes('harvest');
+  const hasAddAction =
+    q.includes('যোগ') ||
+    q.includes('যুক্ত') ||
+    q.includes('বিক্রি') ||
+    q.includes('বিক্রয়') ||
+    q.includes('বেচব') ||
+    q.includes('তালিকাভুক্ত') ||
+    q.includes('লিস্টিং') ||
+    q.includes('লিস্ট') ||
+    q.includes('তুলব') ||
+    q.includes('তুলতে') ||
+    q.includes('দিব') ||
+    q.includes('দেব') ||
+    q.includes('add') ||
+    q.includes('sell') ||
+    q.includes('list') ||
+    q.includes('create') ||
+    q.includes('post');
+
+  const isAddCrop =
+    !isCropHealth &&
+    ((hasCrop && (hasAddAction || q.includes('নতুন') || q.includes('new'))) ||
+      q.includes('নতুন ফসল') ||
+      q.includes('ফসল যোগ') ||
+      q.includes('ফসল বিক্রি') ||
+      q.includes('add crop') ||
+      q.includes('sell crop') ||
+      q.includes('list crop'));
+
+  if (isAddCrop) {
+    return {
+      intent: 'NAVIGATE',
+      reply: language === 'bn'
+        ? 'পাইকারদের কাছে ফসল সরাসরি বিক্রির জন্য তালিকাভুক্তির ফরম খুলতে নিচের বাটনে চাপ দিন।'
+        : 'Click the button below to open the Add Crop listing form for wholesalers.',
+      action: {
+        label: language === 'bn' ? '🌾 নতুন ফসল তালিকাভুক্ত করুন' : '🌾 Add New Crop',
+        action: 'OPEN_ADD_CROP',
+        route: '/dashboard',
+      },
+    };
+  }
+
+  // 4. MARKET PRICES & BENCHMARK RATES
+  const isMarketPrice =
+    q.includes('বাজার দর') ||
+    q.includes('বাজারদর') ||
+    q.includes('বাজার রেট') ||
+    q.includes('market price') ||
+    q.includes('market rate') ||
+    (q.includes('বাজার') && (q.includes('দর') || q.includes('দাম') || q.includes('রেট') || q.includes('দেখাও') || q.includes('কত') || q.includes('price') || q.includes('rate'))) ||
+    q.includes('দর') ||
+    q.includes('দাম') ||
+    q.includes('রেট') ||
+    q.includes('price') ||
+    q.includes('rate');
+
+  if (isMarketPrice) {
+    let targetDistrict: string | null = null;
+    for (const [key, val] of Object.entries(BANGLADESH_DISTRICT_COORDS)) {
+      if (q.includes(key.toLowerCase()) || q.includes(val.bn)) {
+        targetDistrict = key;
+        break;
+      }
+    }
+
+    const loc = targetDistrict || userLocation || 'Bogura';
+    const locBn = BANGLADESH_DISTRICT_COORDS[loc]?.bn || loc;
+
+    const catalog = jsonDb.getCatalog();
+    const matchedCrop = catalog.find(
+      (c: any) =>
+        q.includes(c.name.toLowerCase()) ||
+        q.includes(c.nameBn) ||
+        (Array.isArray(c.keywords) && c.keywords.some((k: string) => q.includes(k.toLowerCase())))
+    );
+
+    if (matchedCrop) {
+      const price = matchedCrop.damBenchmarkPrice;
+      const minWholesale = Math.round(price * 0.9);
+      const maxWholesale = Math.round(price * 1.1);
+      const retailAvg = Math.round(price * 1.35);
+      return {
+        intent: 'ANSWER',
+        reply: language === 'bn'
+          ? `${locBn} মোকামে ${matchedCrop.nameBn} (${matchedCrop.name}) এর সরকারি ডিএএম পাইকারি দর ৳${minWholesale}-৳${maxWholesale}/${matchedCrop.unit} (খুচরা প্রায় ৳${retailAvg}/${matchedCrop.unit})। তথ্যসূত্র: কৃষি বিপণন অধিদপ্তর (DAM)।`
+          : `In ${loc}, wholesale benchmark for ${matchedCrop.name} is ৳${minWholesale}-৳${maxWholesale}/${matchedCrop.unit} (Retail: ৳${retailAvg}). Source: DAM Bangladesh.`,
+        action: {
+          label: language === 'bn' ? '📊 আজকের বাজার দর দেখুন' : '📊 View Market Rates',
+          action: 'OPEN_MARKET',
+          route: '/market-rates',
+        },
+      };
+    }
+
+    // General market rates inquiry (e.g. "বাজার দর দেখাও", "বাজারদর কত", "show market price")
+    return {
+      intent: 'NAVIGATE',
+      reply: language === 'bn'
+        ? `${locBn} মোকামসহ সারা দেশের কৃষি বিপণন অধিদপ্তর (DAM) অনুমোদিত আজকের তাজা পাইকারি ও খুচরা বাজার দর দেখতে নিচে চাপ দিন।`
+        : `Click below to view today's official wholesale and retail market rates for ${loc} and nationwide.`,
+      action: {
+        label: language === 'bn' ? '📊 আজকের বাজার দর দেখুন' : '📊 View Market Rates',
+        action: 'OPEN_MARKET',
+        route: '/market-rates',
+      },
+    };
+  }
+
+  // 5. FINDING WHOLESALERS & ARATS (পাইকার ও আড়তদার ডিরেক্টরি)
+  if (
+    q.includes('পাইকার') ||
+    q.includes('পাইকারদের') ||
+    q.includes('আড়ত') ||
+    q.includes('আড়তদার') ||
+    q.includes('আড়ত') ||
+    q.includes('আড়তদার') ||
+    q.includes('ক্রেতা') ||
+    q.includes('wholesaler') ||
+    q.includes('buyer') ||
+    q.includes('arat')
+  ) {
+    return {
+      intent: 'NAVIGATE',
+      reply: language === 'bn'
+        ? 'আমার হাটের নিবন্ধিত ও বিশ্বস্ত পাইকার ও আড়তদারদের তালিকা দেখতে এবং সরাসরি কল বা চ্যাট করতে নিচে চাপ দিন।'
+        : 'Click below to view verified wholesale buyers and connect directly via call or chat.',
+      action: {
+        label: language === 'bn' ? '🤝 পাইকারদের তালিকা দেখুন' : '🤝 Find Wholesalers',
+        action: 'OPEN_CONTACTS',
+        route: '/contacts',
+      },
+    };
+  }
+
+  // 6. ORDERS & DELIVERIES (অর্ডার ও চালান ট্র্যাকিং)
+  if (
+    q.includes('অর্ডার') ||
+    q.includes('order') ||
+    q.includes('ডেলিভারি') ||
+    q.includes('চালান') ||
+    q.includes('ট্র্যাকিং') ||
+    q.includes('লেনদেন') ||
+    q.includes('অবস্থা')
+  ) {
     if (userId) {
       const userOrders = jsonDb.getOrders({ customerId: userId }).concat(jsonDb.getOrders({ sellerId: userId }));
       if (userOrders.length > 0) {
@@ -1848,102 +2041,131 @@ function resolveContextAwareAssistant(
       }
     }
     return {
-      intent: 'ANSWER',
+      intent: 'NAVIGATE',
       reply: language === 'bn'
-        ? 'আপনার বর্তমান অ্যাকাউন্টে কোনো সক্রিয় বা অপেক্ষমাণ অর্ডার পাওয়া যায়নি। আপনি মার্কেটপ্লেস থেকে অর্ডার করতে পারেন।'
-        : 'No active orders found for your account. You can place orders from the marketplace.',
-      action: { label: language === 'bn' ? 'মার্কেটপ্লেস দেখুন' : 'View Marketplace', action: 'OPEN_MARKET', route: '/marketplace' },
+        ? 'আপনার সকল পাইকারি ক্রয়-বিক্রয়ের অর্ডার ও চালানের অবস্থা দেখতে নিচের বাটনে চাপ দিন।'
+        : 'Click below to view all your trade orders, delivery statuses, and tracking.',
+      action: {
+        label: language === 'bn' ? '📦 অর্ডার তালিকা ও ট্র্যাকিং' : '📦 View Orders',
+        action: 'OPEN_ORDERS',
+        route: '/orders',
+      },
     };
   }
 
-  // 3. Genuine Crop Market Prices & Rates lookup
-  if (q.includes('দর') || q.includes('দাম') || q.includes('রেট') || q.includes('price') || q.includes('rate')) {
-    // Check if district is specified in query
-    let targetDistrict: string | null = null;
-    for (const [key, val] of Object.entries(BANGLADESH_DISTRICT_COORDS)) {
-      if (q.includes(key.toLowerCase()) || q.includes(val.bn)) {
-        targetDistrict = key;
-        break;
-      }
-    }
-
-    // Identify crop from catalog
-    const catalog = jsonDb.getCatalog();
-    let matchedCrop = catalog.find(
-      (c: any) => q.includes(c.name.toLowerCase()) || q.includes(c.nameBn) || c.keywords.some((k: string) => q.includes(k.toLowerCase()))
-    );
-
-    // If query asks for price but specifies neither a crop nor clear location:
-    if (!matchedCrop && !targetDistrict) {
-      return {
-        intent: 'CLARIFY',
-        reply: language === 'bn'
-          ? 'আপনি কোন ফসলের এবং কোন জেলার বাজার দর জানতে চাচ্ছেন? যেমন: "বগুড়ায় টমেটোর পাইকারি দর কত?"'
-          : 'Which crop and district price are you inquiring about? For example: "What is the tomato price in Bogura?"',
-        action: null,
-      };
-    }
-
-    const loc = targetDistrict || userLocation || 'Bogura';
-    const locBn = BANGLADESH_DISTRICT_COORDS[loc]?.bn || loc;
-
-    if (matchedCrop) {
-      const price = matchedCrop.damBenchmarkPrice;
-      const minWholesale = Math.round(price * 0.9);
-      const maxWholesale = Math.round(price * 1.1);
-      const retailAvg = Math.round(price * 1.35);
-      return {
-        intent: 'ANSWER',
-        reply: language === 'bn'
-          ? `${locBn} মোকামে ${matchedCrop.nameBn} (${matchedCrop.name}) এর সরকারি ডিএএম পাইকারি দর ৳${minWholesale}-৳${maxWholesale}/${matchedCrop.unit} (খুচরা প্রায় ৳${retailAvg}/${matchedCrop.unit})। তথ্যসূত্র: কৃষি বিপণন অধিদপ্তর (DAM)।`
-          : `In ${loc}, wholesale benchmark for ${matchedCrop.name} is ৳${minWholesale}-৳${maxWholesale}/${matchedCrop.unit} (Retail: ৳${retailAvg}). Source: DAM Bangladesh.`,
-        action: { label: language === 'bn' ? 'লাইভ বাজার দর চার্ট' : 'Live Rate Charts', action: 'OPEN_MARKET', route: '/market-rates' },
-      };
-    }
-  }
-
-  // 4. Crop Disease & Treatment questions
-  if (q.includes('রোগ') || q.includes('ধসা') || q.includes('পোকা') || q.includes('ব্লাইট') || q.includes('কীটনাশক') || q.includes('disease') || q.includes('pest')) {
+  // 7. FARM LEDGER & EXPENSES (খামার খতিয়ান ও হিসাব)
+  if (
+    q.includes('হিসাব') ||
+    q.includes('লেজার') ||
+    q.includes('খরচ') ||
+    q.includes('লাভ') ||
+    q.includes('খতিয়ান') ||
+    q.includes('ব্যয়') ||
+    q.includes('ledger') ||
+    q.includes('expense') ||
+    q.includes('profit')
+  ) {
     return {
-      intent: 'ANSWER',
+      intent: 'NAVIGATE',
       reply: language === 'bn'
-        ? 'ফসলের রোগ বা পোকার আক্রমণের সঠিক সমাধানের জন্য এআই ক্রপ ডক্টরে আক্রান্ত পাতার ছবি আপলোড করুন অথবা লক্ষণ উল্লেখ করুন। তাৎক্ষণিক নিরাপদ চিকিৎসা পদ্ধতি প্রদান করা হবে।'
-        : 'For crop disease diagnosis, upload leaf photos in AI Crop Doctor to receive approved treatments and safety dosages.',
-      action: { label: language === 'bn' ? 'ফসলের ডাক্তার খুলুন' : 'Open Crop Doctor', action: 'OPEN_DOCTOR', route: '/crop-doctor' },
+        ? 'আপনার খামারের সকল সার, বীজ, সেচ ও পরিবহন খরচের বিপরীতে নিট লাভ-ক্ষতির হিসাব দেখতে খতিয়ানে যান।'
+        : 'Review your farm inputs, transport costs, and profit-loss calculations in the Farm Ledger. Click below.',
+      action: {
+        label: language === 'bn' ? '📒 খামার খতিয়ান ও হিসাব' : '📒 Open Farm Ledger',
+        action: 'OPEN_LEDGER',
+        route: '/ledger',
+      },
     };
   }
 
-  // 5. Weather inquiry
-  if (q.includes('আবহাওয়া') || q.includes('বৃষ্টি') || q.includes('তাপমাত্রা') || q.includes('ঝড়') || q.includes('weather') || q.includes('rain')) {
+  // 8. WEATHER FORECAST (আবহাওয়া)
+  if (
+    q.includes('আবহাওয়া') ||
+    q.includes('আবহাওয়া') ||
+    q.includes('বৃষ্টি') ||
+    q.includes('তাপমাত্রা') ||
+    q.includes('ঝড়') ||
+    q.includes('ঝড়') ||
+    q.includes('weather') ||
+    q.includes('rain')
+  ) {
     const loc = userLocation || 'Bogura';
     const locBn = BANGLADESH_DISTRICT_COORDS[loc]?.bn || loc;
     return {
-      intent: 'ANSWER',
+      intent: 'NAVIGATE',
       reply: language === 'bn'
-        ? `${locBn} জেলার পরবর্তী ৭ দিনের আবহাওয়া পূর্বাভাস, বৃষ্টির সম্ভাবনা এবং ফসল রক্ষা সংক্রান্ত জরুরি সতর্কতা তৈরি রয়েছে।`
-        : `Weather forecast, rain probability, and crop advisories for ${loc} are available.`,
-      action: { label: language === 'bn' ? 'আবহাওয়া ড্যাশবোর্ড' : 'Weather Dashboard', action: 'OPEN_WEATHER', route: '/weather' },
+        ? `${locBn} জেলার পরবর্তী ৭ দিনের আবহাওয়া পূর্বাভাস, বৃষ্টির সম্ভাবনা এবং ফসল রক্ষা সংক্রান্ত সতর্কতা দেখতে নিচে চাপ দিন।`
+        : `Weather forecast, rain probability, and crop advisories for ${loc} are available. Click below.`,
+      action: {
+        label: language === 'bn' ? '🌦️ আবহাওয়া পূর্বাভাস দেখুন' : '🌦️ View Weather Forecast',
+        action: 'OPEN_WEATHER',
+        route: '/weather',
+      },
     };
   }
 
-  // 6. Ambiguous question -> ask one clear clarification question
-  if (q.length < 5) {
+  // 9. PROFILE & ACCOUNT (প্রোফাইল)
+  if (
+    q.includes('প্রোফাইল') ||
+    q.includes('অ্যাকাউন্ট') ||
+    q.includes('profile') ||
+    q.includes('account')
+  ) {
+    return {
+      intent: 'NAVIGATE',
+      reply: language === 'bn'
+        ? 'আপনার প্রোফাইল ও অ্যাকাউন্টের বিবরণ দেখতে নিচের বাটনে চাপ দিন।'
+        : 'Click below to view your account details and profile.',
+      action: {
+        label: language === 'bn' ? '👤 প্রোফাইল দেখুন' : '👤 View Profile',
+        action: 'OPEN_PROFILE',
+        route: '/profile',
+      },
+    };
+  }
+
+  // 10. DASHBOARD (ড্যাশবোর্ড)
+  if (
+    q.includes('ড্যাশবোর্ড') ||
+    q.includes('dashboard') ||
+    q.includes('হোম') ||
+    q.includes('home')
+  ) {
+    return {
+      intent: 'NAVIGATE',
+      reply: language === 'bn'
+        ? 'আপনার ড্যাশবোর্ডে প্রবেশ করতে নিচের বাটনে চাপ দিন।'
+        : 'Click below to go to your dashboard.',
+      action: {
+        label: language === 'bn' ? '🏠 ড্যাশবোর্ডে প্রবেশ করুন' : '🏠 Go to Dashboard',
+        action: 'OPEN_DASHBOARD',
+        route: '/dashboard',
+      },
+    };
+  }
+
+  // Ambiguous question (< 4 chars) -> clarify
+  if (q.length < 4) {
     return {
       intent: 'CLARIFY',
       reply: language === 'bn'
-        ? 'আমি আপনাকে কীভাবে সাহায্য করতে পারি? বাজার দর, আবহাওয়া, রোগ নির্ণয়, অথবা অর্ডার সম্পর্কিত প্রশ্ন করতে পারেন।'
-        : 'How can I assist you today? You can ask about market rates, weather, crop health, or your orders.',
+        ? 'আমি আপনাকে কীভাবে সাহায্য করতে পারি? যেমন: "লগ আউট কিভাবে করব", "নতুন ফসল যোগ করব কিভাবে", বা "বাজার দর দেখাও"।'
+        : 'How can I assist you? For example: "How to log out", "How to add crop", or "Show market rates".',
       action: null,
     };
   }
 
-  // Default helpful direct answer
+  // Default helpful direct answer with market rates shortcut
   return {
     intent: 'ANSWER',
     reply: language === 'bn'
-      ? `আমি নেটিভবাজারের স্মার্ট সহকারী। আপনি যেকোনো ফসলের আজকের বাজার দর, আবহাওয়া সতর্কতা, বা আপনার অর্ডার স্থিতি সম্পর্কে সরাসরি জানতে পারেন।`
-      : `I am NativeBazar Smart Assistant. You can ask for wholesale rates, weather alerts, or track your orders.`,
-    action: { label: language === 'bn' ? 'বাজার দর অনুসন্ধান' : 'Check Market Rates', action: 'OPEN_MARKET', route: '/market-rates' },
+      ? `আমি আমার হাটের স্মার্ট সহকারী। আপনি মুখে বলে বা লিখে যেকোনো কাজের সহায়তা নিতে পারেন — যেমন ফসল বিক্রি, বাজার দর দেখা, পাইকার খোঁজা বা লগআউট করা।`
+      : `I am Amar Haat Smart Assistant. You can ask to add crops, check wholesale rates, find buyers, or log out.`,
+    action: {
+      label: language === 'bn' ? '📊 আজকের বাজার দর দেখুন' : '📊 View Market Rates',
+      action: 'OPEN_MARKET',
+      route: '/market-rates',
+    },
   };
 }
 
@@ -1953,10 +2175,16 @@ app.post('/api/ai/voice-assistant', async (req, res) => {
   // 1. Generate factual rule-based result based on actual DB records
   const result = resolveContextAwareAssistant(query, role, userLocation, language, userId);
 
-  // If Gemini AI is active and query is not a direct unambiguous intent, enhance wording without fabricating
+  // If query resolved to a direct action intent (LOGOUT, OPEN_ADD_CROP, OPEN_MARKET, etc.), return immediately!
+  // This guarantees 100% accurate intent recognition without delay or LLM hallucinations.
+  if (result.action && result.action.action) {
+    return res.json(result);
+  }
+
+  // If Gemini AI is active and query is open-ended, enhance wording without fabricating
   if (ai && query.trim().length > 6) {
     try {
-      const prompt = `System: You are NativeBazar Assistant for Bangladesh Agriculture (${userLocation}).
+      const prompt = `System: You are Amar Haat Assistant for Bangladesh Agriculture (${userLocation}).
 Role: ${role}.
 Language: ${language === 'bn' ? 'Bengali' : 'English'}.
 Strict Requirements:

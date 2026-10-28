@@ -61,12 +61,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   const [licenseNumber, setLicenseNumber] = useState(
     currentUser.licenseNumber || 'DAE-SUP-2024-992'
   );
-  const [designation, setDesignation] = useState(
-    currentUser.designation || 'Upazila Agricultural Officer (UAO)'
-  );
-  const [institution, setInstitution] = useState(
-    currentUser.institution || 'Department of Agricultural Extension (DAE)'
-  );
+
 
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -98,8 +93,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           metric3Bn: `${myOrders.length} টি বাণিজ্যিক চুক্তি`,
         };
       }
-      case 'wholesaler':
-      case 'businessman': {
+      case 'wholesaler': {
         const demands = DemandStore.getByBuyer(currentUser.id);
         const tradeOrders = TradeOrderStore.getAll().filter(
           (o) => o.buyerId === currentUser.id
@@ -113,8 +107,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           metric3Bn: `৳${tradeOrders.reduce((s, o) => s + o.totalBDT, 0).toLocaleString()} মোট লেনদেন`,
         };
       }
-      case 'retailer':
-      case 'supplier': {
+      case 'retailer': {
         const products = SupplierStore.getBySupplierId(currentUser.id);
         const supplierOrders = TradeOrderStore.getAll().filter(
           (o) => o.sellerId === currentUser.id
@@ -128,8 +121,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           metric3Bn: 'অনুমোদিত খুচরা বিক্রেতা',
         };
       }
-      case 'consumer':
-      case 'customer': {
+      case 'consumer': {
         const customerOrders = OrderStore.getByCustomer(currentUser.id);
         return {
           metric1: `${customerOrders.length} Farm-to-Table Orders`,
@@ -138,16 +130,6 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           metric2Bn: 'যাচাইকৃত পরিবারের ভোক্তা',
           metric3: 'Express Delivery Hub',
           metric3Bn: 'দ্রুত হোম ডেলিভারি অন্তর্ভুক্ত',
-        };
-      }
-      case 'expert': {
-        return {
-          metric1: 'Agronomy Specialist',
-          metric1Bn: 'উদ্ভিদ ও মৃত্তিকা বিশেষজ্ঞ',
-          metric2: 'AI Diagnosis Overseer',
-          metric2Bn: 'এআই প্রেসক্রিপশন নিরীক্ষক',
-          metric3: 'Official DAE Liaison',
-          metric3Bn: 'কৃষি সম্প্রসারণ কর্মকর্তা',
         };
       }
       case 'admin': {
@@ -166,8 +148,8 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           metric1Bn: 'সক্রিয় সদস্য',
           metric2: 'Verified Account',
           metric2Bn: 'যাচাইকৃত অ্যাকাউন্ট',
-          metric3: 'NativeBazar Node',
-          metric3Bn: 'নেটিভবাজার নোড',
+          metric3: 'Amar Haat Node',
+          metric3Bn: 'আমার হাট নোড',
         };
       }
     }
@@ -185,11 +167,9 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
       upazila: upazila || (upazilas[0] || 'Bogura Sadar'),
       education,
       farmSizeAcres: currentUser.role === 'farmer' ? farmSizeAcres : undefined,
-      businessName: (currentUser.role === 'businessman' || currentUser.role === 'wholesaler') ? businessName : undefined,
-      shopName: (currentUser.role === 'supplier' || currentUser.role === 'retailer') ? shopName : undefined,
-      licenseNumber: (currentUser.role === 'supplier' || currentUser.role === 'retailer') ? licenseNumber : undefined,
-      designation: currentUser.role === 'expert' ? designation : undefined,
-      institution: currentUser.role === 'expert' ? institution : undefined,
+      businessName: currentUser.role === 'wholesaler' ? businessName : undefined,
+      shopName: currentUser.role === 'retailer' ? shopName : undefined,
+      licenseNumber: currentUser.role === 'retailer' ? licenseNumber : undefined,
     };
 
     const updated = AuthStore.updateProfile(updates);
@@ -232,30 +212,6 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
       labelBn: 'ভোক্তা',
       color: 'bg-purple-100 text-purple-800 border-purple-300',
       icon: <ShoppingCart className="w-3.5 h-3.5 text-purple-700" />,
-    },
-    businessman: {
-      labelEn: 'Wholesale Trader / Buyer',
-      labelBn: 'ব্যবসায়ী ও পাইকার',
-      color: 'bg-blue-100 text-blue-800 border-blue-300',
-      icon: <Briefcase className="w-3.5 h-3.5 text-blue-700" />,
-    },
-    supplier: {
-      labelEn: 'Retailer Store',
-      labelBn: 'খুচরা বিক্রেতা',
-      color: 'bg-amber-100 text-amber-800 border-amber-300',
-      icon: <Store className="w-3.5 h-3.5 text-amber-700" />,
-    },
-    customer: {
-      labelEn: 'Household Consumer',
-      labelBn: 'ভোক্তা',
-      color: 'bg-purple-100 text-purple-800 border-purple-300',
-      icon: <ShoppingCart className="w-3.5 h-3.5 text-purple-700" />,
-    },
-    expert: {
-      labelEn: 'Agronomy Specialist',
-      labelBn: 'কৃষি কর্মকর্তা',
-      color: 'bg-teal-100 text-teal-800 border-teal-300',
-      icon: <Microscope className="w-3.5 h-3.5 text-teal-700" />,
     },
     admin: {
       labelEn: 'Central Platform Administrator',
@@ -548,7 +504,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                 </div>
               )}
 
-              {currentUser.role === 'businessman' && (
+              {currentUser.role === 'wholesaler' && (
                 <div>
                   <label className="block font-bold text-stone-700 mb-1">
                     {t('Business / Enterprise Name', 'প্রতিষ্ঠানের নাম')}
@@ -568,7 +524,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                 </div>
               )}
 
-              {currentUser.role === 'supplier' && (
+              {currentUser.role === 'retailer' && (
                 <>
                   <div>
                     <label className="block font-bold text-stone-700 mb-1">
@@ -601,45 +557,6 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                     ) : (
                       <p className="p-2.5 bg-stone-50 rounded-xl font-mono text-stone-800">
                         {licenseNumber}
-                      </p>
-                    )}
-                  </div>
-                </>
-              )}
-
-              {currentUser.role === 'expert' && (
-                <>
-                  <div>
-                    <label className="block font-bold text-stone-700 mb-1">
-                      {t('Official Designation', 'পদবি')}
-                    </label>
-                    {isEditing ? (
-                      <input
-                        type="text"
-                        value={designation}
-                        onChange={(e) => setDesignation(e.target.value)}
-                        className="w-full p-2.5 bg-stone-50 border border-stone-300 rounded-xl focus:outline-emerald-600"
-                      />
-                    ) : (
-                      <p className="p-2.5 bg-stone-50 rounded-xl font-bold text-stone-800">
-                        {designation}
-                      </p>
-                    )}
-                  </div>
-                  <div>
-                    <label className="block font-bold text-stone-700 mb-1">
-                      {t('Institution / Department', 'প্রতিষ্ঠান')}
-                    </label>
-                    {isEditing ? (
-                      <input
-                        type="text"
-                        value={institution}
-                        onChange={(e) => setInstitution(e.target.value)}
-                        className="w-full p-2.5 bg-stone-50 border border-stone-300 rounded-xl focus:outline-emerald-600"
-                      />
-                    ) : (
-                      <p className="p-2.5 bg-stone-50 rounded-xl text-stone-800">
-                        {institution}
                       </p>
                     )}
                   </div>

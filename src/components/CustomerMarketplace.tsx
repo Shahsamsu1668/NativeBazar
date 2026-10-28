@@ -240,7 +240,7 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
           paymentMethod,
           deliveryAddress: deliveryAddress.trim(),
           district: primaryProduct.district || 'Bogura',
-          notes: `Guest Consumer Order. Sourced via NativeBazar Social Feed.`,
+          notes: `Guest Consumer Order. Sourced via Amar Haat Marketplace.`,
         });
 
         if (res.success && res.order) {
@@ -663,7 +663,7 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
                             <p>
                               📞 <strong>Retailer Verification:</strong> Call{' '}
                               <span className="font-bold text-stone-800">
-                                {product.sellerPhone || 'Verified in NativeBazar Database'}
+                                {product.sellerPhone || (language === 'bn' ? 'আমার হাট ডাটাবেজে যাচাইকৃত' : 'Verified in Amar Haat Database')}
                               </span>
                             </p>
                           </div>
