@@ -1,4 +1,4 @@
-﻿import React, { useState, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { CropDiagnosisResult, Language, User } from '../types';
 import { requestCropDiagnosis } from '../services/aiService';
 import { AuthStore } from '../data/store';
@@ -138,12 +138,12 @@ export const CropDoctorModal: React.FC<CropDoctorModalProps> = ({
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
-      setImageError(language === 'bn' ? 'αª╢αºüαªºαºüαª«αª╛αªñαºìαª░ αª¢αª¼αª┐ αª½αª╛αªçαª▓ αªåαª¬αª▓αºïαªí αªòαª░αºüαª¿αÑñ' : 'Only image files are allowed.');
+      setImageError(language === 'bn' ? 'শুধুমাত্র ছবি ফাইল আপলোড করুন।' : 'Only image files are allowed.');
       return;
     }
 
     if (file.size > 5 * 1024 * 1024) {
-      setImageError(language === 'bn' ? 'αª¢αª¼αª┐αª░ αª╕αª╛αªçαª£ αº½ MB-αªÅαª░ αª¼αºçαª╢αª┐ αª╣αªôαª»αª╝αª╛ αª»αª╛αª¼αºç αª¿αª╛αÑñ' : 'Image must be under 5 MB.');
+      setImageError(language === 'bn' ? 'ছবির সাইজ ৫ MB-এর বেশি হওয়া যাবে না।' : 'Image must be under 5 MB.');
       return;
     }
 
@@ -193,7 +193,7 @@ export const CropDoctorModal: React.FC<CropDoctorModalProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="font-extrabold text-stone-900 text-base sm:text-lg">
-                  {language === 'bn' ? 'αª¿αºçαªƒαª┐αª¡αª¼αª╛αª£αª╛αª░ αª½αª╕αª▓αºçαª░ αªíαª╛αªòαºìαªñαª╛αª░' : 'NativeBazar Crop Doctor'}
+                  {language === 'bn' ? 'নেটিভবাজার ফসলের ডাক্তার' : 'NativeBazar Crop Doctor'}
                 </h3>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 hidden sm:inline-block">
                   BARI & DAE Guidelines
@@ -201,7 +201,7 @@ export const CropDoctorModal: React.FC<CropDoctorModalProps> = ({
               </div>
               <p className="text-[11px] text-stone-500">
                 {language === 'bn'
-                  ? 'αªÅαªåαªç αª¡αª┐αªñαºìαªñαª┐αªò αª½αª╕αª▓αºçαª░ αª░αºïαªù αª¿αª┐αª░αºìαªúαª»αª╝ αªô αªíαª┐αª£αª┐αªƒαª╛αª▓ αª¬αºìαª░αºçαª╕αªòαºìαª░αª┐αª¬αª╢αª¿'
+                  ? 'এআই ভিত্তিক ফসলের রোগ নির্ণয় ও ডিজিটাল প্রেসক্রিপশন'
                   : 'AI-assisted crop pathology diagnosis and digital prescription'}
               </p>
             </div>
@@ -211,7 +211,7 @@ export const CropDoctorModal: React.FC<CropDoctorModalProps> = ({
             onClick={onClose}
             className="text-stone-400 hover:text-stone-700 font-bold text-sm p-1.5 rounded-lg hover:bg-stone-100 transition-colors"
           >
-            Γ£ò
+            ✕
           </button>
         </div>
 
@@ -224,7 +224,7 @@ export const CropDoctorModal: React.FC<CropDoctorModalProps> = ({
               <div className="flex-1 leading-relaxed">
                 <span>
                   {language === 'bn'
-                    ? 'αª╕αªñαª░αºìαªòαªñαª╛: αªÅαªƒαª┐ αªòαºçαª¼αª▓ αªÅαªåαªç αª¡αª┐αªñαºìαªñαª┐αªò αª¬αºìαª░αª╛αªÑαª«αª┐αªò αª¼αª┐αª╢αºìαª▓αºçαª╖αªúαÑñ αªòαºïαª¿αºï αª░αª╛αª╕αª╛αª»αª╝αª¿αª┐αªò αª¼αºìαª»αª¼αª╣αª╛αª░αºçαª░ αª¬αºéαª░αºìαª¼αºç αª╕αºìαªÑαª╛αª¿αºÇαª»αª╝ αªëαª¬-αª╕αª╣αªòαª╛αª░αºÇ αªòαºâαª╖αª┐ αªòαª░αºìαª«αªòαª░αºìαªñαª╛ (SAAO) αª¼αª╛ αªòαºâαª╖αª┐ αª¼αª┐αª╢αºçαª╖αª£αºìαª₧αºçαª░ αª¬αª░αª╛αª«αª░αºìαª╢ αª¿αª┐αª¿αÑñ'
+                    ? 'সতর্কতা: এটি কেবল এআই ভিত্তিক প্রাথমিক বিশ্লেষণ। কোনো রাসায়নিক ব্যবহারের পূর্বে স্থানীয় উপ-সহকারী কৃষি কর্মকর্তা (SAAO) বা কৃষি বিশেষজ্ঞের পরামর্শ নিন।'
                     : 'Disclaimer: This is an AI-generated preliminary advisory only. Consult your local agricultural officer before applying chemical treatments.'}
                 </span>
               </div>
@@ -235,27 +235,27 @@ export const CropDoctorModal: React.FC<CropDoctorModalProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-stone-700 mb-1">
-                    {language === 'bn' ? 'αª½αª╕αª▓αºçαª░ αª¿αª╛αª«' : 'Select Crop'}
+                    {language === 'bn' ? 'ফসলের নাম' : 'Select Crop'}
                   </label>
                   <select
                     value={cropName}
                     onChange={(e) => setCropName(e.target.value)}
                     className="w-full border border-stone-300 rounded-lg p-2.5 bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
                   >
-                    <option value="Tomato">Tomato / αªƒαª«αºçαªƒαºï</option>
-                    <option value="Potato">Potato / αªåαª▓αºü</option>
-                    <option value="Chili">Chili / αª«αª░αª┐αªÜ</option>
-                    <option value="Cauliflower">Cauliflower / αª½αºüαª▓αªòαª¬αª┐</option>
-                    <option value="Rice / Paddy">Rice (BRRI Dhan) / αªºαª╛αª¿</option>
-                    <option value="Pointed Gourd">Pointed Gourd / αª¬αªƒαª▓</option>
-                    <option value="Brinjal">Brinjal (Eggplant) / αª¼αºçαªùαºüαª¿</option>
-                    <option value="Cabbage">Cabbage / αª¼αª╛αªüαªºαª╛αªòαª¬αª┐</option>
+                    <option value="Tomato">Tomato / টমেটো</option>
+                    <option value="Potato">Potato / আলু</option>
+                    <option value="Chili">Chili / মরিচ</option>
+                    <option value="Cauliflower">Cauliflower / ফুলকপি</option>
+                    <option value="Rice / Paddy">Rice (BRRI Dhan) / ধান</option>
+                    <option value="Pointed Gourd">Pointed Gourd / পটল</option>
+                    <option value="Brinjal">Brinjal (Eggplant) / বেগুন</option>
+                    <option value="Cabbage">Cabbage / বাঁধাকপি</option>
                   </select>
                 </div>
 
                 <div>
                   <label className="block font-semibold text-stone-700 mb-1">
-                    {language === 'bn' ? 'αª▓αªòαºìαª╖αªú αªô αª¼αª┐αª¼αª░αªú' : 'Visible Symptoms'}
+                    {language === 'bn' ? 'লক্ষণ ও বিবরণ' : 'Visible Symptoms'}
                   </label>
                   <input
                     type="text"
@@ -263,7 +263,7 @@ export const CropDoctorModal: React.FC<CropDoctorModalProps> = ({
                     onChange={(e) => setSymptoms(e.target.value)}
                     placeholder={
                       language === 'bn'
-                        ? 'αª¬αª╛αªñαª╛αª»αª╝ αªªαª╛αªù, αª¼αª┐αª¼αª░αºìαªúαªñαª╛ αª¼αª╛ αªòαºÇαªƒ αªåαªòαºìαª░αª«αªúαºçαª░ αª¼αª┐αª¼αª░αªú αª▓αª┐αªûαºüαª¿...'
+                        ? 'পাতায় দাগ, বিবর্ণতা বা কীট আক্রমণের বিবরণ লিখুন...'
                         : 'Describe spots, leaf curling, or rot symptoms...'
                     }
                     className="w-full border border-stone-300 rounded-lg p-2.5 bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
@@ -274,7 +274,7 @@ export const CropDoctorModal: React.FC<CropDoctorModalProps> = ({
               {/* Photo Upload Area */}
               <div>
                 <label className="block font-semibold text-stone-700 mb-1">
-                  {language === 'bn' ? 'αªåαªòαºìαª░αª╛αª¿αºìαªñ αª¬αª╛αªñαª╛αª░ αª¢αª¼αª┐ (αªÉαªÜαºìαª¢αª┐αªò αªòαª┐αª¿αºìαªñαºü αª¿αª┐αª░αºìαª¡αºüαª▓αªñαª╛αª░ αª£αª¿αºìαª» αª£αª░αºüαª░αª┐)' : 'Upload Crop Leaf Image (Recommended)'}
+                  {language === 'bn' ? 'আক্রান্ত পাতার ছবি (ঐচ্ছিক কিন্তু নির্ভুলতার জন্য জরুরি)' : 'Upload Crop Leaf Image (Recommended)'}
                 </label>
 
                 <input
@@ -296,10 +296,10 @@ export const CropDoctorModal: React.FC<CropDoctorModalProps> = ({
                         <Upload className="w-5 h-5" />
                       </div>
                       <p className="font-bold text-stone-700 text-xs">
-                        {language === 'bn' ? 'αªòαºìαª»αª╛αª«αºçαª░αª╛ αªªαª┐αª»αª╝αºç αª¢αª¼αª┐ αªñαºüαª▓αºüαª¿ αª¼αª╛ αªùαºìαª»αª╛αª▓αª╛αª░αª┐ αªÑαºçαªòαºç αªåαª¬αª▓αºïαªí αªòαª░αºüαª¿' : 'Take photo or upload leaf image'}
+                        {language === 'bn' ? 'ক্যামেরা দিয়ে ছবি তুলুন বা গ্যালারি থেকে আপলোড করুন' : 'Take photo or upload leaf image'}
                       </p>
                       <p className="text-[10px] text-stone-400">
-                        PNG, JPG, WEBP (αª╕αª░αºìαª¼αºïαªÜαºìαªÜ αº½ MB)
+                        PNG, JPG, WEBP (সর্বোচ্চ ৫ MB)
                       </p>
                     </div>
                   </div>
@@ -320,7 +320,7 @@ export const CropDoctorModal: React.FC<CropDoctorModalProps> = ({
                     </button>
                     <div className="absolute bottom-2 left-2 bg-black/60 text-white text-[10px] px-2 py-0.5 rounded-md flex items-center gap-1">
                       <ImagePlus className="w-3 h-3" />
-                      <span>{language === 'bn' ? 'αª¢αª¼αª┐ αª»αºüαªòαºìαªñ αª╣αª»αª╝αºçαª¢αºç' : 'Image attached'}</span>
+                      <span>{language === 'bn' ? 'ছবি যুক্ত হয়েছে' : 'Image attached'}</span>
                     </div>
                   </div>
                 )}
@@ -346,12 +346,12 @@ export const CropDoctorModal: React.FC<CropDoctorModalProps> = ({
                   {loading ? (
                     <>
                       <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                      <span>{language === 'bn' ? 'αª¼αª┐αª╢αºìαª▓αºçαª╖αªú αªÜαª▓αª¢αºç...' : 'Analyzing...'}</span>
+                      <span>{language === 'bn' ? 'বিশ্লেষণ চলছে...' : 'Analyzing...'}</span>
                     </>
                   ) : (
                     <>
                       <Stethoscope className="w-3.5 h-3.5" />
-                      <span>{language === 'bn' ? 'αª░αºïαªù αª¿αª┐αª░αºìαªúαª»αª╝ αªòαª░αºüαª¿' : 'Run AI Diagnosis'}</span>
+                      <span>{language === 'bn' ? 'রোগ নির্ণয় করুন' : 'Run AI Diagnosis'}</span>
                     </>
                   )}
                 </button>
@@ -364,7 +364,7 @@ export const CropDoctorModal: React.FC<CropDoctorModalProps> = ({
                 <div className="flex items-start justify-between">
                   <div>
                     <span className="bg-emerald-200 text-emerald-900 font-bold px-2 py-0.5 rounded text-[10px] uppercase">
-                      {diagnosis.severity} Severity ΓÇó {diagnosis.confidence || 92}% AI Confidence
+                      {diagnosis.severity} Severity • {diagnosis.confidence || 92}% AI Confidence
                     </span>
                     <h4 className="text-base sm:text-lg font-extrabold text-stone-900 mt-1">
                       {language === 'bn' ? diagnosis.diseaseBanglaName : diagnosis.diseaseName}
@@ -381,7 +381,7 @@ export const CropDoctorModal: React.FC<CropDoctorModalProps> = ({
                 </div>
 
                 <p className="text-stone-700 text-xs leading-relaxed bg-white/90 p-3 rounded-xl border border-emerald-100 shadow-2xs">
-                  <strong className="text-stone-900">{language === 'bn' ? 'αª▓αªòαºìαª╖αªú αª╕αª╛αª░αª╛αªéαª╢:' : 'Symptoms Summary:'}</strong> {diagnosis.symptomsSummary}
+                  <strong className="text-stone-900">{language === 'bn' ? 'লক্ষণ সারাংশ:' : 'Symptoms Summary:'}</strong> {diagnosis.symptomsSummary}
                 </p>
 
                 {/* Treatment Breakdown */}
@@ -395,7 +395,7 @@ export const CropDoctorModal: React.FC<CropDoctorModalProps> = ({
                           <div>
                             <span className="font-extrabold text-emerald-950 text-xs flex items-center gap-1.5">
                               <FileText className="w-3.5 h-3.5 text-emerald-600" />
-                              {language === 'bn' ? 'αªàαª¿αºüαª«αºïαªªαª┐αªñ αª¼αª╛αª▓αª╛αªçαª¿αª╛αª╢αªò αªÜαª┐αªòαª┐αºÄαª╕αª╛' : 'Verified Chemical Prescription'}
+                              {language === 'bn' ? 'অনুমোদিত বালাইনাশক চিকিৎসা' : 'Verified Chemical Prescription'}
                             </span>
                             <span className="text-[10px] text-stone-500 block mt-0.5">
                               {pInfo.registrationNo}
@@ -425,8 +425,8 @@ export const CropDoctorModal: React.FC<CropDoctorModalProps> = ({
                               {pInfo.generic}
                             </p>
                             <div className="text-[10px] text-stone-700 space-y-0.5 pt-0.5">
-                              <p><strong>{language === 'bn' ? 'αª¬αºìαª░αª»αª╝αºïαªù αª«αª╛αªñαºìαª░αª╛:' : 'Dose:'}</strong> {diagnosis.chemicalTreatment.dose}</p>
-                              <p><strong>{language === 'bn' ? 'αª╕αºìαª¬αºìαª░αºç αª╕αª«αª»αª╝αª╕αºéαªÜαºÇ:' : 'Schedule:'}</strong> {diagnosis.chemicalTreatment.schedule}</p>
+                              <p><strong>{language === 'bn' ? 'প্রয়োগ মাত্রা:' : 'Dose:'}</strong> {diagnosis.chemicalTreatment.dose}</p>
+                              <p><strong>{language === 'bn' ? 'স্প্রে সময়সূচী:' : 'Schedule:'}</strong> {diagnosis.chemicalTreatment.schedule}</p>
                             </div>
                           </div>
                         </div>
@@ -435,11 +435,11 @@ export const CropDoctorModal: React.FC<CropDoctorModalProps> = ({
                         <div className="bg-amber-50/80 border border-amber-200 rounded-lg p-2 text-[10px] text-amber-900 space-y-0.5">
                           <div className="flex items-center gap-1 font-bold">
                             <ShieldAlert className="w-3 h-3 text-amber-700 shrink-0" />
-                            <span>{language === 'bn' ? 'αª¼αª╛αª▓αª╛αªçαª¿αª╛αª╢αªò αª¿αª┐αª░αª╛αª¬αªñαºìαªñαª╛ αªô αª¼αºìαª»αª¼αª╣αª╛αª░αºçαª░ αª¿αª┐αª░αºìαªªαºçαª╢αª┐αªòαª╛:' : 'Pesticide Safety & Harvest Interval (PHI):'}</span>
+                            <span>{language === 'bn' ? 'বালাইনাশক নিরাপত্তা ও ব্যবহারের নির্দেশিকা:' : 'Pesticide Safety & Harvest Interval (PHI):'}</span>
                           </div>
                           <p className="text-[9.5px] leading-tight text-amber-800">
                             {language === 'bn'
-                              ? `αª½αª╕αª▓ αªñαºïαª▓αª╛αª░ αª¬αºéαª░αºìαª¼αª¼αª░αºìαªñαºÇ αª¿αª┐αª░αª╛αª¬αªª αª╕αª«αª»αª╝ (PHI): ${pInfo.safetyIntervalDays} αªªαª┐αª¿αÑñ αª╕αºìαª¬αºìαª░αºç αªòαª░αª╛αª░ αª╕αª«αª»αª╝ αª«αª╛αª╕αºìαªò αªô αªùαºìαª▓αª╛αª¡αª╕ αª¼αºìαª»αª¼αª╣αª╛αª░ αªòαª░αºüαª¿αÑñ αª¼αª╛αªñαª╛αª╕αºçαª░ αª¼αª┐αª¬αª░αºÇαªñαºç αª╕αºìαª¬αºìαª░αºç αªòαª░αª¼αºçαª¿ αª¿αª╛αÑñ`
+                              ? `ফসল তোলার পূর্ববর্তী নিরাপদ সময় (PHI): ${pInfo.safetyIntervalDays} দিন। স্প্রে করার সময় মাস্ক ও গ্লাভস ব্যবহার করুন। বাতাসের বিপরীতে স্প্রে করবেন না।`
                               : `Pre-Harvest Interval (PHI): ${pInfo.safetyIntervalDays} days. Wear protective mask and gloves. Avoid spraying against wind.`}
                           </p>
                         </div>
@@ -452,14 +452,14 @@ export const CropDoctorModal: React.FC<CropDoctorModalProps> = ({
                     <div>
                       <span className="font-extrabold text-teal-950 text-xs flex items-center gap-1.5 border-b border-stone-100 pb-2">
                         <Sparkles className="w-3.5 h-3.5 text-teal-600" />
-                        {language === 'bn' ? 'αª£αºêαª¼ αªô αª¬αºìαª░αª╛αªòαºâαªñαª┐αªò αª¬αºìαª░αªñαª┐αªòαª╛αª░ (αª¬αª░αª┐αª¼αºçαª╢αª¼αª╛αª¿αºìαªºαª¼)' : 'Organic Botanical Remedy (Eco-friendly)'}
+                        {language === 'bn' ? 'জৈব ও প্রাকৃতিক প্রতিকার (পরিবেশবান্ধব)' : 'Organic Botanical Remedy (Eco-friendly)'}
                       </span>
                       <p className="text-stone-700 text-[11px] leading-relaxed mt-2.5">
                         {diagnosis.organicTreatment}
                       </p>
                       {diagnosis.preventionTips && (
                         <div className="mt-2.5 pt-2 border-t border-stone-100 text-[10px] text-stone-600">
-                          <strong className="text-stone-800">{language === 'bn' ? 'αª¡αª¼αª┐αª╖αºìαª»αºÄ αª¬αºìαª░αªñαª┐αª░αºïαªº αªƒαª┐αª¬αª╕: ' : 'Future Prevention: '}</strong>
+                          <strong className="text-stone-800">{language === 'bn' ? 'ভবিষ্যৎ প্রতিরোধ টিপস: ' : 'Future Prevention: '}</strong>
                           {diagnosis.preventionTips}
                         </div>
                       )}
@@ -468,22 +468,22 @@ export const CropDoctorModal: React.FC<CropDoctorModalProps> = ({
                     <div className="bg-teal-50 border border-teal-200 rounded-lg p-2 text-[10px] text-teal-900">
                       <span className="font-bold flex items-center gap-1">
                         <CheckCircle2 className="w-3 h-3 text-teal-700" />
-                        {language === 'bn' ? 'αª¿αª┐αª░αª╛αª¬αªª αª£αºêαª¼ αªÜαª╛αª╖αª╛αª¼αª╛αªª αª¬αªªαºìαªºαªñαª┐' : 'Safe organic farming practice'}
+                        {language === 'bn' ? 'নিরাপদ জৈব চাষাবাদ পদ্ধতি' : 'Safe organic farming practice'}
                       </span>
                       <p className="text-[9.5px] text-teal-800 mt-0.5">
                         {language === 'bn'
-                          ? 'αª░αª╛αª╕αª╛αª»αª╝αª¿αª┐αªò αª¬αºìαª░αª»αª╝αºïαªùαºçαª░ αª¬αºéαª░αºìαª¼αºç αª╕αª░αºìαª¼αªªαª╛ αª£αºêαª¼ αªô αª╕αª«αª¿αºìαª¼αª┐αªñ αª¼αª╛αª▓αª╛αªç αª¼αºìαª»αª¼αª╕αºìαªÑαª╛αª¬αª¿αª╛ (IPM) αªàαª¿αºüαª╕αª░αªú αªòαª░αºüαª¿αÑñ'
+                          ? 'রাসায়নিক প্রয়োগের পূর্বে সর্বদা জৈব ও সমন্বিত বালাই ব্যবস্থাপনা (IPM) অনুসরণ করুন।'
                           : 'Always prioritize Integrated Pest Management (IPM) before chemical intervention.'}
                       </p>
                     </div>
                   </div>
                 </div>
 
-                {/* Immediate Actions ΓÇö Visual Step-by-Step Cards */}
+                {/* Immediate Actions — Visual Step-by-Step Cards */}
                 <div className="space-y-2 pt-1">
                   <div className="flex items-center gap-1.5 text-stone-900 font-extrabold text-xs">
                     <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                    <span>{language === 'bn' ? 'αªñαª╛αºÄαªòαºìαª╖αªúαª┐αªò αªòαª░αªúαºÇαª»αª╝ αª¬αªªαªòαºìαª╖αºçαª¬ (αªºαª╛αª¬ αªàαª¿αºüαª»αª╛αª»αª╝αºÇ):' : 'Immediate Step-by-Step Cultural Actions:'}</span>
+                    <span>{language === 'bn' ? 'তাৎক্ষণিক করণীয় পদক্ষেপ (ধাপ অনুযায়ী):' : 'Immediate Step-by-Step Cultural Actions:'}</span>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
@@ -493,7 +493,7 @@ export const CropDoctorModal: React.FC<CropDoctorModalProps> = ({
                         <Droplets key="2" className="w-4 h-4 text-blue-700" />,
                         <Sun key="3" className="w-4 h-4 text-amber-700" />,
                       ];
-                      const stepLabelsBn = ['αªºαª╛αª¬ αºº: αª¬αª░αª┐αªÜαºìαª¢αª¿αºìαª¿αªñαª╛ αªô αª¢αª╛αªüαªƒαª╛αªç', 'αªºαª╛αª¬ αº¿: αª¬αª╛αª¿αª┐ αªô αª╕αºçαªÜ αª¼αºìαª»αª¼αª╕αºìαªÑαª╛αª¬αª¿αª╛', 'αªºαª╛αª¬ αº⌐: αª¼αª╛αª»αª╝αºü αªô αª╕αºéαª░αºìαª»αª╛αª▓αºïαªò'];
+                      const stepLabelsBn = ['ধাপ ১: পরিচ্ছন্নতা ও ছাঁটাই', 'ধাপ ২: পানি ও সেচ ব্যবস্থাপনা', 'ধাপ ৩: বায়ু ও সূর্যালোক'];
                       const stepLabelsEn = ['Step 1: Sanitation', 'Step 2: Water Care', 'Step 3: Aeration'];
 
                       return (
@@ -504,7 +504,7 @@ export const CropDoctorModal: React.FC<CropDoctorModalProps> = ({
                           <div>
                             <div className="flex items-center justify-between mb-2">
                               <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                                {language === 'bn' ? (stepLabelsBn[idx] || `αªºαª╛αª¬ ${idx + 1}`) : (stepLabelsEn[idx] || `Step ${idx + 1}`)}
+                                {language === 'bn' ? (stepLabelsBn[idx] || `ধাপ ${idx + 1}`) : (stepLabelsEn[idx] || `Step ${idx + 1}`)}
                               </span>
                               <div className="w-6 h-6 rounded-lg bg-stone-50 border border-stone-200 flex items-center justify-center">
                                 {stepIcons[idx % stepIcons.length]}

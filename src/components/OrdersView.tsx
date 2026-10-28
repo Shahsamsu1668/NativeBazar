@@ -57,20 +57,60 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ currentUser, language })
     loadOrders();
   }, [currentUser?.id]);
 
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  const isOrderInTab = (o: SupplyChainOrder, tab: OrderTabId) => {
+    const ot = (o.orderType || '').toLowerCase();
+    const sRole = (o.sellerRole || '').toLowerCase();
+    const bRole = (o.buyerRole || '').toLowerCase();
+
+    if (tab === 'farmer_to_wholesaler') {
+      return (
+        ot === 'farmer_to_wholesaler' ||
+        ot === '1st_tier' ||
+        ot === 'supplier_input' ||
+        (sRole === 'farmer' && (bRole === 'wholesaler' || bRole === 'businessman'))
+      );
+    }
+    if (tab === 'wholesaler_to_retailer') {
+      return (
+        ot === 'wholesaler_to_retailer' ||
+        ot === '2nd_tier' ||
+        ot === 'b2b_trade' ||
+        ((sRole === 'wholesaler' || sRole === 'businessman') && (bRole === 'retailer' || bRole === 'supplier'))
+      );
+    }
+    if (tab === 'retailer_to_consumer') {
+      return (
+        ot === 'retailer_to_consumer' ||
+        ot === '3rd_tier' ||
+        ot === 'consumer_retail' ||
+        ((sRole === 'retailer' || sRole === 'supplier') && (bRole === 'consumer' || bRole === 'customer'))
+      );
+    }
+    return false;
+  };
+
   const handleUpdateStatus = async (
     orderId: string,
     status: 'Confirmed' | 'Processing' | 'Dispatched' | 'Delivered' | 'Cancelled'
   ) => {
     try {
       await orderApi.updateStatus(orderId, status, currentUser?.name || 'Authorized User', currentUser?.role || 'admin');
+      showToast(t(`Order ${orderId} status updated to ${status}.`, `অর্ডার ${orderId} স্ট্যাটাস ${status} এ পরিবর্তিত হয়েছে।`));
       loadOrders();
     } catch (e: any) {
-      alert(e.message || 'Status update failed');
+      showToast(e.message || t('Status update failed', 'স্ট্যাটাস আপডেট ব্যর্থ হয়েছে'));
     }
   };
 
   // Filter orders by active tab
-  const filteredOrders = orders.filter((o) => o.orderType === activeTab);
+  const filteredOrders = orders.filter((o) => isOrderInTab(o, activeTab));
 
   const getStatusBadge = (status: SupplyChainOrder['status']) => {
     switch (status) {
@@ -150,6 +190,14 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ currentUser, language })
         </div>
       </div>
 
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed bottom-6 right-6 z-50 bg-stone-900 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2.5 text-xs font-semibold border border-stone-700 animate-fade-in">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
       {/* Tabs */}
       <div className="flex items-center gap-2 border-b border-stone-200 pb-2 overflow-x-auto no-scrollbar">
         <button
@@ -163,7 +211,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ currentUser, language })
           <Sprout className="w-4 h-4" />
           <span>{t('Tier 1: Farmer → Wholesaler', '১ম স্তর: কৃষক → পাইকার')}</span>
           <span className="bg-stone-900 text-white text-[10px] px-1.5 py-0.2 rounded-full">
-            {orders.filter((o) => o.orderType === 'farmer_to_wholesaler').length}
+            {orders.filter((o) => isOrderInTab(o, 'farmer_to_wholesaler')).length}
           </span>
         </button>
 
@@ -176,9 +224,9 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ currentUser, language })
           }`}
         >
           <Building className="w-4 h-4" />
-          <span>{t('Tier 2: Wholesaler → Retailer', '২য় স্তর: পাইকার → খুচরা')}</span>
+          <span>{t('Tier 2: Wholesaler → Retailer', '২য় স্তর: পাইকার → খুচরা')}</span>
           <span className="bg-stone-900 text-white text-[10px] px-1.5 py-0.2 rounded-full">
-            {orders.filter((o) => o.orderType === 'wholesaler_to_retailer').length}
+            {orders.filter((o) => isOrderInTab(o, 'wholesaler_to_retailer')).length}
           </span>
         </button>
 
@@ -191,9 +239,9 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ currentUser, language })
           }`}
         >
           <ShoppingCart className="w-4 h-4" />
-          <span>{t('Tier 3: Retailer → Consumer', '৩য় স্তর: খুচরা → ভোক্তা')}</span>
+          <span>{t('Tier 3: Retailer → Consumer', '৩য় স্তর: খুচরা → ভোক্তা')}</span>
           <span className="bg-stone-900 text-white text-[10px] px-1.5 py-0.2 rounded-full">
-            {orders.filter((o) => o.orderType === 'retailer_to_consumer').length}
+            {orders.filter((o) => isOrderInTab(o, 'retailer_to_consumer')).length}
           </span>
         </button>
       </div>
@@ -230,7 +278,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ currentUser, language })
                   <span className="font-mono font-extrabold text-stone-900 text-sm">
                     {order.id}
                   </span>
-                  {getStatusBadge(order.status)}
+                  {getStatusBadge(order.status || order.deliveryStatus)}
                   <span className="text-[11px] text-stone-400">
                     {new Date(order.createdAt).toLocaleDateString()}
                   </span>
@@ -308,7 +356,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ currentUser, language })
                       Confirm
                     </button>
                   )}
-                  {order.status === 'Confirmed' && (
+                  {(order.status === 'Confirmed' || order.deliveryStatus === 'Confirmed') && (
                     <button
                       onClick={() => handleUpdateStatus(order.id, 'Dispatched')}
                       className="bg-purple-600 hover:bg-purple-700 text-white font-bold px-3 py-1.5 rounded-xl text-xs"
@@ -316,7 +364,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ currentUser, language })
                       Dispatch
                     </button>
                   )}
-                  {order.status === 'Dispatched' && (
+                  {(order.status === 'Dispatched' || order.deliveryStatus === 'Dispatched') && (
                     <button
                       onClick={() => handleUpdateStatus(order.id, 'Delivered')}
                       className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-xl text-xs"

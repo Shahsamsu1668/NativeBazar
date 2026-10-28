@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { MarketplaceProduct, Language, User } from '../types';
 import { productApi, orderApi } from '../services/api';
 import {
@@ -82,6 +82,14 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
     totalBDT: number;
     retailerName: string;
   } | null>(null);
+  const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+  const showToast = (text: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setToastMessage({ text, type });
+    setTimeout(() => {
+      setToastMessage((prev) => (prev?.text === text ? null : prev));
+    }, 4000);
+  };
 
   // Save cart to local storage
   useEffect(() => {
@@ -109,7 +117,7 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
       console.error('Failed to load marketplace products', err);
       setError(
         language === 'bn'
-          ? 'αª¬αªúαºìαª» αª▓αºïαªí αªòαª░αªñαºç αª¼αºìαª»αª░αºìαªÑ αª╣αª»αª╝αºçαª¢αºçαÑñ αª╕αºìαªÑαª╛αª¿αºÇαª»αª╝ αª╕αª╛αª░αºìαª¡αª╛αª░ αªÜαª╛αª▓αºü αªåαª¢αºç αªòαª┐αª¿αª╛ αª¬αª░αºÇαªòαºìαª╖αª╛ αªòαª░αºüαª¿αÑñ'
+          ? 'পণ্য লোড করতে ব্যর্থ হয়েছে। স্থানীয় সার্ভার চালু আছে কিনা পরীক্ষা করুন।'
           : 'Failed to load products. Checking local database...'
       );
     } finally {
@@ -188,10 +196,11 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
     if (cart.length === 0) return;
 
     if (!customerName.trim() || !phone.trim() || !deliveryAddress.trim()) {
-      alert(
+      showToast(
         language === 'bn'
-          ? 'αªàαª¿αºüαªùαºìαª░αª╣ αªòαª░αºç αªåαª¬αª¿αª╛αª░ αª¿αª╛αª«, αª«αºïαª¼αª╛αªçαª▓ αª¿αª«αºìαª¼αª░ αªÅαª¼αªé αª╕αª«αºìαª¬αºéαª░αºìαªú αªíαºçαª▓αª┐αª¡αª╛αª░αª┐ αªáαª┐αªòαª╛αª¿αª╛ αª¬αºéαª░αªú αªòαª░αºüαª¿αÑñ'
-          : 'Please provide your name, phone number, and delivery address.'
+          ? 'অনুগ্রহ করে আপনার নাম, মোবাইল নম্বর এবং সম্পূর্ণ ডেলিভারি ঠিকানা পূরণ করুন।'
+          : 'Please provide your name, phone number, and delivery address.',
+        'error'
       );
       return;
     }
@@ -235,7 +244,7 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
         });
 
         if (res.success && res.order) {
-          lastOrderId = res.order.id;
+          lastOrderId = res.order.id || res.order.orderId;
         }
       }
 
@@ -251,11 +260,12 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
       fetchProducts(); // Refresh stock
     } catch (err: any) {
       console.error('Order placement failed', err);
-      alert(
+      showToast(
         err.message ||
           (language === 'bn'
-            ? 'αªàαª░αºìαªíαª╛αª░ αª¬αºìαª░αªòαºìαª░αª┐αª»αª╝αª╛ αªòαª░αªñαºç αªñαºìαª░αºüαªƒαª┐ αª╣αª»αª╝αºçαª¢αºçαÑñ αªàαª¿αºüαªùαºìαª░αª╣ αªòαª░αºç αªåαª¼αª╛αª░ αªÜαºçαª╖αºìαªƒαª╛ αªòαª░αºüαª¿αÑñ'
-            : 'Failed to place order. Please try again.')
+            ? 'অর্ডার প্রক্রিয়া করতে ত্রুটি হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।'
+            : 'Failed to place order. Please try again.'),
+        'error'
       );
     } finally {
       setSubmittingOrder(false);
@@ -271,15 +281,15 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
             <Sparkles className="w-3.5 h-3.5" />
             <span>
               {language === 'bn'
-                ? 'αª¼αªùαºüαªíαª╝αª╛ αªô αªëαªñαºìαªñαª░αª¼αªÖαºìαªùαºçαª░ αª╕αª░αª╛αª╕αª░αª┐ αªûαºüαªÜαª░αª╛ αªòαºâαª╖αª┐αª¬αªúαºìαª» αª½αª┐αªí'
-                : 'Fresh Retail Harvests ΓÇó Direct from Local Retailers & Verified Hubs'}
+                ? 'বগুড়া ও উত্তরবঙ্গের সরাসরি খুচরা কৃষিপণ্য ফিড'
+                : 'Fresh Retail Harvests • Direct from Local Retailers & Verified Hubs'}
             </span>
           </div>
 
           <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight leading-tight">
             {language === 'bn' ? (
               <>
-                αªñαª╛αª£αª╛ αªªαºçαª╢αª┐ αªòαºâαª╖αª┐αª¬αªúαºìαª» αªòαª┐αª¿αºüαª¿, <span className="text-emerald-400">αª¿αª┐αª░αª╛αª¬αªª αªô αª╕αºìαª¼αªÜαºìαª¢ αª«αºéαª▓αºìαª»αºç</span>
+                তাজা দেশি কৃষিপণ্য কিনুন, <span className="text-emerald-400">নিরাপদ ও স্বচ্ছ মূল্যে</span>
               </>
             ) : (
               <>
@@ -290,7 +300,7 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
 
           <p className="text-stone-300 text-xs sm:text-sm leading-relaxed max-w-2xl">
             {language === 'bn'
-              ? 'αªòαºïαª¿αºï αªàαºìαª»αª╛αªòαª╛αªëαª¿αºìαªƒ αª¼αª╛ αª▓αªùαªçαª¿ αª¬αºìαª░αºƒαºïαª£αª¿ αª¿αºçαªçαÑñ αª¼αª┐αª╢αºìαª¼αª╕αºìαªñ αªûαºüαªÜαª░αª╛ αª¼αª┐αªòαºìαª░αºçαªñαª╛ αªô αª¼αª╛αª£αª╛αª░ αªòαºçαª¿αºìαªªαºìαª░ αªÑαºçαªòαºç αªƒαª╛αªƒαªòαª╛ αª╕αª¼αª£αª┐, αªåαª▓αºü, αª«αª░αª┐αªÜ αªô αª╢αª╕αºìαª» αª¼αºçαª¢αºç αª¿αª┐αª¿αÑñ αª¬αºìαª░αªñαª┐αªƒαª┐ αª¬αªúαºìαª»αºç αª░αºƒαºçαª¢αºç αªòαºâαª╖αªò αªëαºÄαª╕αºçαª░ αªƒαºìαª░αºçαª╕αºçαª¼αª┐αª▓αª┐αªƒαª┐αÑñ'
+              ? 'কোনো অ্যাকাউন্ট বা লগইন প্রয়োজন নেই। বিশ্বস্ত খুচরা বিক্রেতা ও বাজার কেন্দ্র থেকে টাটকা সবজি, আলু, মরিচ ও শস্য বেছে নিন। প্রতিটি পণ্যে রয়েছে কৃষক উৎসের ট্রেসেবিলিটি।'
               : 'Zero registration required for shoppers. Browse daily retail harvests from certified market retailers, verify farm origins, and enjoy same-day home delivery.'}
           </p>
 
@@ -298,15 +308,15 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
           <div className="pt-2 flex flex-wrap items-center gap-4 text-xs text-stone-300">
             <div className="flex items-center gap-1.5 bg-black/30 px-3 py-1.5 rounded-xl border border-white/10">
               <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              <span>{language === 'bn' ? 'αººαºªαºª% αª½αª░αª«αª╛αª▓αª┐αª¿αª«αºüαªòαºìαªñ αªô αª¿αª┐αª░αª╛αª¬αªª' : '100% Quality & Origin Checked'}</span>
+              <span>{language === 'bn' ? '১০০% ফরমালিনমুক্ত ও নিরাপদ' : '100% Quality & Origin Checked'}</span>
             </div>
             <div className="flex items-center gap-1.5 bg-black/30 px-3 py-1.5 rounded-xl border border-white/10">
               <Truck className="w-4 h-4 text-teal-400" />
-              <span>{language === 'bn' ? 'αªªαºìαª░αºüαªñ αª╣αºïαª« αªíαºçαª▓αª┐αª¡αª╛αª░αª┐' : 'Local Fast Van Delivery'}</span>
+              <span>{language === 'bn' ? 'দ্রুত হোম ডেলিভারি' : 'Local Fast Van Delivery'}</span>
             </div>
             <div className="flex items-center gap-1.5 bg-black/30 px-3 py-1.5 rounded-xl border border-white/10">
               <BadgeCheck className="w-4 h-4 text-amber-400" />
-              <span>{language === 'bn' ? 'αªûαºüαªÜαª░αª╛ αª¼αª┐αªòαºìαª░αºçαªñαª╛ αªùαºìαª»αª╛αª░αª╛αª¿αºìαªƒαª┐' : 'Verified Retailer Guarantee'}</span>
+              <span>{language === 'bn' ? 'খুচরা বিক্রেতা গ্যারান্টি' : 'Verified Retailer Guarantee'}</span>
             </div>
           </div>
         </div>
@@ -323,9 +333,9 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
               <ShoppingBag className="w-4 h-4" />
             </div>
             <div>
-              <span className="font-bold text-sm">αº│{cartSubtotalBDT}</span>
+              <span className="font-bold text-sm">৳{cartSubtotalBDT}</span>
               <span className="text-stone-400 text-xs ml-2">
-                ({totalKg.toFixed(1)} kg ΓÇó {cart.length} {language === 'bn' ? 'αªåαªçαªƒαºçαª«' : 'items'})
+                ({totalKg.toFixed(1)} kg • {cart.length} {language === 'bn' ? 'আইটেম' : 'items'})
               </span>
             </div>
           </div>
@@ -335,13 +345,13 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
               onClick={() => setIsCartOpen(true)}
               className="bg-stone-800 hover:bg-stone-700 text-stone-200 px-3 py-1.5 rounded-xl text-xs font-semibold"
             >
-              {language === 'bn' ? 'αªòαª╛αª░αºìαªƒ αª¼αª┐αª╕αºìαªñαª╛αª░αª┐αªñ' : 'View Basket'}
+              {language === 'bn' ? 'কার্ট বিস্তারিত' : 'View Basket'}
             </button>
             <button
               onClick={() => setShowCheckoutModal(true)}
               className="bg-emerald-500 hover:bg-emerald-400 text-stone-950 font-extrabold px-4 py-1.5 rounded-xl text-xs flex items-center gap-1.5 shadow-md"
             >
-              <span>{language === 'bn' ? 'αªàαª░αºìαªíαª╛αª░ αªªαª┐αª¿' : 'Guest Checkout'}</span>
+              <span>{language === 'bn' ? 'অর্ডার দিন' : 'Guest Checkout'}</span>
               <Truck className="w-3.5 h-3.5" />
             </button>
           </div>
@@ -360,7 +370,7 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={
                 language === 'bn'
-                  ? 'αª╕αª¼αª£αª┐, αªåαª▓αºü, αª«αª░αª┐αªÜ αª¼αª╛ αªûαºüαªÜαª░αª╛ αª¼αª┐αªòαºìαª░αºçαªñαª╛ αªûαºüαªüαª£αºüαª¿...'
+                  ? 'সবজি, আলু, মরিচ বা খুচরা বিক্রেতা খুঁজুন...'
                   : 'Search fresh tomatoes, potatoes, chilies, or retailers...'
               }
               className="w-full pl-9 pr-20 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs font-medium text-stone-800 placeholder-stone-400 focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
@@ -369,7 +379,7 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
               type="submit"
               className="absolute right-1.5 top-1/2 -translate-y-1/2 bg-stone-900 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg hover:bg-stone-800"
             >
-              {language === 'bn' ? 'αªûαºüαªüαª£αºüαª¿' : 'Search'}
+              {language === 'bn' ? 'খুঁজুন' : 'Search'}
             </button>
           </form>
 
@@ -377,7 +387,7 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
           <div className="flex items-center gap-2 shrink-0">
             <MapPin className="w-4 h-4 text-emerald-600 shrink-0" />
             <span className="text-xs font-bold text-stone-600 shrink-0">
-              {language === 'bn' ? 'αª£αºçαª▓αª╛:' : 'District:'}
+              {language === 'bn' ? 'জেলা:' : 'District:'}
             </span>
             <select
               value={selectedDistrict}
@@ -386,7 +396,7 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
             >
               {DISTRICTS.map((d) => (
                 <option key={d} value={d}>
-                  {d === 'All' ? (language === 'bn' ? 'αª╕αªòαª▓ αª£αºçαª▓αª╛' : 'All Districts') : d}
+                  {d === 'All' ? (language === 'bn' ? 'সকল জেলা' : 'All Districts') : d}
                 </option>
               ))}
             </select>
@@ -405,12 +415,12 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
                   : 'bg-stone-100 text-stone-600 hover:bg-stone-200 border border-stone-200/80'
               }`}
             >
-              {cat === 'All' ? (language === 'bn' ? 'αª╕αª¼ αª¬αªúαºìαª»' : 'All Products') : cat}
+              {cat === 'All' ? (language === 'bn' ? 'সব পণ্য' : 'All Products') : cat}
             </button>
           ))}
           <button
             onClick={fetchProducts}
-            title={language === 'bn' ? 'αª░αª┐αª½αºìαª░αºçαª╢' : 'Refresh'}
+            title={language === 'bn' ? 'রিফ্রেশ' : 'Refresh'}
             className="p-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-600 border border-stone-200 shrink-0 ml-auto"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-emerald-600' : ''}`} />
@@ -427,7 +437,7 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
               <RefreshCw className="w-8 h-8 mx-auto text-emerald-600 animate-spin" />
               <p className="text-xs font-semibold text-stone-600">
                 {language === 'bn'
-                  ? 'αªñαª╛αª£αª╛ αªûαºüαªÜαª░αª╛ αªòαºâαª╖αª┐αª¬αªúαºìαª» αª½αª┐αªí αª▓αºïαªí αª╣αªÜαºìαª¢αºç...'
+                  ? 'তাজা খুচরা কৃষিপণ্য ফিড লোড হচ্ছে...'
                   : 'Loading fresh retail marketplace stream...'}
               </p>
             </div>
@@ -442,7 +452,7 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
                   onClick={fetchProducts}
                   className="mt-2 text-xs font-bold underline hover:text-red-900"
                 >
-                  {language === 'bn' ? 'αª¬αºüαª¿αª░αª╛αª»αª╝ αªÜαºçαª╖αºìαªƒαª╛ αªòαª░αºüαª¿' : 'Retry'}
+                  {language === 'bn' ? 'পুনরায় চেষ্টা করুন' : 'Retry'}
                 </button>
               </div>
             </div>
@@ -452,11 +462,11 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
             <div className="text-center py-16 bg-white rounded-3xl border border-stone-200 p-8 space-y-3 shadow-xs">
               <Store className="w-12 h-12 text-stone-300 mx-auto" />
               <h3 className="text-base font-bold text-stone-800">
-                {language === 'bn' ? 'αªòαºïαª¿αºï αª¬αªúαºìαª» αª¬αª╛αªôαª»αª╝αª╛ αª»αª╛αª»αª╝αª¿αª┐' : 'No Retail Products Found'}
+                {language === 'bn' ? 'কোনো পণ্য পাওয়া যায়নি' : 'No Retail Products Found'}
               </h3>
               <p className="text-xs text-stone-500 max-w-sm mx-auto">
                 {language === 'bn'
-                  ? 'αªÅαªç αªòαºìαª»αª╛αªƒαª╛αªùαª░αª┐ αª¼αª╛ αª£αºçαª▓αª╛αª»αª╝ αª¼αª░αºìαªñαª«αª╛αª¿αºç αªòαºïαª¿αºï αªûαºüαªÜαª░αª╛ αª¼αª┐αªòαºìαª░αºçαªñαª╛ αª¬αªúαºìαª» αª¬αºïαª╕αºìαªƒ αªòαª░αºçαª¿αª¿αª┐αÑñ'
+                  ? 'এই ক্যাটাগরি বা জেলায় বর্তমানে কোনো খুচরা বিক্রেতা পণ্য পোস্ট করেননি।'
                   : 'No retail products matching your current filters. Try selecting "All" or a different category.'}
               </p>
               <button
@@ -468,7 +478,7 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
                 }}
                 className="mt-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2 rounded-xl transition-all"
               >
-                {language === 'bn' ? 'αª½αª┐αª▓αºìαªƒαª╛αª░ αª░αª┐αª╕αºçαªƒ αªòαª░αºüαª¿' : 'Reset Filters'}
+                {language === 'bn' ? 'ফিল্টার রিসেট করুন' : 'Reset Filters'}
               </button>
             </div>
           )}
@@ -506,7 +516,7 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
                         <p className="text-[11px] text-stone-500 flex items-center gap-1 mt-0.5">
                           <MapPin className="w-3 h-3 text-stone-400" />
                           <span>
-                            {product.locationDetails || product.district} ΓÇó{' '}
+                            {product.locationDetails || product.district} •{' '}
                             <span className="text-emerald-700 font-semibold">Retail Outlet</span>
                           </span>
                         </p>
@@ -527,7 +537,7 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
                         onClick={() => {
                           if (navigator.clipboard) {
                             navigator.clipboard.writeText(window.location.href);
-                            alert(language === 'bn' ? 'αª▓αª┐αªÖαºìαªò αªòαª¬αª┐ αªòαª░αª╛ αª╣αª»αª╝αºçαª¢αºç!' : 'Link copied to clipboard!');
+                            showToast(language === 'bn' ? 'লিঙ্ক কপি করা হয়েছে!' : 'Link copied to clipboard!', 'info');
                           }
                         }}
                         className="p-2 rounded-xl text-stone-400 hover:text-stone-700 hover:bg-stone-50 transition-colors"
@@ -572,13 +582,13 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
                     <div className="absolute bottom-3 right-3 bg-white/95 backdrop-blur-md rounded-2xl p-2 px-3 shadow-lg border border-stone-200/80 text-right">
                       <div className="flex items-baseline gap-1 justify-end">
                         <span className="text-base sm:text-lg font-black text-stone-900">
-                          αº│{product.pricePerKg}
+                          ৳{product.pricePerKg}
                         </span>
                         <span className="text-[11px] font-semibold text-stone-500">/kg</span>
                       </div>
                       {product.marketPricePerKg && product.marketPricePerKg > product.pricePerKg && (
                         <span className="text-[10px] text-stone-400 line-through block">
-                          Govt DAM: αº│{product.marketPricePerKg}/kg
+                          Govt DAM: ৳{product.marketPricePerKg}/kg
                         </span>
                       )}
                     </div>
@@ -592,7 +602,7 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
                           {language === 'bn' ? product.banglaName || product.cropName : product.cropName}
                         </h3>
                         <span className="text-xs text-stone-500 font-medium">
-                          {language === 'bn' ? 'αª£αª╛αªñ:' : 'Variety:'}{' '}
+                          {language === 'bn' ? 'জাত:' : 'Variety:'}{' '}
                           <span className="font-bold text-stone-700">
                             {product.variety || 'Local Deshi'}
                           </span>
@@ -611,14 +621,14 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
                           <div className="flex items-center gap-1.5">
                             <ShieldCheck className="w-4 h-4 text-emerald-600" />
                             <span>
-                              {language === 'bn' ? 'αªëαºÄαª¬αªñαºìαªñαª┐ αªô αªƒαºìαª░αºçαª╕αºçαª¼αª┐αª▓αª┐αªƒαª┐:' : 'Traceability & Origin:'}
+                              {language === 'bn' ? 'উৎপত্তি ও ট্রেসেবিলিটি:' : 'Traceability & Origin:'}
                             </span>
                           </div>
                           <button
                             onClick={() => toggleTrace(product.id)}
                             className="text-emerald-700 hover:text-emerald-800 text-[11px] font-bold flex items-center gap-0.5"
                           >
-                            <span>{isTraceExpanded ? 'αª╕αªéαªòαºìαª╖αª┐αª¬αºìαªñ' : 'αª»αª╛αªÜαª╛αªç αª¼αª┐αª╕αºìαªñαª╛αª░αª┐αªñ'}</span>
+                            <span>{isTraceExpanded ? 'সংক্ষিপ্ত' : 'যাচাই বিস্তারিত'}</span>
                             {isTraceExpanded ? (
                               <ChevronUp className="w-3.5 h-3.5" />
                             ) : (
@@ -629,11 +639,11 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
 
                         <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-stone-600">
                           <span>
-                            ≡ƒî▒ <strong>Farmer Origin:</strong>{' '}
+                            🌱 <strong>Farmer Origin:</strong>{' '}
                             {product.traceability?.farmerOrigin || product.district}
                           </span>
                           <span>
-                            ≡ƒÅó <strong>Procured Arat:</strong>{' '}
+                            🏢 <strong>Procured Arat:</strong>{' '}
                             {product.traceability?.wholesalerArat || 'Direct Mokam'}
                           </span>
                         </div>
@@ -642,16 +652,16 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
                         {isTraceExpanded && (
                           <div className="mt-3 pt-3 border-t border-stone-200/80 space-y-1.5 text-[11px] text-stone-600 animate-slide-down">
                             <p>
-                              ≡ƒùô∩╕Å <strong>Procurement Timeline:</strong>{' '}
+                              🗓️ <strong>Procurement Timeline:</strong>{' '}
                               {product.traceability?.procurementDate || 'Within 24 hours from farm gate'}
                             </p>
                             <p>
-                              ≡ƒ¢í∩╕Å <strong>Purity & Safety Assurance:</strong>{' '}
+                              🛡️ <strong>Purity & Safety Assurance:</strong>{' '}
                               {product.traceability?.safetyNote ||
                                 'Verified formalin-free and harvested following natural post-harvest safety.'}
                             </p>
                             <p>
-                              ≡ƒô₧ <strong>Retailer Verification:</strong> Call{' '}
+                              📞 <strong>Retailer Verification:</strong> Call{' '}
                               <span className="font-bold text-stone-800">
                                 {product.sellerPhone || 'Verified in NativeBazar Database'}
                               </span>
@@ -664,7 +674,7 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
                     {/* Stock & Add to Cart Controls */}
                     <div className="pt-3 border-t border-stone-100 flex items-center justify-between gap-3">
                       <div className="text-xs text-stone-500">
-                        {language === 'bn' ? 'αª«αª£αºüαªª αªåαª¢αºç:' : 'Stock Available:'}{' '}
+                        {language === 'bn' ? 'মজুদ আছে:' : 'Stock Available:'}{' '}
                         <strong className="text-stone-800 font-bold">
                           {product.availableKg} kg
                         </strong>
@@ -700,7 +710,7 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
                           className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-stone-300 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-xs transition-all hover:scale-102 active:scale-98"
                         >
                           <Plus className="w-4 h-4" />
-                          <span>{language === 'bn' ? 'αª¼αºìαª»αª╛αªùαºç αª»αºïαªù αªòαª░αºüαª¿' : 'Add to Basket'}</span>
+                          <span>{language === 'bn' ? 'ব্যাগে যোগ করুন' : 'Add to Basket'}</span>
                         </button>
                       )}
                     </div>
@@ -721,15 +731,15 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
                 </div>
                 <div>
                   <h3 className="font-extrabold text-stone-900 text-sm">
-                    {language === 'bn' ? 'αªåαª¬αª¿αª╛αª░ αª¼αª╛αª£αª╛αª░ αª¥αºüαº£αª┐' : 'Your Shopping Basket'}
+                    {language === 'bn' ? 'আপনার বাজার ঝুড়ি' : 'Your Shopping Basket'}
                   </h3>
                   <p className="text-[10px] text-stone-400">
-                    {language === 'bn' ? 'αª▓αªùαªçαª¿ αª¢αª╛αº£αª╛αªç αª╕αª╣αª£αºç αªàαª░αºìαªíαª╛αª░ αªòαª░αºüαª¿' : 'Guest checkout ΓÇó No login needed'}
+                    {language === 'bn' ? 'লগইন ছাড়াই সহজে অর্ডার করুন' : 'Guest checkout • No login needed'}
                   </p>
                 </div>
               </div>
               <span className="bg-emerald-100 text-emerald-800 font-extrabold text-xs px-2 py-0.5 rounded-full">
-                {cart.length} {language === 'bn' ? 'αªƒαª┐' : 'items'}
+                {cart.length} {language === 'bn' ? 'টি' : 'items'}
               </span>
             </div>
 
@@ -748,7 +758,7 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
                             : item.product.cropName}
                         </h4>
                         <p className="text-[10px] text-stone-500">
-                          {item.quantityKg} kg ├ù αº│{item.product.pricePerKg} ΓÇó{' '}
+                          {item.quantityKg} kg × ৳{item.product.pricePerKg} •{' '}
                           <span className="text-emerald-700 font-semibold truncate">
                             {item.product.sellerName}
                           </span>
@@ -757,7 +767,7 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
 
                       <div className="flex items-center gap-2 shrink-0">
                         <span className="font-black text-stone-900 text-xs">
-                          αº│{item.quantityKg * item.product.pricePerKg}
+                          ৳{item.quantityKg * item.product.pricePerKg}
                         </span>
                         <button
                           onClick={() => removeFromCart(item.product.id)}
@@ -774,18 +784,18 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
                 {/* Calculation breakdown */}
                 <div className="space-y-1.5 pt-3 border-t border-stone-200 text-xs">
                   <div className="flex justify-between text-stone-600">
-                    <span>{language === 'bn' ? 'αª¬αªúαºìαª»αºçαª░ αª«αºïαªƒ αª«αºéαª▓αºìαª»' : 'Items Subtotal'}</span>
-                    <span className="font-semibold text-stone-800">αº│{cartSubtotalBDT}</span>
+                    <span>{language === 'bn' ? 'পণ্যের মোট মূল্য' : 'Items Subtotal'}</span>
+                    <span className="font-semibold text-stone-800">৳{cartSubtotalBDT}</span>
                   </div>
                   <div className="flex justify-between text-stone-600">
-                    <span>{language === 'bn' ? 'αªíαºçαª▓αª┐αª¡αª╛αª░αª┐ αªÜαª╛αª░αºìαª£ (αª▓αºïαªòαª╛αª▓ αª¡αºìαª»αª╛αª¿)' : 'Local Delivery'}</span>
+                    <span>{language === 'bn' ? 'ডেলিভারি চার্জ (লোকাল ভ্যান)' : 'Local Delivery'}</span>
                     <span className="font-semibold text-emerald-700">
-                      {deliveryFeeBDT === 0 ? 'Free' : `αº│${deliveryFeeBDT}`}
+                      {deliveryFeeBDT === 0 ? 'Free' : `৳${deliveryFeeBDT}`}
                     </span>
                   </div>
                   <div className="flex justify-between text-stone-900 font-black text-sm pt-2 border-t border-dashed border-stone-200">
-                    <span>{language === 'bn' ? 'αª╕αª░αºìαª¼αª«αºïαªƒ αª¬αºìαª░αªªαºçαª»αª╝' : 'Total Payable'}</span>
-                    <span className="text-emerald-700 text-base">αº│{grandTotalBDT}</span>
+                    <span>{language === 'bn' ? 'সর্বমোট প্রদেয়' : 'Total Payable'}</span>
+                    <span className="text-emerald-700 text-base">৳{grandTotalBDT}</span>
                   </div>
                 </div>
 
@@ -796,7 +806,7 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
                 >
                   <ShieldCheck className="w-4 h-4" />
                   <span>
-                    {language === 'bn' ? 'αªùαºçαª╕αºìαªƒ αªÜαºçαªòαªåαªëαªƒ αªòαª░αºüαª¿' : 'Proceed to Checkout'}
+                    {language === 'bn' ? 'গেস্ট চেকআউট করুন' : 'Proceed to Checkout'}
                   </span>
                 </button>
               </div>
@@ -804,11 +814,11 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
               <div className="text-center py-10 space-y-2 text-stone-400">
                 <ShoppingCart className="w-10 h-10 mx-auto text-stone-300 stroke-1" />
                 <p className="text-xs font-semibold text-stone-600">
-                  {language === 'bn' ? 'αªåαª¬αª¿αª╛αª░ αª¥αºüαªíαª╝αª┐ αªûαª╛αª▓αª┐ αªåαª¢αºç' : 'Your basket is empty'}
+                  {language === 'bn' ? 'আপনার ঝুড়ি খালি আছে' : 'Your basket is empty'}
                 </p>
                 <p className="text-[11px] text-stone-400">
                   {language === 'bn'
-                    ? 'αª½αª┐αªí αªÑαºçαªòαºç αª¬αª¢αª¿αºìαªªαª«αªñαºï αªñαª╛αª£αª╛ αª¬αªúαºìαª» αª»αºïαªù αªòαª░αºüαª¿'
+                    ? 'ফিড থেকে পছন্দমতো তাজা পণ্য যোগ করুন'
                     : 'Tap "Add to Basket" on any fresh product in the feed'}
                 </p>
               </div>
@@ -818,11 +828,11 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
             <div className="mt-5 pt-4 border-t border-stone-100 space-y-2 text-[11px] text-stone-500">
               <div className="flex items-center gap-1.5 font-semibold text-stone-700">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                <span>{language === 'bn' ? 'αª╕αºìαª¼αªÜαºìαª¢ αªûαºüαªÜαª░αª╛ αª¼αª╛αª£αª╛αª░' : 'Fair Retail Guarantee'}</span>
+                <span>{language === 'bn' ? 'স্বচ্ছ খুচরা বাজার' : 'Fair Retail Guarantee'}</span>
               </div>
               <p className="leading-relaxed">
                 {language === 'bn'
-                  ? 'αª¬αºìαª░αªñαª┐αªƒαª┐ αªàαª░αºìαªíαª╛αª░ αª╕αºìαªÑαª╛αª¿αºÇαºƒ αª¡αºìαª»αª╛αª¿ αª¼αª╛ αªíαºçαª▓αª┐αª¡αª╛αª░αª┐ αª╕αª╛αª░αºìαª¡αª┐αª╕αºçαª░ αª«αª╛αªºαºìαª»αª«αºç αªªαºìαª░αºüαªñ αªáαª┐αªòαª╛αª¿αª╛αºƒ αª¬αºîαªüαª¢αºç αªªαºçαªôαºƒαª╛ αª╣αºƒαÑñ αªòαºìαª»αª╛αª╢ αªàαª¿ αªíαºçαª▓αª┐αª¡αª╛αª░αª┐ αª╕αºüαª¼αª┐αªºαª╛ αª░αºƒαºçαª¢αºçαÑñ'
+                  ? 'প্রতিটি অর্ডার স্থানীয় ভ্যান বা ডেলিভারি সার্ভিসের মাধ্যমে দ্রুত ঠিকানায় পৌঁছে দেওয়া হয়। ক্যাশ অন ডেলিভারি সুবিধা রয়েছে।'
                   : 'Pay upon delivery after checking physical freshness and crate quality.'}
               </p>
             </div>
@@ -843,11 +853,11 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
 
                 <div className="space-y-1">
                   <h3 className="text-xl font-black text-stone-900">
-                    {language === 'bn' ? 'αªàαª░αºìαªíαª╛αª░ αª╕αª½αª▓αª¡αª╛αª¼αºç αª¿αª┐αª╢αºìαªÜαª┐αªñ αª╣αª»αª╝αºçαª¢αºç!' : 'Order Placed Successfully!'}
+                    {language === 'bn' ? 'অর্ডার সফলভাবে নিশ্চিত হয়েছে!' : 'Order Placed Successfully!'}
                   </h3>
                   <p className="text-xs text-stone-600">
                     {language === 'bn'
-                      ? 'αªûαºüαªÜαª░αª╛ αª¼αª┐αªòαºìαª░αºçαªñαª╛ αªåαª¬αª¿αª╛αª░ αªàαª░αºìαªíαª╛αª░ αª¬αºìαª»αª╛αªòαºçαª£αª┐αªé αª╢αºüαª░αºü αªòαª░αºçαª¢αºçαª¿αÑñ'
+                      ? 'খুচরা বিক্রেতা আপনার অর্ডার প্যাকেজিং শুরু করেছেন।'
                       : 'The verified local retailer has received your delivery dispatch request.'}
                   </p>
                 </div>
@@ -866,7 +876,7 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
                   <div className="flex justify-between">
                     <span className="text-stone-500">Total Payable:</span>
                     <strong className="text-emerald-700 font-bold text-sm">
-                      αº│{orderSuccessDetails.totalBDT}
+                      ৳{orderSuccessDetails.totalBDT}
                     </strong>
                   </div>
                   <div className="flex justify-between">
@@ -882,7 +892,7 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
                   }}
                   className="w-full bg-stone-900 hover:bg-stone-800 text-white font-extrabold py-3 rounded-2xl text-xs transition-all"
                 >
-                  {language === 'bn' ? 'αªòαºçαª¿αª╛αªòαª╛αªƒαª╛ αªÜαª╛αª▓αª┐αª»αª╝αºç αª»αª╛αª¿' : 'Continue Shopping'}
+                  {language === 'bn' ? 'কেনাকাটা চালিয়ে যান' : 'Continue Shopping'}
                 </button>
               </div>
             ) : (
@@ -895,11 +905,11 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
                     </div>
                     <div>
                       <h3 className="font-extrabold text-stone-900 text-base">
-                        {language === 'bn' ? 'αªªαºìαª░αºüαªñ αªùαºçαª╕αºìαªƒ αªÜαºçαªòαªåαªëαªƒ' : 'Quick Guest Checkout'}
+                        {language === 'bn' ? 'দ্রুত গেস্ট চেকআউট' : 'Quick Guest Checkout'}
                       </h3>
                       <p className="text-[11px] text-stone-500">
                         {language === 'bn'
-                          ? 'αª╢αºüαªºαºüαª«αª╛αªñαºìαª░ αª¬αºìαª░αºƒαºïαª£αª¿αºÇαºƒ αªíαºçαª▓αª┐αª¡αª╛αª░αª┐αª░ αªñαªÑαºìαª» αªªαª┐αª¿'
+                          ? 'শুধুমাত্র প্রয়োজনীয় ডেলিভারির তথ্য দিন'
                           : 'No login required. Just enter delivery details.'}
                       </p>
                     </div>
@@ -908,7 +918,7 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
                     onClick={() => setShowCheckoutModal(false)}
                     className="w-8 h-8 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-600 flex items-center justify-center font-bold text-sm"
                   >
-                    Γ£ò
+                    ✕
                   </button>
                 </div>
 
@@ -916,14 +926,14 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
                   {/* Customer Name */}
                   <div>
                     <label className="block font-bold text-stone-700 mb-1">
-                      {language === 'bn' ? 'αªåαª¬αª¿αª╛αª░ αª¿αª╛αª«' : 'Full Name'}{' '}
+                      {language === 'bn' ? 'আপনার নাম' : 'Full Name'}{' '}
                       <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="text"
                       value={customerName}
                       onChange={(e) => setCustomerName(e.target.value)}
-                      placeholder={language === 'bn' ? 'αª»αºçαª«αª¿: αª«αºïαª╣αª╛αª«αºìαª«αªª αªòαª░αª┐αª«' : 'e.g. John Doe'}
+                      placeholder={language === 'bn' ? 'যেমন: মোহাম্মদ করিম' : 'e.g. John Doe'}
                       className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-300 rounded-xl font-medium text-stone-900 focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
                       required
                     />
@@ -932,7 +942,7 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
                   {/* Phone */}
                   <div>
                     <label className="block font-bold text-stone-700 mb-1">
-                      {language === 'bn' ? 'αª«αºïαª¼αª╛αªçαª▓ αª¿αª«αºìαª¼αª░ (αªÅαª╕αªÅαª«αªÅαª╕ αªô αªƒαºìαª░αºìαª»αª╛αªòαª┐αªé)' : 'Mobile Phone (for delivery SMS)'}{' '}
+                      {language === 'bn' ? 'মোবাইল নম্বর (এসএমএস ও ট্র্যাকিং)' : 'Mobile Phone (for delivery SMS)'}{' '}
                       <span className="text-red-500">*</span>
                     </label>
                     <input
@@ -948,7 +958,7 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
                   {/* Delivery Address */}
                   <div>
                     <label className="block font-bold text-stone-700 mb-1">
-                      {language === 'bn' ? 'αªíαºçαª▓αª┐αª¡αª╛αª░αª┐ αªáαª┐αªòαª╛αª¿αª╛' : 'Complete Delivery Address'}{' '}
+                      {language === 'bn' ? 'ডেলিভারি ঠিকানা' : 'Complete Delivery Address'}{' '}
                       <span className="text-red-500">*</span>
                     </label>
                     <textarea
@@ -957,7 +967,7 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
                       onChange={(e) => setDeliveryAddress(e.target.value)}
                       placeholder={
                         language === 'bn'
-                          ? 'αª¼αª╛αªíαª╝αª┐ αª¿αª«αºìαª¼αª░, αª░αª╛αª╕αºìαªñαª╛/αª«αª╣αª▓αºìαª▓αª╛, αªëαª¬αª£αºçαª▓αª╛, αª£αºçαª▓αª╛...'
+                          ? 'বাড়ি নম্বর, রাস্তা/মহল্লা, উপজেলা, জেলা...'
                           : 'House/Street, Area, Upazila, District...'
                       }
                       className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-300 rounded-xl font-medium text-stone-900 focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
@@ -968,7 +978,7 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
                   {/* Payment Method Selector */}
                   <div>
                     <label className="block font-bold text-stone-700 mb-1.5">
-                      {language === 'bn' ? 'αª¬αºçαª«αºçαª¿αºìαªƒ αª¬αªªαºìαªºαªñαª┐' : 'Payment Method'}
+                      {language === 'bn' ? 'পেমেন্ট পদ্ধতি' : 'Payment Method'}
                     </label>
                     <div className="grid grid-cols-3 gap-2">
                       {(['Cash on Delivery', 'bKash', 'Nagad'] as const).map((method) => (
@@ -993,10 +1003,10 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
                     <div>
                       <span className="text-stone-500 block">Total Payable</span>
                       <span className="text-[11px] text-stone-400">
-                        {cart.length} items ΓÇó {totalKg.toFixed(1)} kg
+                        {cart.length} items • {totalKg.toFixed(1)} kg
                       </span>
                     </div>
-                    <span className="text-emerald-700 font-black text-xl">αº│{grandTotalBDT}</span>
+                    <span className="text-emerald-700 font-black text-xl">৳{grandTotalBDT}</span>
                   </div>
 
                   {/* Form actions */}
@@ -1006,7 +1016,7 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
                       onClick={() => setShowCheckoutModal(false)}
                       className="px-4 py-2.5 rounded-xl text-stone-600 font-bold hover:bg-stone-100"
                     >
-                      {language === 'bn' ? 'αª¼αª╛αªñαª┐αª▓' : 'Cancel'}
+                      {language === 'bn' ? 'বাতিল' : 'Cancel'}
                     </button>
                     <button
                       type="submit"
@@ -1016,12 +1026,12 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
                       {submittingOrder ? (
                         <>
                           <RefreshCw className="w-4 h-4 animate-spin" />
-                          <span>{language === 'bn' ? 'αªàαª░αºìαªíαª╛αª░ αª¬αºìαª░αªòαºìαª░αª┐αª»αª╝αª╛αªºαºÇαª¿...' : 'Processing...'}</span>
+                          <span>{language === 'bn' ? 'অর্ডার প্রক্রিয়াধীন...' : 'Processing...'}</span>
                         </>
                       ) : (
                         <>
                           <CheckCircle2 className="w-4 h-4" />
-                          <span>{language === 'bn' ? 'αªàαª░αºìαªíαª╛αª░ αª¿αª┐αª╢αºìαªÜαª┐αªñ αªòαª░αºüαª¿' : 'Confirm Order'}</span>
+                          <span>{language === 'bn' ? 'অর্ডার নিশ্চিত করুন' : 'Confirm Order'}</span>
                         </>
                       )}
                     </button>
@@ -1030,6 +1040,32 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-2xl border text-sm font-semibold transition-all transform animate-in slide-in-from-bottom-5 duration-300 ${
+          toastMessage.type === 'success'
+            ? 'bg-emerald-950/90 border-emerald-500/50 text-emerald-100'
+            : toastMessage.type === 'info'
+            ? 'bg-sky-950/90 border-sky-500/50 text-sky-100'
+            : 'bg-rose-950/90 border-rose-500/50 text-rose-100'
+        }`}>
+          {toastMessage.type === 'success' ? (
+            <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+          ) : toastMessage.type === 'info' ? (
+            <CheckCircle2 className="w-5 h-5 text-sky-400 shrink-0" />
+          ) : (
+            <AlertCircle className="w-5 h-5 text-rose-400 shrink-0" />
+          )}
+          <span className="max-w-md">{toastMessage.text}</span>
+          <button
+            onClick={() => setToastMessage(null)}
+            className="ml-2 text-stone-400 hover:text-white transition-colors"
+          >
+            ×
+          </button>
         </div>
       )}
     </div>

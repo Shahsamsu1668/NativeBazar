@@ -197,6 +197,16 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
     date: new Date().toISOString().split('T')[0],
   });
 
+  const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null);
+
+  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+    setToastMessage({ text, type });
+    setTimeout(() => {
+      setToastMessage((prev) => (prev?.text === text ? null : prev));
+    }, 4000);
+  };
+
   const t = (en: string, bn: string) => (language === 'bn' ? bn : en);
 
   // Load Farmer Intelligence (Market prices, bids, weather)
@@ -354,7 +364,7 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
       });
 
       NotificationStore.addSystemNotif(
-        currentUser.id,
+        currentUser?.id || 'usr-farmer',
         t('Harvest Published!', 'ফসল তালিকাভুক্ত!'),
         t(
           `${selected.nameEn} (${quantityKg}kg) published to Wholesalers at ৳${pricePerKg}/kg.`,
@@ -363,26 +373,31 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
         'success'
       );
 
+      showToast(t('Harvest published successfully!', 'ফসল সফলভাবে তালিকাভুক্ত হয়েছে!'), 'success');
       setShowAddModal(false);
       setAiPrediction(null);
       loadMyProducts();
     } catch (err: any) {
-      alert(err.message || 'Failed to publish crop');
+      showToast(err.message || 'Failed to publish crop', 'error');
     } finally {
       setSubmittingProduct(false);
     }
   };
 
   // Delete Product
-  const handleDeleteProduct = async (id: string) => {
-    if (confirm(t('Are you sure you want to remove this harvest listing?', 'এই ফসলের তালিকাটি কি নিশ্চিতভাবে মুছে ফেলতে চান?'))) {
-      try {
-        await productApi.deleteProduct(id);
-        loadMyProducts();
-      } catch (e: any) {
-        alert(e.message || 'Failed to delete listing');
-      }
-    }
+  const handleDeleteProduct = (id: string) => {
+    setConfirmDialog({
+      message: t('Are you sure you want to remove this harvest listing?', 'এই ফসলের তালিকাটি কি নিশ্চিতভাবে মুছে ফেলতে চান?'),
+      onConfirm: async () => {
+        try {
+          await productApi.deleteProduct(id);
+          showToast(t('Harvest listing deleted', 'ফসলের তালিকাটি মুছে ফেলা হয়েছে'), 'success');
+          loadMyProducts();
+        } catch (e: any) {
+          showToast(e.message || 'Failed to delete listing', 'error');
+        }
+      },
+    });
   };
 
   // Update Order Delivery Status
@@ -391,16 +406,17 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
     status: 'Confirmed' | 'Processing' | 'Dispatched' | 'Delivered'
   ) => {
     try {
-      await orderApi.updateStatus(orderId, status, currentUser.name, 'farmer');
+      await orderApi.updateStatus(orderId, status, currentUser?.name || 'Farmer', 'farmer');
       loadReceivedOrders();
       NotificationStore.addSystemNotif(
-        currentUser.id,
+        currentUser?.id || 'usr-farmer',
         t('Order Updated', 'অর্ডারের অবস্থা পরিবর্তিত'),
         t(`Order #${orderId} marked as ${status}`, `অর্ডার #${orderId} এখন ${status}`),
         'info'
       );
+      showToast(t(`Order #${orderId} marked as ${status}`, `অর্ডার #${orderId} এখন ${status}`), 'success');
     } catch (e: any) {
-      alert(e.message || 'Failed to update order status');
+      showToast(e.message || 'Failed to update order status', 'error');
     }
   };
 
@@ -1066,14 +1082,14 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
                     <span className="font-mono font-bold text-stone-900 text-sm">{order.id}</span>
                     <span
                       className={`badge text-[10px] ${
-                        order.status === 'Delivered'
+                        (order.status || order.deliveryStatus) === 'Delivered'
                           ? 'badge-success'
-                          : order.status === 'Dispatched'
+                          : (order.status || order.deliveryStatus) === 'Dispatched'
                           ? 'badge-purple'
                           : 'badge-warning'
                       }`}
                     >
-                      {order.status}
+                      {order.status || order.deliveryStatus}
                     </span>
                   </div>
                   <div className="text-stone-700 font-semibold">
@@ -1092,7 +1108,7 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
                   </div>
 
                   <div className="flex items-center gap-1.5">
-                    {order.status === 'Confirmed' && (
+                    {((order.status || order.deliveryStatus) === 'Confirmed') && (
                       <button
                         onClick={() => handleUpdateOrderStatus(order.id, 'Dispatched')}
                         className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-xl text-xs"
@@ -1100,7 +1116,7 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
                         {t('Mark Dispatched', 'মাল পাঠান')}
                       </button>
                     )}
-                    {order.status === 'Dispatched' && (
+                    {((order.status || order.deliveryStatus) === 'Dispatched') && (
                       <button
                         onClick={() => handleUpdateOrderStatus(order.id, 'Delivered')}
                         className="bg-stone-900 hover:bg-stone-800 text-white font-bold px-3 py-1.5 rounded-xl text-xs"
@@ -1474,6 +1490,58 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-2xl border text-sm font-semibold transition-all transform animate-in slide-in-from-bottom-5 duration-300 ${
+          toastMessage.type === 'success'
+            ? 'bg-emerald-950/90 border-emerald-500/50 text-emerald-100 shadow-emerald-950/30'
+            : 'bg-rose-950/90 border-rose-500/50 text-rose-100 shadow-rose-950/30'
+        }`}>
+          {toastMessage.type === 'success' ? (
+            <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+          ) : (
+            <AlertCircle className="w-5 h-5 text-rose-400 shrink-0" />
+          )}
+          <span className="max-w-md">{toastMessage.text}</span>
+          <button
+            onClick={() => setToastMessage(null)}
+            className="ml-2 text-stone-400 hover:text-white transition-colors"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
+      {/* Confirmation Modal */}
+      {confirmDialog && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-stone-100 animate-in zoom-in-95 duration-200">
+            <h4 className="text-lg font-bold text-stone-900 mb-2">{t('Confirm Action', 'নিশ্চিতকরণ')}</h4>
+            <p className="text-sm text-stone-600 mb-6">{confirmDialog.message}</p>
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setConfirmDialog(null)}
+                className="px-4 py-2 text-stone-600 font-bold hover:bg-stone-100 rounded-xl transition-colors text-sm"
+              >
+                {t('Cancel', 'বাতিল')}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const onConfirm = confirmDialog.onConfirm;
+                  setConfirmDialog(null);
+                  onConfirm();
+                }}
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-md transition-colors text-sm"
+              >
+                {t('Confirm', 'নিশ্চিত করুন')}
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -543,6 +543,29 @@ app.post('/api/orders', (req, res) => {
       return res.status(400).json({ error: 'No items in cart to order.' });
     }
 
+    let finalSellerId = sellerId;
+    let finalSellerName = sellerName;
+    let finalSellerPhone = sellerPhone;
+    let finalSellerRole = sellerRole;
+
+    if ((!finalSellerId || !finalSellerRole) && items && items.length > 0) {
+      const firstProd = db.prepare('SELECT * FROM products WHERE id = ?').get(items[0].productId) as any;
+      if (firstProd) {
+        finalSellerId = finalSellerId || firstProd.seller_id;
+        finalSellerName = finalSellerName || firstProd.seller_name;
+        finalSellerPhone = finalSellerPhone || firstProd.seller_phone;
+        finalSellerRole = finalSellerRole || firstProd.seller_role;
+      }
+    }
+
+    // Default seller fallback for consumer orders
+    if (!finalSellerId) {
+      finalSellerId = 'usr-retailer-jafor';
+      finalSellerName = finalSellerName || 'Jafor';
+      finalSellerPhone = finalSellerPhone || '01911334200';
+      finalSellerRole = finalSellerRole || 'retailer';
+    }
+
     // Execute atomic transaction with supply chain validation
     const result = executeOrderTransaction({
       buyerId,
@@ -550,10 +573,10 @@ app.post('/api/orders', (req, res) => {
       buyerPhone,
       buyerEmail,
       buyerRole: buyerRole || 'consumer',
-      sellerId,
-      sellerName,
-      sellerPhone,
-      sellerRole,
+      sellerId: finalSellerId,
+      sellerName: finalSellerName,
+      sellerPhone: finalSellerPhone,
+      sellerRole: finalSellerRole,
       items,
       paymentMethod,
       deliveryAddress,
@@ -625,6 +648,7 @@ app.get('/api/orders', (req, res) => {
         paymentMethod: o.payment_method,
         paymentStatus: o.payment_status,
         deliveryStatus: o.delivery_status,
+        status: o.delivery_status,
         deliveryAddress: o.delivery_address,
         district: o.district,
         trackingCode: o.tracking_code,

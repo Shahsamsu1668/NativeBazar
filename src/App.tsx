@@ -213,13 +213,22 @@ export default function App() {
           onLanguageToggle={() => setLanguage((prev) => (prev === 'bn' ? 'en' : 'bn'))}
           onBack={() => setIsAuthOpen(false)}
           onAuthSuccess={(user) => {
-            setCurrentUser(user);
+            // Persist to store and local storage, then navigate to dashboard
+            const safeUser: User = {
+              ...user,
+              password: '***',
+              sessionToken: user.sessionToken || `nb_sec_${Date.now()}`,
+              sessionExpiresAt: user.sessionExpiresAt || new Date(Date.now() + 43200000).toISOString(),
+            };
+            AuthStore.setCurrentUser(safeUser);
+            localStorage.setItem('nb_current_user', JSON.stringify(safeUser));
+            setCurrentUser(safeUser);
             setIsAuthOpen(false);
             setActiveView('dashboard');
             showToast(
               language === 'bn'
-                ? `স্বাগতম, ${user.name}! আপনি সফলভাবে প্রবেশ করেছেন।`
-                : `Welcome, ${user.name}! Signed in successfully.`
+                ? `স্বাগতম, ${safeUser.name || 'ব্যবহারকারী'}! আপনি সফলভাবে প্রবেশ করেছেন।`
+                : `Welcome, ${safeUser.name || 'User'}! Signed in successfully.`
             );
           }}
         />

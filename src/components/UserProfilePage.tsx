@@ -140,7 +140,8 @@ const roleConfig: Record<
   },
 };
 
-function getInitials(name: string) {
+function getInitials(name?: string) {
+  if (!name) return 'U';
   return name
     .split(' ')
     .slice(0, 2)
@@ -262,7 +263,18 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({
   );
   const allUsers = useMemo(() => (isAdmin ? AuthStore.getUsers() : []), [isAdmin]);
 
-  const rc = roleConfig[user.role];
+  // Normalise role aliases to keys that exist in roleConfig
+  const normaliseRole = (role: string): UserRole => {
+    const map: Record<string, UserRole> = {
+      businessman: 'wholesaler',
+      supplier: 'wholesaler',
+      customer: 'consumer',
+      retailer: 'retailer',
+      expert: 'admin',
+    };
+    return (map[role] || role) as UserRole;
+  };
+  const rc = roleConfig[normaliseRole(user.role)] ?? roleConfig['farmer'];
 
   const stats = useMemo(() => {
     if (user.role === 'farmer') {

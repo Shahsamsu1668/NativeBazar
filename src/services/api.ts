@@ -135,10 +135,19 @@ export const orderApi = {
     district: string;
     notes?: string;
   }): Promise<{ success: boolean; order: any; message: string }> {
-    return fetchJson('/api/orders', {
+    const res = await fetchJson<{ success: boolean; order: any; message: string }>('/api/orders', {
       method: 'POST',
       body: JSON.stringify(orderPayload),
     });
+    if (res?.order) {
+      res.order = {
+        ...res.order,
+        id: res.order.id || res.order.orderId,
+        status: res.order.status || res.order.deliveryStatus,
+        deliveryStatus: res.order.deliveryStatus || res.order.status,
+      };
+    }
+    return res;
   },
 
   async getOrders(params?: {
@@ -154,7 +163,14 @@ export const orderApi = {
     if (params?.buyerId) query.set('buyerId', params.buyerId);
 
     const qs = query.toString();
-    return fetchJson(`/api/orders${qs ? `?${qs}` : ''}`);
+    const res = await fetchJson<{ orders: any[]; total?: number }>(`/api/orders${qs ? `?${qs}` : ''}`);
+    const orders = (res.orders || []).map((o: any) => ({
+      ...o,
+      id: o.id || o.orderId,
+      status: o.status || o.deliveryStatus,
+      deliveryStatus: o.deliveryStatus || o.status,
+    }));
+    return { orders, total: res.total ?? orders.length };
   },
 
   async updateStatus(

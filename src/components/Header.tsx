@@ -295,10 +295,10 @@ export const Header: React.FC<HeaderProps> = ({
                   aria-label={t('User profile menu', 'ব্যবহারকারী প্রোফাইল')}
                 >
                   <div className="w-6 h-6 rounded-md bg-stone-800 text-white flex items-center justify-center text-xs font-bold shrink-0">
-                    {currentUser.name.charAt(0)}
+                    {(currentUser.name || 'U').charAt(0).toUpperCase()}
                   </div>
                   <div className="text-left hidden lg:block">
-                    <p className="text-xs font-bold text-stone-800 leading-none">{currentUser.name.split(' ')[0]}</p>
+                    <p className="text-xs font-bold text-stone-800 leading-none">{(currentUser.name || 'User').split(' ')[0]}</p>
                     <p className="text-[10px] text-stone-500 leading-none mt-0.5">{t(config.labelEn, config.labelBn)}</p>
                   </div>
                   <ChevronDown className="w-3 h-3 text-stone-400" />
@@ -307,7 +307,7 @@ export const Header: React.FC<HeaderProps> = ({
                 {showUserMenu && (
                   <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-xl border border-stone-200 overflow-hidden animate-slide-down z-50">
                     <div className="px-4 py-3 bg-stone-50 border-b border-stone-200">
-                      <p className="font-bold text-stone-900 text-xs">{currentUser.name}</p>
+                      <p className="font-bold text-stone-900 text-xs">{currentUser.name || 'User'}</p>
                       <p className="text-[11px] text-stone-500 font-mono mt-0.5">{currentUser.phone}</p>
                       <span className={`inline-flex items-center gap-1 mt-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full border ${config.badgeBg}`}>
                         {config.icon}

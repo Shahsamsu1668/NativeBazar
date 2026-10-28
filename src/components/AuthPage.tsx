@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Language, UserRole, User } from '../types';
 import { AuthStore, LoginResult } from '../data/store';
 import { BANGLADESH_LOCATIONS } from '../data/mockData';
@@ -32,16 +32,16 @@ interface AuthPageProps {
 
 // Popular crops in Bangladesh for interactive one-click farmer selection
 const POPULAR_CROPS = [
-  { id: 'Potato', en: 'Potato', bn: 'αªåαª▓αºü', icon: '≡ƒÑö' },
-  { id: 'Tomato', en: 'Tomato', bn: 'αªƒαª«αºçαªƒαºï', icon: '≡ƒìà' },
-  { id: 'Chili', en: 'Green Chili', bn: 'αªòαª╛αªüαªÜαª╛ αª«αª░αª┐αªÜ', icon: '≡ƒî╢∩╕Å' },
-  { id: 'Rice', en: 'Paddy / Rice', bn: 'αªºαª╛αª¿ / αªÜαª╛αª▓', icon: '≡ƒî╛' },
-  { id: 'Eggplant', en: 'Brinjal', bn: 'αª¼αºçαªùαºüαª¿', icon: '≡ƒìå' },
-  { id: 'Cauliflower', en: 'Cauliflower', bn: 'αª½αºüαª▓αªòαª¬αª┐', icon: '≡ƒÑª' },
-  { id: 'Onion', en: 'Onion', bn: 'αª¬αºçαªüαª»αª╝αª╛αª£', icon: '≡ƒºà' },
-  { id: 'Cabbage', en: 'Cabbage', bn: 'αª¼αª╛αªüαªºαª╛αªòαª¬αª┐', icon: '≡ƒÑ¼' },
-  { id: 'Mustard', en: 'Mustard', bn: 'αª╕αª░αª┐αª╖αª╛', icon: '≡ƒî╝' },
-  { id: 'Maize', en: 'Maize', bn: 'αª¡αºüαªƒαºìαªƒαª╛', icon: '≡ƒî╜' },
+  { id: 'Potato', en: 'Potato', bn: 'আলু', icon: '🥔' },
+  { id: 'Tomato', en: 'Tomato', bn: 'টমেটো', icon: '🍅' },
+  { id: 'Chili', en: 'Green Chili', bn: 'কাঁচা মরিচ', icon: '🌶️' },
+  { id: 'Rice', en: 'Paddy / Rice', bn: 'ধান / চাল', icon: '🌾' },
+  { id: 'Eggplant', en: 'Brinjal', bn: 'বেগুন', icon: '🍆' },
+  { id: 'Cauliflower', en: 'Cauliflower', bn: 'ফুলকপি', icon: '🥦' },
+  { id: 'Onion', en: 'Onion', bn: 'পেঁয়াজ', icon: '🧅' },
+  { id: 'Cabbage', en: 'Cabbage', bn: 'বাঁধাকপি', icon: '🥬' },
+  { id: 'Mustard', en: 'Mustard', bn: 'সরিষা', icon: '🌼' },
+  { id: 'Maize', en: 'Maize', bn: 'ভুট্টা', icon: '🌽' },
 ];
 
 export const AuthPage: React.FC<AuthPageProps> = ({
@@ -149,12 +149,20 @@ export const AuthPage: React.FC<AuthPageProps> = ({
           return;
         }
       } catch (backendErr: any) {
-        // If backend returns an explicit credential error, display it
-        if (backendErr.message && !backendErr.message.includes('fetch')) {
+        // Only block local fallback for explicit credential rejection (401/wrong password messages)
+        const msg: string = (backendErr.message || '').toLowerCase();
+        const isCredentialError =
+          msg.includes('invalid') ||
+          msg.includes('incorrect') ||
+          msg.includes('wrong password') ||
+          msg.includes('unauthorized') ||
+          msg.includes('not found') === false && msg.includes('401');
+        if (isCredentialError && !msg.includes('fetch') && !msg.includes('network') && !msg.includes('failed to fetch')) {
           setError(backendErr.message);
           setLoading(false);
           return;
         }
+        // Network/server errors: fall through to local store
       }
 
       // 2. Fallback to client-side store verification
@@ -171,7 +179,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         setLockoutSeconds(localResult.remainingSeconds || 180);
         setError(
           language === 'bn'
-            ? `αªÅαªòαª╛αªºαª┐αªò αª¡αºüαª▓ αªÜαºçαª╖αºìαªƒαª╛αª░ αªòαª╛αª░αªúαºç αªàαºìαª»αª╛αªòαª╛αªëαª¿αºìαªƒ αª╕αª╛αª«αºƒαª┐αªòαª¡αª╛αª¼αºç αª▓αªò αªòαª░αª╛ αª╣αºƒαºçαª¢αºçαÑñ ${localResult.remainingSeconds} αª╕αºçαªòαºçαª¿αºìαªí αª¬αª░ αªÜαºçαª╖αºìαªƒαª╛ αªòαª░αºüαª¿αÑñ`
+            ? `একাধিক ভুল চেষ্টার কারণে অ্যাকাউন্ট সাময়িকভাবে লক করা হয়েছে। ${localResult.remainingSeconds} সেকেন্ড পর চেষ্টা করুন।`
             : `Account locked due to 3 failed attempts. Please retry in ${localResult.remainingSeconds}s.`
         );
         return;
@@ -180,7 +188,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       if (!localResult.success || !localResult.user) {
         setError(
           language === 'bn'
-            ? 'αª«αºïαª¼αª╛αªçαª▓ αª¿αª«αºìαª¼αª░ αªàαªÑαª¼αª╛ αª¬αª╛αª╕αªôαª»αª╝αª╛αª░αºìαªí αª╕αªáαª┐αªò αª¿αª»αª╝αÑñ αªªαª»αª╝αª╛ αªòαª░αºç αªåαª¼αª╛αª░ αªÜαºçαª╖αºìαªƒαª╛ αªòαª░αºüαª¿αÑñ'
+            ? 'মোবাইল নম্বর অথবা পাসওয়ার্ড সঠিক নয়। দয়া করে আবার চেষ্টা করুন।'
             : 'Incorrect credentials. Please verify your phone number and password.'
         );
         return;
@@ -211,11 +219,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         AuthStore.setCurrentUser(res.user);
         onAuthSuccess(res.user);
       } else {
-        setError(language === 'bn' ? 'αªàαºìαª»αª╛αªíαª«αª┐αª¿ αªÅαªòαºìαª╕αºçαª╕ αª¬αºìαª░αªñαºìαª»αª╛αªûαºìαª»αª╛αªñαÑñ' : 'Admin Access Denied.');
+        setError(language === 'bn' ? 'অ্যাডমিন এক্সেস প্রত্যাখ্যাত।' : 'Admin Access Denied.');
       }
     } catch (err: any) {
       setLoading(false);
-      setError(err.message || (language === 'bn' ? 'αªàαª¿αºüαª«αºïαªªαª┐αªñ αªàαºìαª»αª╛αªíαª«αª┐αª¿ αªñαªÑαºìαª» αª╕αªáαª┐αªò αª¿αºƒαÑñ' : 'Invalid admin authorization credentials.'));
+      setError(err.message || (language === 'bn' ? 'অনুমোদিত অ্যাডমিন তথ্য সঠিক নয়।' : 'Invalid admin authorization credentials.'));
     }
   };
 
@@ -225,24 +233,24 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     setError('');
 
     if (!regName.trim()) {
-      setError(language === 'bn' ? 'αªåαª¬αª¿αª╛αª░ αª¬αºéαª░αºìαªú αª¿αª╛αª« αª▓αª┐αªûαºüαª¿αÑñ' : 'Please enter your full name.');
+      setError(language === 'bn' ? 'আপনার পূর্ণ নাম লিখুন।' : 'Please enter your full name.');
       return;
     }
     if (!regPhone.trim() || regPhone.length < 9) {
-      setError(language === 'bn' ? 'αª╕αªáαª┐αªò αººαºº αª╕αªéαªûαºìαª»αª╛αª░ αª«αºïαª¼αª╛αªçαª▓ αª¿αª«αºìαª¼αª░ αªªαª┐αª¿αÑñ' : 'Please enter a valid mobile number.');
+      setError(language === 'bn' ? 'সঠিক ১১ সংখ্যার মোবাইল নম্বর দিন।' : 'Please enter a valid mobile number.');
       return;
     }
     if (regPassword.length < 6) {
-      setError(language === 'bn' ? 'αª¬αª╛αª╕αªôαª»αª╝αª╛αª░αºìαªí αªòαª«αª¬αªòαºìαª╖αºç αº¼ αªàαªòαºìαª╖αª░αºçαª░ αª╣αªñαºç αª╣αª¼αºçαÑñ' : 'Password must be at least 6 characters.');
+      setError(language === 'bn' ? 'পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে।' : 'Password must be at least 6 characters.');
       return;
     }
     if (regPassword !== regConfirmPassword) {
-      setError(language === 'bn' ? 'αªëαª¡αª»αª╝ αª¬αª╛αª╕αªôαª»αª╝αª╛αª░αºìαªí αªÅαªòαªç αª╣αªñαºç αª╣αª¼αºçαÑñ' : 'Passwords do not match.');
+      setError(language === 'bn' ? 'উভয় পাসওয়ার্ড একই হতে হবে।' : 'Passwords do not match.');
       return;
     }
 
     if (selectedRole === 'farmer' && selectedCrops.length === 0) {
-      setError(language === 'bn' ? 'αªòαª«αª¬αªòαºìαª╖αºç αªÅαªòαªƒαª┐ αª¬αºìαª░αªºαª╛αª¿ αª½αª╕αª▓ αª¿αª┐αª░αºìαª¼αª╛αªÜαª¿ αªòαª░αºüαª¿αÑñ' : 'Please select at least one primary crop.');
+      setError(language === 'bn' ? 'কমপক্ষে একটি প্রধান ফসল নির্বাচন করুন।' : 'Please select at least one primary crop.');
       return;
     }
 
@@ -303,7 +311,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
             className="flex items-center gap-1.5 text-xs font-bold text-stone-600 hover:text-emerald-700 bg-white px-3 py-1.5 rounded-xl border border-stone-200 transition-colors shadow-2xs"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>{t('Back to Marketplace', 'αª«αª╛αª░αºìαªòαºçαªƒαª¬αºìαª▓αºçαª╕αºç αª½αª┐αª░αºüαª¿')}</span>
+            <span>{t('Back to Marketplace', 'মার্কেটপ্লেসে ফিরুন')}</span>
           </button>
         ) : <div />}
 
@@ -311,7 +319,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
           onClick={onLanguageToggle}
           className="text-xs font-bold text-stone-700 bg-white px-3 py-1.5 rounded-xl border border-stone-200 hover:bg-stone-50 transition-colors shadow-2xs"
         >
-          {language === 'bn' ? 'English' : 'αª¼αª╛αªéαª▓αª╛'}
+          {language === 'bn' ? 'English' : 'বাংলা'}
         </button>
       </div>
 
@@ -322,12 +330,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({
             <Sprout className="w-7 h-7 text-emerald-300" />
           </div>
           <h1 className="text-xl sm:text-2xl font-black tracking-tight">
-            NativeBazar ΓÇó {t('Agricultural Platform', 'αª¿αºçαªƒαª┐αª¡αª¼αª╛αª£αª╛αª░ αªòαºâαª╖αª┐ αª¬αºìαª▓αºìαª»αª╛αªƒαª½αª░αºìαª«')}
+            NativeBazar • {t('Agricultural Platform', 'নেটিভবাজার কৃষি প্ল্যাটফর্ম')}
           </h1>
           <p className="text-xs text-emerald-100/80 mt-1 max-w-sm mx-auto">
             {t(
               'Secure agricultural supply chain connecting Farmers, Wholesalers, Retailers & Consumers.',
-              'αªòαºâαª╖αªò, αª¬αª╛αªçαªòαª╛αª░, αªûαºüαªÜαª░αª╛ αª¼αª┐αªòαºìαª░αºçαªñαª╛ αªô αª¡αºïαªòαºìαªñαª╛αªªαºçαª░ αª╕αª░αª╛αª╕αª░αª┐ αª¿αª┐αª░αª╛αª¬αªª αªòαºâαª╖αª┐ αª¼αª╛αª£αª╛αª░αÑñ'
+              'কৃষক, পাইকার, খুচরা বিক্রেতা ও ভোক্তাদের সরাসরি নিরাপদ কৃষি বাজার।'
             )}
           </p>
         </div>
@@ -339,34 +347,34 @@ export const AuthPage: React.FC<AuthPageProps> = ({
               <div className="flex items-center gap-2">
                 <ShieldCheck className="w-5 h-5 text-slate-800" />
                 <h2 className="text-base font-bold text-stone-900">
-                  {t('Authorized Administrator Access', 'αªàαª¿αºüαª«αºïαªªαª┐αªñ αªàαºìαª»αª╛αªíαª«αª┐αª¿ αª¬αºïαª░αºìαªƒαª╛αª▓')}
+                  {t('Authorized Administrator Access', 'অনুমোদিত অ্যাডমিন পোর্টাল')}
                 </h2>
               </div>
               <button
                 onClick={() => { setIsAdminMode(false); setError(''); }}
                 className="text-xs font-bold text-emerald-700 hover:underline"
               >
-                {t('Return to Public Login', 'αª╕αª╛αªºαª╛αª░αªú αª▓αªùαªçαª¿αºç αª½αª┐αª░αºüαª¿')}
+                {t('Return to Public Login', 'সাধারণ লগইনে ফিরুন')}
               </button>
             </div>
 
             <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700">
               {t(
                 'This section is strictly restricted to certified platform administrators. Unauthorized access attempts are monitored and logged.',
-                'αªÅαªç αª╕αºçαªòαª╢αª¿αªƒαª┐ αª╢αºüαªºαºüαª«αª╛αªñαºìαª░ αª¬αºìαª▓αºìαª»αª╛αªƒαª½αª░αºìαª« αªàαºìαª»αª╛αªíαª«αª┐αª¿αª┐αª╕αºìαªƒαºìαª░αºçαªƒαª░αªªαºçαª░ αª£αª¿αºìαª» αª╕αªéαª░αªòαºìαª╖αª┐αªñαÑñ αªàαª¿αª¿αºüαª«αºïαªªαª┐αªñ αª¬αºìαª░αªÜαºçαª╖αºìαªƒαª╛ αª¿αª┐αª░αºÇαªòαºìαª╖αª┐αªñ αª╣αºƒαÑñ'
+                'এই সেকশনটি শুধুমাত্র প্ল্যাটফর্ম অ্যাডমিনিস্ট্রেটরদের জন্য সংরক্ষিত। অননুমোদিত প্রচেষ্টা নিরীক্ষিত হয়।'
               )}
             </div>
 
             {error && (
               <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-bold">
-                ΓÜá∩╕Å {error}
+                ⚠️ {error}
               </div>
             )}
 
             <form onSubmit={handleAdminLogin} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-stone-700 mb-1">
-                  {t('Admin ID / Username', 'αªàαºìαª»αª╛αªíαª«αª┐αª¿ αªåαªçαªíαª┐')}
+                  {t('Admin ID / Username', 'অ্যাডমিন আইডি')}
                 </label>
                 <input
                   type="text"
@@ -380,21 +388,21 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
               <div>
                 <label className="block text-xs font-bold text-stone-700 mb-1">
-                  {t('Secret Password', 'αªùαºïαª¬αª¿ αª¬αª╛αª╕αªôαºƒαª╛αª░αºìαªí')}
+                  {t('Secret Password', 'গোপন পাসওয়ার্ড')}
                 </label>
                 <input
                   type="password"
                   required
                   value={adminPassword}
                   onChange={(e) => setAdminPassword(e.target.value)}
-                  placeholder="ΓÇóΓÇóΓÇóΓÇóΓÇóΓÇóΓÇóΓÇó"
+                  placeholder="••••••••"
                   className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-stone-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-bold text-stone-700 mb-1">
-                  {t('Clearance 2FA Security PIN', 'αª╕αª┐αªòαª┐αªëαª░αª┐αªƒαª┐ αª¬αª┐αª¿')}
+                  {t('Clearance 2FA Security PIN', 'সিকিউরিটি পিন')}
                 </label>
                 <input
                   type="password"
@@ -411,7 +419,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                 className="w-full py-3 bg-stone-900 hover:bg-stone-800 text-white font-bold rounded-xl text-sm transition-all shadow-md flex items-center justify-center gap-2"
               >
                 <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                <span>{loading ? t('Authenticating...', 'αª»αª╛αªÜαª╛αªç αªòαª░αª╛ αª╣αªÜαºìαª¢αºç...') : t('Verify Admin Clearance', 'αªàαºìαª»αª╛αªíαª«αª┐αª¿ αª»αª╛αªÜαª╛αªç αªô αª¬αºìαª░αª¼αºçαª╢')}</span>
+                <span>{loading ? t('Authenticating...', 'যাচাই করা হচ্ছে...') : t('Verify Admin Clearance', 'অ্যাডমিন যাচাই ও প্রবেশ')}</span>
               </button>
             </form>
           </div>
@@ -428,7 +436,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                     : 'text-stone-500 hover:text-stone-900'
                 }`}
               >
-                {t('Sign In (Existing Account)', 'αª▓αªùαªçαª¿ αªòαª░αºüαª¿')}
+                {t('Sign In (Existing Account)', 'লগইন করুন')}
               </button>
               <button
                 type="button"
@@ -439,21 +447,21 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                     : 'text-stone-500 hover:text-stone-900'
                 }`}
               >
-                {t('Create New Account', 'αª¿αªñαºüαª¿ αªàαºìαª»αª╛αªòαª╛αªëαª¿αºìαªƒ αªûαºüαª▓αºüαª¿')}
+                {t('Create New Account', 'নতুন অ্যাকাউন্ট খুলুন')}
               </button>
             </div>
 
             {/* Exactly 4 Public Roles Selector */}
             <div>
               <label className="block text-xs font-bold text-stone-600 mb-2">
-                {t('Select Your Role in Supply Chain:', 'αªåαª¬αª¿αª╛αª░ αª¡αºéαª«αª┐αªòαª╛ αª¿αª┐αª░αºìαª¼αª╛αªÜαª¿ αªòαª░αºüαª¿:')}
+                {t('Select Your Role in Supply Chain:', 'আপনার ভূমিকা নির্বাচন করুন:')}
               </label>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {[
-                  { id: 'farmer', en: 'Farmer', bn: 'αªòαºâαª╖αªò', icon: <Sprout className="w-4 h-4" />, color: 'emerald' },
-                  { id: 'wholesaler', en: 'Wholesaler', bn: 'αª¬αª╛αªçαªòαª╛αª░', icon: <Briefcase className="w-4 h-4" />, color: 'blue' },
-                  { id: 'retailer', en: 'Retailer', bn: 'αªûαºüαªÜαª░αª╛ αª¼αª┐αªòαºìαª░αºçαªñαª╛', icon: <Store className="w-4 h-4" />, color: 'amber' },
-                  { id: 'consumer', en: 'Consumer', bn: 'αª¡αºïαªòαºìαªñαª╛', icon: <ShoppingCart className="w-4 h-4" />, color: 'purple' },
+                  { id: 'farmer', en: 'Farmer', bn: 'কৃষক', icon: <Sprout className="w-4 h-4" />, color: 'emerald' },
+                  { id: 'wholesaler', en: 'Wholesaler', bn: 'পাইকার', icon: <Briefcase className="w-4 h-4" />, color: 'blue' },
+                  { id: 'retailer', en: 'Retailer', bn: 'খুচরা বিক্রেতা', icon: <Store className="w-4 h-4" />, color: 'amber' },
+                  { id: 'consumer', en: 'Consumer', bn: 'ভোক্তা', icon: <ShoppingCart className="w-4 h-4" />, color: 'purple' },
                 ].map((r) => {
                   const isSelected = selectedRole === r.id;
                   return (
@@ -481,7 +489,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
             {error && (
               <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-bold flex items-center gap-2">
-                <span>ΓÜá∩╕Å</span>
+                <span>⚠️</span>
                 <span>{error}</span>
               </div>
             )}
@@ -491,7 +499,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
               <form onSubmit={handleLogin} className="space-y-4">
                 <div>
                   <label className="block text-xs font-bold text-stone-700 mb-1">
-                    {t('Mobile Phone Number', 'αª«αºïαª¼αª╛αªçαª▓ αª¿αª«αºìαª¼αª░')}
+                    {t('Mobile Phone Number', 'মোবাইল নম্বর')}
                   </label>
                   <div className="relative">
                     <Phone className="w-4 h-4 text-stone-400 absolute left-3.5 top-3" />
@@ -508,7 +516,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
                 <div>
                   <label className="block text-xs font-bold text-stone-700 mb-1">
-                    {t('Password', 'αª¬αª╛αª╕αªôαª»αª╝αª╛αª░αºìαªí')}
+                    {t('Password', 'পাসওয়ার্ড')}
                   </label>
                   <div className="relative">
                     <Lock className="w-4 h-4 text-stone-400 absolute left-3.5 top-3" />
@@ -517,7 +525,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                       required
                       value={loginPassword}
                       onChange={(e) => setLoginPassword(e.target.value)}
-                      placeholder={t('Enter your password', 'αª¬αª╛αª╕αªôαª»αª╝αª╛αª░αºìαªí αª▓αª┐αªûαºüαª¿')}
+                      placeholder={t('Enter your password', 'পাসওয়ার্ড লিখুন')}
                       className="w-full pl-10 pr-10 py-2.5 text-sm rounded-xl border border-stone-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
                     />
                     <button
@@ -535,7 +543,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   disabled={loading || isLocked}
                   className="w-full py-3 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white font-bold rounded-xl text-sm transition-all shadow-md flex items-center justify-center gap-2"
                 >
-                  <span>{loading ? t('Signing in...', 'αª¬αºìαª░αª¼αºçαª╢ αªòαª░αª╛ αª╣αªÜαºìαª¢αºç...') : t(`Sign In as ${selectedRole}`, 'αª▓αªùαªçαª¿ αªòαª░αºüαª¿')}</span>
+                  <span>{loading ? t('Signing in...', 'প্রবেশ করা হচ্ছে...') : t(`Sign In as ${selectedRole}`, 'লগইন করুন')}</span>
                   <ArrowRight className="w-4 h-4" />
                 </button>
               </form>
@@ -549,7 +557,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                     <span>
                       {t(
                         'Easy registration for farmers! Just pick your crops, phone number, and password.',
-                        'αªòαºâαª╖αªòαªªαºçαª░ αª£αª¿αºìαª» αª╕αª╣αª£ αª¿αª┐αª¼αª¿αºìαªºαª¿! αªåαª¬αª¿αª╛αª░ αª½αª╕αª▓ αªÅαª¼αªé αª«αºïαª¼αª╛αªçαª▓ αª¿αª«αºìαª¼αª░ αªªαª┐αºƒαºç αªàαºìαª»αª╛αªòαª╛αªëαª¿αºìαªƒ αªûαºüαª▓αºüαª¿αÑñ'
+                        'কৃষকদের জন্য সহজ নিবন্ধন! আপনার ফসল এবং মোবাইল নম্বর দিয়ে অ্যাকাউন্ট খুলুন।'
                       )}
                     </span>
                   </div>
@@ -560,7 +568,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   <div className="p-3 bg-purple-50 border border-purple-200 rounded-xl text-xs text-purple-900 font-medium">
                     {t(
                       'Tip: Consumers can immediately browse and place orders as guests without any account!',
-                      'αª¬αª░αª╛αª«αª░αºìαª╢: αª¡αºïαªòαºìαªñαª╛αª░αª╛ αª¿αª┐αª¼αª¿αºìαªºαª¿ αª¢αª╛αº£αª╛αªç αª╕αª░αª╛αª╕αª░αª┐ αª¬αªúαºìαª» αª¥αºüαº£αª┐αªñαºç αª¿αª┐αºƒαºç αªàαª░αºìαªíαª╛αª░ αªòαª░αªñαºç αª¬αª╛αª░αºçαª¿αÑñ'
+                      'পরামর্শ: ভোক্তারা নিবন্ধন ছাড়াই সরাসরি পণ্য ঝুড়িতে নিয়ে অর্ডার করতে পারেন।'
                     )}
                   </div>
                 )}
@@ -568,7 +576,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                 {/* Full Name */}
                 <div>
                   <label className="block text-xs font-bold text-stone-700 mb-1">
-                    {t('Full Name', 'αª¬αºéαª░αºìαªú αª¿αª╛αª«')} *
+                    {t('Full Name', 'পূর্ণ নাম')} *
                   </label>
                   <div className="relative">
                     <UserIcon className="w-4 h-4 text-stone-400 absolute left-3.5 top-3" />
@@ -586,7 +594,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                 {/* Mobile Phone Number */}
                 <div>
                   <label className="block text-xs font-bold text-stone-700 mb-1">
-                    {t('Mobile Phone Number', 'αª«αºïαª¼αª╛αªçαª▓ αª¿αª«αºìαª¼αª░')} *
+                    {t('Mobile Phone Number', 'মোবাইল নম্বর')} *
                   </label>
                   <div className="relative">
                     <Phone className="w-4 h-4 text-stone-400 absolute left-3.5 top-3" />
@@ -605,7 +613,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-bold text-stone-700 mb-1">
-                      {t('District', 'αª£αºçαª▓αª╛')} *
+                      {t('District', 'জেলা')} *
                     </label>
                     <select
                       value={regDistrict}
@@ -626,7 +634,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
                   <div>
                     <label className="block text-xs font-bold text-stone-700 mb-1">
-                      {t('Upazila / Area', 'αªëαª¬αª£αºçαª▓αª╛')} *
+                      {t('Upazila / Area', 'উপজেলা')} *
                     </label>
                     <select
                       value={regUpazila}
@@ -649,7 +657,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   <div className="space-y-3 p-3.5 bg-stone-50 rounded-2xl border border-stone-200">
                     <div>
                       <label className="block text-xs font-bold text-stone-800 mb-1.5">
-                        {t('Select Your Primary Crops (Click to choose):', 'αªåαª¬αª¿αª╛αª░ αªÜαª╛αª╖αª╛αª¼αª╛αªªαªòαºâαªñ αª½αª╕αª▓ αª¿αª┐αª░αºìαª¼αª╛αªÜαª¿ αªòαª░αºüαª¿:')}
+                        {t('Select Your Primary Crops (Click to choose):', 'আপনার চাষাবাদকৃত ফসল নির্বাচন করুন:')}
                       </label>
                       <div className="flex flex-wrap gap-1.5">
                         {POPULAR_CROPS.map((crop) => {
@@ -676,7 +684,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
                     <div>
                       <label className="block text-xs font-bold text-stone-700 mb-1">
-                        {t('Farm Size (Bigha / Acres)', 'αª£αª«αª┐αª░ αª¬αª░αª┐αª«αª╛αªú (αª¼αª┐αªÿαª╛ / αªÅαªòαª░)')}
+                        {t('Farm Size (Bigha / Acres)', 'জমির পরিমাণ (বিঘা / একর)')}
                       </label>
                       <input
                         type="number"
@@ -695,7 +703,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   <div className="space-y-3 p-3.5 bg-blue-50/50 rounded-2xl border border-blue-100">
                     <div>
                       <label className="block text-xs font-bold text-stone-700 mb-1">
-                        {t('Wholesale Business / Arat Name', 'αª¬αª╛αªçαªòαª╛αª░αª┐ αª¬αºìαª░αªñαª┐αª╖αºìαªáαª╛αª¿ / αªåαº£αªñαºçαª░ αª¿αª╛αª«')} *
+                        {t('Wholesale Business / Arat Name', 'পাইকারি প্রতিষ্ঠান / আড়তের নাম')} *
                       </label>
                       <input
                         type="text"
@@ -708,16 +716,16 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-stone-700 mb-1">
-                        {t('Procurement Scale', 'αª¼αºìαª»αª¼αª╕αª╛αª░ αªºαª░αªú')}
+                        {t('Procurement Scale', 'ব্যবসার ধরণ')}
                       </label>
                       <select
                         value={businessType}
                         onChange={(e) => setBusinessType(e.target.value)}
                         className="w-full px-3 py-2 text-xs rounded-xl border border-stone-300 bg-white font-semibold"
                       >
-                        <option value="Wholesaler">Bulk Wholesaler (αª«αºïαªòαª╛αª« αª¬αª╛αªçαªòαª╛αª░)</option>
-                        <option value="Aratdar">Aratdar Syndicate (αªåαº£αªñαªªαª╛αª░ αª╕αª┐αª¿αºìαªíαª┐αªòαºçαªƒ)</option>
-                        <option value="Processor">Agro Food Processor (αªûαª╛αªªαºìαª» αª¬αºìαª░αªòαºìαª░αª┐αºƒαª╛αª£αª╛αªñαªòαª╛αª░αºÇ)</option>
+                        <option value="Wholesaler">Bulk Wholesaler (মোকাম পাইকার)</option>
+                        <option value="Aratdar">Aratdar Syndicate (আড়তদার সিন্ডিকেট)</option>
+                        <option value="Processor">Agro Food Processor (খাদ্য প্রক্রিয়াজাতকারী)</option>
                       </select>
                     </div>
                   </div>
@@ -728,7 +736,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   <div className="space-y-3 p-3.5 bg-amber-50/50 rounded-2xl border border-amber-100">
                     <div>
                       <label className="block text-xs font-bold text-stone-700 mb-1">
-                        {t('Retail Shop / Outlet Name', 'αªûαºüαªÜαª░αª╛ αªªαºïαªòαª╛αª¿ / αªåαªëαªƒαª▓αºçαªƒαºçαª░ αª¿αª╛αª«')} *
+                        {t('Retail Shop / Outlet Name', 'খুচরা দোকান / আউটলেটের নাম')} *
                       </label>
                       <input
                         type="text"
@@ -741,7 +749,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-stone-700 mb-1">
-                        {t('Shop Address / Location', 'αªªαºïαªòαª╛αª¿αºçαª░ αªáαª┐αªòαª╛αª¿αª╛')}
+                        {t('Shop Address / Location', 'দোকানের ঠিকানা')}
                       </label>
                       <input
                         type="text"
@@ -758,7 +766,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                 {selectedRole === 'consumer' && (
                   <div>
                     <label className="block text-xs font-bold text-stone-700 mb-1">
-                      {t('Home / Office Delivery Address', 'αªíαºçαª▓αª┐αª¡αª╛αª░αª┐αª░ αªáαª┐αªòαª╛αª¿αª╛')}
+                      {t('Home / Office Delivery Address', 'ডেলিভারির ঠিকানা')}
                     </label>
                     <input
                       type="text"
@@ -774,7 +782,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-bold text-stone-700 mb-1">
-                      {t('Password', 'αª¬αª╛αª╕αªôαª»αª╝αª╛αª░αºìαªí')} *
+                      {t('Password', 'পাসওয়ার্ড')} *
                     </label>
                     <input
                       type="password"
@@ -788,7 +796,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
                   <div>
                     <label className="block text-xs font-bold text-stone-700 mb-1">
-                      {t('Confirm Password', 'αª¬αºüαª¿αª░αª╛αª»αª╝ αª¬αª╛αª╕αªôαª»αª╝αª╛αª░αºìαªí')} *
+                      {t('Confirm Password', 'পুনরায় পাসওয়ার্ড')} *
                     </label>
                     <input
                       type="password"
@@ -806,7 +814,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   disabled={loading}
                   className="w-full py-3 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white font-bold rounded-xl text-sm transition-all shadow-md flex items-center justify-center gap-2"
                 >
-                  <span>{loading ? t('Creating Account...', 'αªàαºìαª»αª╛αªòαª╛αªëαª¿αºìαªƒ αªñαºêαª░αª┐ αª╣αªÜαºìαª¢αºç...') : t('Complete Registration', 'αª¿αª┐αª¼αª¿αºìαªºαª¿ αª╕αª«αºìαª¬αª¿αºìαª¿ αªòαª░αºüαª¿')}</span>
+                  <span>{loading ? t('Creating Account...', 'অ্যাকাউন্ট তৈরি হচ্ছে...') : t('Complete Registration', 'নিবন্ধন সম্পন্ন করুন')}</span>
                   <ArrowRight className="w-4 h-4" />
                 </button>
               </form>
@@ -814,14 +822,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
             {/* Restricted Administrator Portal Link */}
             <div className="pt-4 border-t border-stone-100 flex items-center justify-between text-[11px] text-stone-400">
-              <span>NativeBazar Pilot ΓÇó Bangladesh</span>
+              <span>NativeBazar Pilot • Bangladesh</span>
               <button
                 type="button"
                 onClick={() => { setIsAdminMode(true); setError(''); }}
                 className="flex items-center gap-1 text-stone-500 hover:text-stone-800 font-semibold transition-colors"
               >
                 <KeyRound className="w-3 h-3 text-slate-500" />
-                <span>{t('Authorized Admin Portal', 'αªàαª¿αºüαª«αºïαªªαª┐αªñ αªàαºìαª»αª╛αªíαª«αª┐αª¿ αª¬αºìαª░αª¼αºçαª╢')}</span>
+                <span>{t('Authorized Admin Portal', 'অনুমোদিত অ্যাডমিন প্রবেশ')}</span>
               </button>
             </div>
           </div>

@@ -78,20 +78,29 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
   const [retailerOrders, setRetailerOrders] = useState<SupplyChainOrder[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
 
-  // Tab 4: Post Procurement Tender / Bid for Farmers
   const [tenderForm, setTenderForm] = useState({
     cropName: 'Hybrid Tomatoes',
     cropBangla: 'হাইব্রিড পাকা টমেটো',
     quantityKgNeeded: 3000,
     offeredPricePerKg: 39,
-    district: currentUser.district || 'Bogura',
-    upazila: currentUser.upazila || 'Shibganj',
+    district: currentUser?.district || 'Bogura',
+    upazila: currentUser?.upazila || 'Shibganj',
     location: 'Mahasthangarh Highway Delivery Point',
     deadline: 'Within 7 days',
     urgent: true,
     notes: 'Grade A firm table tomatoes. Immediate payment upon crate weighing.',
   });
   const [submittingTender, setSubmittingTender] = useState(false);
+  const [isPublishingBatch, setIsPublishingBatch] = useState(false);
+  const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null);
+
+  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+    setToastMessage({ text, type });
+    setTimeout(() => {
+      setToastMessage((prev) => (prev?.text === text ? null : prev));
+    }, 4000);
+  };
 
   const t = (en: string, bn: string) => (language === 'bn' ? bn : en);
 
@@ -160,17 +169,17 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
     if (!selectedCropToBuy) return;
 
     if (purchaseQtyKg > selectedCropToBuy.availableKg) {
-      alert(t('Quantity exceeds available farm stock.', 'চাহিদার পরিমাণ মজুদ ফসলের চেয়ে বেশি।'));
+      showToast(t('Quantity exceeds available farm stock.', 'চাহিদার পরিমাণ মজুদ ফসলের চেয়ে বেশি।'), 'error');
       return;
     }
 
     setSubmittingPurchase(true);
     try {
       const res = await orderApi.createOrder({
-        buyerId: currentUser.id,
-        buyerName: currentUser.businessName || currentUser.name,
-        buyerPhone: currentUser.phone,
-        buyerEmail: currentUser.email,
+        buyerId: currentUser?.id || 'usr-wholesaler',
+        buyerName: currentUser?.businessName || currentUser?.name || 'Wholesaler Arat',
+        buyerPhone: currentUser?.phone || '01711000000',
+        buyerEmail: currentUser?.email,
         buyerRole: 'wholesaler',
         sellerId: selectedCropToBuy.sellerId,
         sellerName: selectedCropToBuy.sellerName,
@@ -185,22 +194,23 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
         paymentMethod: 'Bank Transfer / Arat Escrow',
         deliveryAddress: deliveryHub,
         district: selectedCropToBuy.district,
-        notes: `Wholesale procurement contract by ${currentUser.businessName || currentUser.name}. Pick-up at farm gate.`,
+        notes: `Wholesale procurement contract by ${currentUser?.businessName || currentUser?.name || 'Wholesaler'}. Pick-up at farm gate.`,
       });
 
       if (res.success) {
-        alert(
+        showToast(
           t(
             `Wholesale Purchase Order placed successfully! Order #${res.order.id}. Stock reserved from Farmer.`,
             `পাইকারি ক্রয়াদেশ সফলভাবে সম্পন্ন হয়েছে! অর্ডার #${res.order.id}। কৃষকের মজুদ থেকে সংরক্ষিত।`
-          )
+          ),
+          'success'
         );
         setSelectedCropToBuy(null);
         loadFarmerCrops();
         loadMyListings();
       }
     } catch (err: any) {
-      alert(err.message || 'Purchase failed');
+      showToast(err.message || 'Purchase failed', 'error');
     } finally {
       setSubmittingPurchase(false);
     }
@@ -209,11 +219,13 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
   // Publish Wholesale Batch for Retailers (Wholesaler -> Retailer)
   const handlePublishWholesaleBatch = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isPublishingBatch) return;
+    setIsPublishingBatch(true);
     try {
       await productApi.createProduct({
-        sellerId: currentUser.id,
-        sellerName: currentUser.businessName || currentUser.name,
-        sellerPhone: currentUser.phone,
+        sellerId: currentUser?.id || 'usr-wholesaler',
+        sellerName: currentUser?.businessName || currentUser?.name || 'Wholesaler Arat',
+        sellerPhone: currentUser?.phone || '01711000000',
         sellerRole: 'wholesaler',
         targetRole: 'retailer',
         cropName: newBatchForm.cropName,
@@ -225,9 +237,9 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
         minOrderKg: newBatchForm.minOrderKg,
         pricePerKg: newBatchForm.pricePerKg,
         qualityGrade: newBatchForm.qualityGrade,
-        district: currentUser.district || 'Bogura',
-        upazila: currentUser.upazila || 'Shibganj',
-        locationDetails: `${currentUser.businessName || currentUser.name} Wholesale Arat Depot`,
+        district: currentUser?.district || 'Bogura',
+        upazila: currentUser?.upazila || 'Shibganj',
+        locationDetails: `${currentUser?.businessName || currentUser?.name || 'Wholesale'} Arat Depot`,
         harvestStatus: 'Cold-chain stored / Fresh Lot',
         availableDate: 'Ready for Retailer Dispatch',
         organicCertified: false,
@@ -235,14 +247,14 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
         description: newBatchForm.description,
         traceability: {
           farmerOrigin: newBatchForm.farmerOrigin,
-          wholesalerArat: currentUser.businessName || currentUser.name,
+          wholesalerArat: currentUser?.businessName || currentUser?.name || 'Wholesaler Arat',
           procurementDate: 'Procured from verified farmer',
           safetyNote: 'Sorted and crate-packed for retail shops.',
         },
       });
 
       NotificationStore.addSystemNotif(
-        currentUser.id,
+        currentUser?.id || 'usr-wholesaler',
         t('Wholesale Batch Published', 'পাইকারি লট প্রকাশিত'),
         t(
           `Published ${newBatchForm.quantityKg}kg of ${newBatchForm.cropName} for retailers at ৳${newBatchForm.pricePerKg}/kg.`,
@@ -251,10 +263,13 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
         'success'
       );
 
+      showToast(t('Wholesale batch published for retailers!', 'খুচরা বিক্রেতাদের জন্য পাইকারি লট সফলভাবে প্রকাশিত হয়েছে!'), 'success');
       setShowAddBatchModal(false);
       loadMyListings();
     } catch (err: any) {
-      alert(err.message || 'Failed to create wholesale batch');
+      showToast(err.message || 'Failed to create wholesale batch', 'error');
+    } finally {
+      setIsPublishingBatch(false);
     }
   };
 
@@ -264,10 +279,10 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
     setSubmittingTender(true);
     try {
       await intelligenceApi.createWholesalerOffer({
-        wholesalerId: currentUser.id,
-        wholesalerName: currentUser.name,
-        wholesalerPhone: currentUser.phone,
-        businessName: currentUser.businessName || currentUser.name,
+        wholesalerId: currentUser?.id || 'usr-wholesaler',
+        wholesalerName: currentUser?.name || 'Wholesaler',
+        wholesalerPhone: currentUser?.phone || '01711000000',
+        businessName: currentUser?.businessName || currentUser?.name || 'Wholesaler Arat',
         cropName: tenderForm.cropName,
         cropBangla: tenderForm.cropBangla,
         quantityKgNeeded: tenderForm.quantityKgNeeded,
@@ -281,16 +296,17 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
         notes: tenderForm.notes,
       });
 
-      alert(
+      showToast(
         t(
           'Procurement Tender published to Farmers successfully! It will now appear on all Farmers’ Intelligence screens.',
           'কৃষকদের জন্য শস্য ক্রয়ের দরপত্র সফলভাবে প্রকাশিত হয়েছে! এটি কৃষকদের ড্যাশবোর্ডে প্রদর্শিত হবে।'
-        )
+        ),
+        'success'
       );
 
       setActiveTab('procure_crops');
     } catch (err: any) {
-      alert(err.message || 'Failed to publish tender');
+      showToast(err.message || 'Failed to publish tender', 'error');
     } finally {
       setSubmittingTender(false);
     }
@@ -302,10 +318,11 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
     status: 'Confirmed' | 'Processing' | 'Dispatched' | 'Delivered'
   ) => {
     try {
-      await orderApi.updateStatus(orderId, status, currentUser.name, 'wholesaler');
+      await orderApi.updateStatus(orderId, status, currentUser?.name || 'Wholesaler', 'wholesaler');
+      showToast(t(`Order status updated to ${status}!`, `অর্ডার স্ট্যাটাস ${status}-এ পরিবর্তিত হয়েছে!`), 'success');
       loadRetailerOrders();
     } catch (e: any) {
-      alert(e.message || 'Failed to update order status');
+      showToast(e.message || 'Failed to update order status', 'error');
     }
   };
 
@@ -664,13 +681,22 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
                   <div className="pt-2 border-t border-stone-100 flex items-center justify-between">
                     <span className="text-[10px] text-stone-400">Target: Retailer Shops</span>
                     <button
-                      onClick={async () => {
-                        if (confirm('Delete this wholesale listing?')) {
-                          await productApi.deleteProduct(batch.id);
-                          loadMyListings();
-                        }
+                      onClick={() => {
+                        setConfirmDialog({
+                          message: t('Are you sure you want to delete this wholesale batch?', 'আপনি কি এই পাইকারি লটটি ডিলিট করতে চান?'),
+                          onConfirm: async () => {
+                            try {
+                              await productApi.deleteProduct(batch.id);
+                              showToast(t('Wholesale listing deleted', 'পাইকারি লট ডিলিট করা হয়েছে'), 'success');
+                              loadMyListings();
+                            } catch (e: any) {
+                              showToast(e.message || 'Failed to delete listing', 'error');
+                            }
+                          },
+                        });
                       }}
-                      className="text-stone-400 hover:text-red-500 p-1"
+                      className="text-stone-400 hover:text-red-500 p-1 transition-colors"
+                      title={t('Delete Listing', 'লট ডিলিট করুন')}
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -724,14 +750,14 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
                     <span className="font-mono font-bold text-stone-900 text-sm">{order.id}</span>
                     <span
                       className={`badge text-[10px] ${
-                        order.status === 'Delivered'
+                        (order.status || order.deliveryStatus) === 'Delivered'
                           ? 'badge-success'
-                          : order.status === 'Dispatched'
+                          : (order.status || order.deliveryStatus) === 'Dispatched'
                           ? 'badge-purple'
                           : 'badge-warning'
                       }`}
                     >
-                      {order.status}
+                      {order.status || order.deliveryStatus}
                     </span>
                   </div>
                   <div className="text-stone-700 font-semibold">
@@ -750,7 +776,7 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
                   </div>
 
                   <div className="flex items-center gap-1.5">
-                    {order.status === 'Confirmed' && (
+                    {((order.status || order.deliveryStatus) === 'Confirmed') && (
                       <button
                         onClick={() => handleUpdateRetailerOrderStatus(order.id, 'Dispatched')}
                         className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-1.5 rounded-xl text-xs"
@@ -758,7 +784,7 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
                         {t('Mark Dispatched', 'মাল পাঠান')}
                       </button>
                     )}
-                    {order.status === 'Dispatched' && (
+                    {((order.status || order.deliveryStatus) === 'Dispatched') && (
                       <button
                         onClick={() => handleUpdateRetailerOrderStatus(order.id, 'Delivered')}
                         className="bg-stone-900 hover:bg-stone-800 text-white font-bold px-3 py-1.5 rounded-xl text-xs"
@@ -1153,12 +1179,72 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-extrabold px-6 py-2 rounded-xl shadow-md"
+                  disabled={isPublishingBatch}
+                  className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-extrabold px-6 py-2 rounded-xl shadow-md flex items-center gap-2"
                 >
-                  Publish Batch
+                  {isPublishingBatch ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>{t('Publishing...', 'প্রকাশিত হচ্ছে...')}</span>
+                    </>
+                  ) : (
+                    <span>{t('Publish Batch', 'লট প্রকাশ করুন')}</span>
+                  )}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-2xl border text-sm font-semibold transition-all transform animate-in slide-in-from-bottom-5 duration-300 ${
+          toastMessage.type === 'success'
+            ? 'bg-blue-950/90 border-blue-500/50 text-blue-100 shadow-blue-950/30'
+            : 'bg-rose-950/90 border-rose-500/50 text-rose-100 shadow-rose-950/30'
+        }`}>
+          {toastMessage.type === 'success' ? (
+            <CheckCircle2 className="w-5 h-5 text-blue-400 shrink-0" />
+          ) : (
+            <AlertCircle className="w-5 h-5 text-rose-400 shrink-0" />
+          )}
+          <span className="max-w-md">{toastMessage.text}</span>
+          <button
+            onClick={() => setToastMessage(null)}
+            className="ml-2 text-stone-400 hover:text-white transition-colors"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
+      {/* Confirmation Modal */}
+      {confirmDialog && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-stone-100 animate-in zoom-in-95 duration-200">
+            <h4 className="text-lg font-bold text-stone-900 mb-2">{t('Confirm Action', 'নিশ্চিতকরণ')}</h4>
+            <p className="text-sm text-stone-600 mb-6">{confirmDialog.message}</p>
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setConfirmDialog(null)}
+                className="px-4 py-2 text-stone-600 font-bold hover:bg-stone-100 rounded-xl transition-colors text-sm"
+              >
+                {t('Cancel', 'বাতিল')}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const onConfirm = confirmDialog.onConfirm;
+                  setConfirmDialog(null);
+                  onConfirm();
+                }}
+                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-md transition-colors text-sm"
+              >
+                {t('Confirm', 'নিশ্চিত করুন')}
+              </button>
+            </div>
           </div>
         </div>
       )}

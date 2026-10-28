@@ -137,23 +137,36 @@ export const RetailerDashboard: React.FC<RetailerDashboardProps> = ({
     loadConsumerOrders();
   }, [currentUser.id]);
 
+  const [isPublishingProduct, setIsPublishingProduct] = useState(false);
+  const [toastMessage, setToastMessage] = useState<{ text: string; type?: 'success' | 'error' } | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<{
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  } | null>(null);
+
+  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+    setToastMessage({ text, type });
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
   // Execute Wholesale Purchase from Wholesaler (Wholesaler -> Retailer)
   const handlePurchaseFromWholesaler = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedWholesaleLot) return;
 
     if (orderKg < (selectedWholesaleLot.minOrderKg || 50)) {
-      alert(`Minimum wholesale order is ${selectedWholesaleLot.minOrderKg || 50} kg.`);
+      showToast(t(`Minimum wholesale order is ${selectedWholesaleLot.minOrderKg || 50} kg.`, `নূন্যতম পাইকারি অর্ডার ${selectedWholesaleLot.minOrderKg || 50} কেজি।`), 'error');
       return;
     }
 
     setSubmittingWholesaleOrder(true);
     try {
       const res = await orderApi.createOrder({
-        buyerId: currentUser.id,
-        buyerName: currentUser.shopName || currentUser.name,
-        buyerPhone: currentUser.phone,
-        buyerEmail: currentUser.email,
+        buyerId: currentUser?.id,
+        buyerName: currentUser?.shopName || currentUser?.name || 'Retailer',
+        buyerPhone: currentUser?.phone || '',
+        buyerEmail: currentUser?.email,
         buyerRole: 'retailer',
         sellerId: selectedWholesaleLot.sellerId,
         sellerName: selectedWholesaleLot.sellerName,
@@ -166,24 +179,25 @@ export const RetailerDashboard: React.FC<RetailerDashboardProps> = ({
           },
         ],
         paymentMethod: 'Bank Transfer / Wholesale Credit',
-        deliveryAddress: currentUser.address || `${currentUser.district} Retail Outlet`,
-        district: currentUser.district || 'Bogura',
-        notes: `Procured wholesale stock by ${currentUser.shopName || currentUser.name}`,
+        deliveryAddress: currentUser?.address || `${currentUser?.district || 'Bogura'} Retail Outlet`,
+        district: currentUser?.district || 'Bogura',
+        notes: `Procured wholesale stock by ${currentUser?.shopName || currentUser?.name}`,
       });
 
       if (res.success) {
-        alert(
+        showToast(
           t(
             `Wholesale stock ordered from Wholesaler! Order #${res.order.id}. Stock reserved.`,
             `পাইকার থেকে স্টক ক্রয় সম্পন্ন হয়েছে! অর্ডার #${res.order.id}। স্টক সংরক্ষিত।`
-          )
+          ),
+          'success'
         );
         setSelectedWholesaleLot(null);
         loadWholesaleListings();
         loadMyRetailProducts();
       }
     } catch (err: any) {
-      alert(err.message || 'Wholesale order failed');
+      showToast(err.message || t('Wholesale order failed', 'পাইকারি অর্ডার ব্যর্থ হয়েছে'), 'error');
     } finally {
       setSubmittingWholesaleOrder(false);
     }
@@ -192,11 +206,14 @@ export const RetailerDashboard: React.FC<RetailerDashboardProps> = ({
   // Publish Retail Product for Consumers (Retailer -> Consumer)
   const handlePublishRetailProduct = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isPublishingProduct) return;
+    setIsPublishingProduct(true);
+
     try {
       await productApi.createProduct({
-        sellerId: currentUser.id,
-        sellerName: currentUser.shopName || currentUser.name,
-        sellerPhone: currentUser.phone,
+        sellerId: currentUser?.id,
+        sellerName: currentUser?.shopName || currentUser?.name || 'Retailer',
+        sellerPhone: currentUser?.phone || '',
         sellerRole: 'retailer',
         targetRole: 'consumer',
         cropName: retailForm.cropName,
@@ -209,8 +226,8 @@ export const RetailerDashboard: React.FC<RetailerDashboardProps> = ({
         pricePerKg: retailForm.pricePerKg,
         marketPricePerKg: retailForm.marketPricePerKg,
         qualityGrade: retailForm.qualityGrade,
-        district: currentUser.district || 'Bogura',
-        upazila: currentUser.upazila || 'Bogura Sadar',
+        district: currentUser?.district || 'Bogura',
+        upazila: currentUser?.upazila || 'Bogura Sadar',
         locationDetails: retailForm.locationDetails,
         harvestStatus: 'Fresh Farm Stock',
         availableDate: 'Ready for Home Delivery',
@@ -235,23 +252,32 @@ export const RetailerDashboard: React.FC<RetailerDashboardProps> = ({
         'success'
       );
 
+      showToast(t('Retail Product Live on Social Feed!', 'খুচরা পণ্য সোশ্যাল ফিডে প্রকাশিত!'), 'success');
       setShowAddRetailModal(false);
       loadMyRetailProducts();
     } catch (err: any) {
-      alert(err.message || 'Failed to publish retail product');
+      showToast(err.message || t('Failed to publish retail product', 'পণ্য প্রকাশ করতে ব্যর্থ হয়েছে'), 'error');
+    } finally {
+      setIsPublishingProduct(false);
     }
   };
 
   // Delete Retail Product
-  const handleDeleteProduct = async (id: string) => {
-    if (confirm(t('Remove this product from the Consumer Marketplace?', 'ভোক্তা মার্কেটপ্লেস থেকে এই পণ্যটি কি সরাতে চান?'))) {
-      try {
-        await productApi.deleteProduct(id);
-        loadMyRetailProducts();
-      } catch (e: any) {
-        alert(e.message || 'Failed to delete product');
-      }
-    }
+  const handleDeleteProduct = (id: string) => {
+    setConfirmDialog({
+      title: t('Delete Product', 'পণ্য মুছে ফেলুন'),
+      message: t('Remove this product from the Consumer Marketplace?', 'ভোক্তা মার্কেটপ্লেস থেকে এই পণ্যটি কি সরাতে চান?'),
+      onConfirm: async () => {
+        setConfirmDialog(null);
+        try {
+          await productApi.deleteProduct(id);
+          showToast(t('Product removed successfully', 'পণ্য সফলভাবে সরানো হয়েছে'), 'success');
+          loadMyRetailProducts();
+        } catch (e: any) {
+          showToast(e.message || t('Failed to delete product', 'পণ্য মোছা ব্যর্থ হয়েছে'), 'error');
+        }
+      },
+    });
   };
 
   // Update Consumer Order Status
@@ -260,10 +286,11 @@ export const RetailerDashboard: React.FC<RetailerDashboardProps> = ({
     status: 'Confirmed' | 'Processing' | 'Dispatched' | 'Delivered'
   ) => {
     try {
-      await orderApi.updateStatus(orderId, status, currentUser.name, 'retailer');
+      await orderApi.updateStatus(orderId, status, currentUser?.name || 'Retailer', 'retailer');
+      showToast(t(`Order ${orderId} status updated to ${status}.`, `অর্ডার ${orderId} স্ট্যাটাস ${status} এ হালনাগাদ করা হয়েছে।`), 'success');
       loadConsumerOrders();
     } catch (e: any) {
-      alert(e.message || 'Failed to update order status');
+      showToast(e.message || t('Failed to update order status', 'অর্ডার স্ট্যাটাস আপডেট ব্যর্থ হয়েছে'), 'error');
     }
   };
 
@@ -551,14 +578,14 @@ export const RetailerDashboard: React.FC<RetailerDashboardProps> = ({
                     <span className="font-mono font-bold text-stone-900 text-sm">{order.id}</span>
                     <span
                       className={`badge text-[10px] ${
-                        order.status === 'Delivered'
+                        (order.status || order.deliveryStatus) === 'Delivered'
                           ? 'badge-success'
-                          : order.status === 'Dispatched'
+                          : (order.status || order.deliveryStatus) === 'Dispatched'
                           ? 'badge-purple'
                           : 'badge-warning'
                       }`}
                     >
-                      {order.status}
+                      {order.status || order.deliveryStatus}
                     </span>
                   </div>
                   <div className="text-stone-700 font-semibold">
@@ -578,7 +605,7 @@ export const RetailerDashboard: React.FC<RetailerDashboardProps> = ({
                   </div>
 
                   <div className="flex items-center gap-1.5">
-                    {order.status === 'Confirmed' && (
+                    {((order.status || order.deliveryStatus) === 'Confirmed') && (
                       <button
                         onClick={() => handleUpdateConsumerOrderStatus(order.id, 'Dispatched')}
                         className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1"
@@ -587,7 +614,7 @@ export const RetailerDashboard: React.FC<RetailerDashboardProps> = ({
                         <span>Dispatch Van</span>
                       </button>
                     )}
-                    {order.status === 'Dispatched' && (
+                    {((order.status || order.deliveryStatus) === 'Dispatched') && (
                       <button
                         onClick={() => handleUpdateConsumerOrderStatus(order.id, 'Delivered')}
                         className="bg-stone-900 hover:bg-stone-800 text-white font-bold px-3 py-1.5 rounded-xl text-xs"
@@ -910,12 +937,72 @@ export const RetailerDashboard: React.FC<RetailerDashboardProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-6 py-2 rounded-xl shadow-md"
+                  disabled={isPublishingProduct}
+                  className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-extrabold px-6 py-2 rounded-xl shadow-md flex items-center gap-2"
                 >
-                  Publish to Social Feed
+                  {isPublishingProduct ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>{t('Publishing...', 'প্রকাশিত হচ্ছে...')}</span>
+                    </>
+                  ) : (
+                    <span>{t('Publish to Social Feed', 'সোশ্যাল ফিডে প্রকাশ করুন')}</span>
+                  )}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-2xl border text-sm font-semibold transition-all transform animate-in slide-in-from-bottom-5 duration-300 ${
+          toastMessage.type === 'success'
+            ? 'bg-emerald-950/90 border-emerald-500/50 text-emerald-100 shadow-emerald-950/30'
+            : 'bg-rose-950/90 border-rose-500/50 text-rose-100 shadow-rose-950/30'
+        }`}>
+          {toastMessage.type === 'success' ? (
+            <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+          ) : (
+            <AlertCircle className="w-5 h-5 text-rose-400 shrink-0" />
+          )}
+          <span className="max-w-md">{toastMessage.text}</span>
+          <button
+            onClick={() => setToastMessage(null)}
+            className="ml-2 text-stone-400 hover:text-white transition-colors"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
+      {/* Confirmation Modal */}
+      {confirmDialog && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-stone-100 animate-in zoom-in-95 duration-200">
+            <h4 className="text-lg font-bold text-stone-900 mb-2">{t('Confirm Action', 'নিশ্চিতকরণ')}</h4>
+            <p className="text-sm text-stone-600 mb-6">{confirmDialog.message}</p>
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setConfirmDialog(null)}
+                className="px-4 py-2 text-stone-600 font-bold hover:bg-stone-100 rounded-xl transition-colors text-sm"
+              >
+                {t('Cancel', 'বাতিল')}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const onConfirm = confirmDialog.onConfirm;
+                  setConfirmDialog(null);
+                  onConfirm();
+                }}
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-md transition-colors text-sm"
+              >
+                {t('Confirm', 'নিশ্চিত করুন')}
+              </button>
+            </div>
           </div>
         </div>
       )}

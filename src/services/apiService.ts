@@ -233,7 +233,12 @@ export const apiService = {
       if (filter?.orderType) params.append('orderType', filter.orderType);
       const res = await fetch(`${BASE_URL}/orders?${params.toString()}`);
       const data = await res.json();
-      return data.orders || [];
+      return (data.orders || []).map((o: any) => ({
+        ...o,
+        id: o.id || o.orderId,
+        status: o.status || o.deliveryStatus,
+        deliveryStatus: o.deliveryStatus || o.status,
+      }));
     } catch {
       return [];
     }
