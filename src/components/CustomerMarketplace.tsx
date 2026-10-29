@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { MarketplaceProduct, Language, User } from '../types';
 import { productApi, orderApi } from '../services/api';
+import { toBanglaNumber } from './Header';
+import { getCropName, getCropDescription, translateMetadata } from './RetailerDashboard';
 import {
   ShoppingCart,
   Plus,
@@ -112,7 +114,8 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
         category: selectedCategory !== 'All' ? selectedCategory : undefined,
         search: searchQuery.trim() || undefined,
       });
-      setProducts(res.products || []);
+      const strictlyRetail = (res.products || []).filter((p) => (p.sellerRole || '').toLowerCase() === 'retailer');
+      setProducts(strictlyRetail);
     } catch (err: any) {
       console.error('Failed to load marketplace products', err);
       setError(
@@ -136,6 +139,16 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
 
   // Cart operations
   const addToCart = (product: MarketplaceProduct) => {
+    // Strict supply chain: Consumers can ONLY purchase from Retailers
+    if (product.sellerRole && product.sellerRole.toLowerCase() !== 'retailer') {
+      showToast(
+        language === 'bn'
+          ? 'বাণিজ্যিক বিধিনিষেধ: ভোক্তারা শুধুমাত্র খুচরা বিক্রেতাদের থেকেই ক্রয় করতে পারবেন। কৃষক বা পাইকারদের থেকে সরাসরি ক্রয় সম্পূর্ণ নিষিদ্ধ।'
+          : 'Trade Restriction: Consumers can ONLY purchase from Retailers. Direct purchases from Farmers or Wholesalers are strictly blocked.',
+        'error'
+      );
+      return;
+    }
     setCart((prev) => {
       const existing = prev.find((item) => item.product.id === product.id);
       if (existing) {
@@ -222,6 +235,14 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
         const sellerItems = groupedBySeller[sellerId];
         const primaryProduct = sellerItems[0].product;
         primaryRetailer = primaryProduct.sellerName;
+
+        if (primaryProduct.sellerRole && primaryProduct.sellerRole.toLowerCase() !== 'retailer') {
+          throw new Error(
+            language === 'bn'
+              ? 'বাণিজ্যিক বিধিনিষেধ: ভোক্তারা শুধুমাত্র খুচরা বিক্রেতাদের থেকেই ক্রয় করতে পারবেন। কৃষক বা পাইকারদের থেকে সরাসরি ক্রয় নিষিদ্ধ।'
+              : 'Trade Restriction: Consumers can ONLY purchase from Retailers. Direct purchases from Farmers or Wholesalers are strictly blocked.'
+          );
+        }
 
         const res = await orderApi.createOrder({
           buyerId: currentUser?.id,
@@ -588,7 +609,7 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
                       </div>
                       {product.marketPricePerKg && product.marketPricePerKg > product.pricePerKg && (
                         <span className="text-[10px] text-stone-400 line-through block">
-                          Govt DAM: ৳{product.marketPricePerKg}/kg
+                          {language === 'bn' ? `সরকারি কৃষি বিপণন দর: ৳${toBanglaNumber(product.marketPricePerKg)}/কেজি` : `Govt DAM: ৳${product.marketPricePerKg}/kg`}
                         </span>
                       )}
                     </div>
@@ -599,7 +620,7 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
                     <div>
                       <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-1">
                         <h3 className="text-base sm:text-lg font-extrabold text-stone-900">
-                          {language === 'bn' ? product.banglaName || product.cropName : product.cropName}
+                          {getCropName(product, language)}
                         </h3>
                         <span className="text-xs text-stone-500 font-medium">
                           {language === 'bn' ? 'জাত:' : 'Variety:'}{' '}
@@ -680,7 +701,7 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
                         </strong>
                         {product.minOrderKg && product.minOrderKg > 1 && (
                           <span className="text-[10px] text-stone-400 block">
-                            (Min: {product.minOrderKg} kg)
+                            ({language === 'bn' ? 'নূন্যতম:' : 'Min:'} {language === 'bn' ? toBanglaNumber(product.minOrderKg) : product.minOrderKg} {language === 'bn' ? 'কেজি' : 'kg'})
                           </span>
                         )}
                       </div>
@@ -694,7 +715,7 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
                             <Minus className="w-3.5 h-3.5" />
                           </button>
                           <span className="font-extrabold text-xs px-2 text-stone-900">
-                            {inCart.quantityKg} kg
+                            {language === 'bn' ? toBanglaNumber(inCart.quantityKg) : inCart.quantityKg} {language === 'bn' ? 'কেজি' : 'kg'}
                           </span>
                           <button
                             onClick={() => updateCartQty(product.id, 1)}

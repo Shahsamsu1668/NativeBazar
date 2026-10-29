@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { UserRole, Language, User, ActiveView, Theme, Notification } from '../types';
 import {
-  Sprout, Briefcase, Store, ShoppingCart, Microscope, ShieldCheck,
+  Sprout, Briefcase, Store, ShoppingCart, ShoppingBag, Microscope, ShieldCheck,
   Mic, Stethoscope, Globe, MapPin, TrendingUp,
   Bell, LogOut, ChevronDown, Menu, X,
   Package, CheckCircle2, Sun, Moon, User as UserIcon,
@@ -245,7 +245,7 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Desktop Actions */}
           <div className="hidden md:flex items-center gap-2 flex-1 justify-end">
             {/* AI Crop Doctor Button — hidden for consumer */}
-            {role !== 'consumer' && (
+            {role !== 'consumer' && role !== 'retailer' && (
               <button
                 onClick={onOpenCropDoctor}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
@@ -257,7 +257,7 @@ export const Header: React.FC<HeaderProps> = ({
             )}
 
             {/* Voice Assistant Button — hidden for consumer */}
-            {role !== 'consumer' && (
+            {role !== 'consumer' && role !== 'retailer' && (
               <button
                 onClick={onOpenVoiceAssistant}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
@@ -526,8 +526,8 @@ export const Header: React.FC<HeaderProps> = ({
                       : 'text-stone-700 hover:bg-stone-200/70 hover:text-stone-900'
                   }`}
                 >
-                  {nav.icon}
-                  <span>{t(nav.labelEn, nav.labelBn)}</span>
+                  {nav.id === 'orders' && role === 'consumer' ? <ShoppingBag className="w-4 h-4" /> : nav.icon}
+                  <span>{nav.id === 'orders' ? (role === 'consumer' ? t('Consumer Purchases', 'ভোক্তার ক্রয়') : role === 'retailer' ? t('Retailer Trade', 'খুচরা বিক্রেতার বাণিজ্য') : t(nav.labelEn, nav.labelBn)) : t(nav.labelEn, nav.labelBn)}</span>
                 </button>
               );
             })}
@@ -566,15 +566,17 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           )}
 
-          {/* Crop Doctor & Voice AI — hidden for consumer role on mobile */}
+          {/* Crop Doctor & Voice AI — hidden for consumer role on mobile, Crop Doctor hidden for retailer */}
           {role !== 'consumer' && (
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={() => { onOpenCropDoctor(); setMobileMenuOpen(false); }}
-                className="flex items-center gap-2 p-2 bg-emerald-50 border border-emerald-200 rounded-lg text-xs font-semibold text-emerald-800 cursor-pointer"
-              >
-                <Stethoscope className="w-4 h-4 text-emerald-600" /> {t('Crop Doctor', 'ফসলের ডাক্তার')}
-              </button>
+            <div className={role === 'retailer' ? 'grid grid-cols-1 gap-2' : 'grid grid-cols-2 gap-2'}>
+              {role !== 'retailer' && (
+                <button
+                  onClick={() => { onOpenCropDoctor(); setMobileMenuOpen(false); }}
+                  className="flex items-center gap-2 p-2 bg-emerald-50 border border-emerald-200 rounded-lg text-xs font-semibold text-emerald-800 cursor-pointer"
+                >
+                  <Stethoscope className="w-4 h-4 text-emerald-600" /> {t('Crop Doctor', 'ফসলের ডাক্তার')}
+                </button>
+              )}
               <button
                 onClick={() => { onOpenVoiceAssistant(); setMobileMenuOpen(false); }}
                 className="flex items-center gap-2 p-2 bg-teal-50 border border-teal-200 rounded-lg text-xs font-semibold text-teal-800 cursor-pointer"
@@ -583,7 +585,6 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             </div>
           )}
-
           <div className="grid grid-cols-3 gap-2">
             <div className="col-span-2 flex items-center gap-1 bg-stone-100 rounded-lg px-2 py-1.5 text-xs">
               <MapPin className="w-3.5 h-3.5 text-stone-500" />

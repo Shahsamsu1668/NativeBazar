@@ -966,9 +966,29 @@ export function validateSupplyChainTrade(buyerRole: string, sellerRole: string) 
     throw new Error(`Rule Violation: Farmers (কৃষক) are producers and cannot purchase crop stock.`);
   }
 
-  // 3. Retailers and Consumers cannot transact directly with Farmers
-  if ((bRole === 'retailer' || bRole === 'consumer') && sRole === 'farmer') {
-    throw new Error(`Rule Violation: Retailers and Consumers are strictly barred from buying from Farmers.`);
+  // 3. Retailer Trading Restrictions: Retailers can ONLY purchase from Wholesalers and sell to Consumers
+  if (bRole === 'retailer') {
+    if (sRole !== 'wholesaler') {
+      throw new Error(`Rule Violation: Retailers (খুচরা বিক্রেতা) can ONLY purchase from Wholesalers (পাইকার). Direct purchasing from Farmers (কৃষক) or other roles is strictly blocked.`);
+    }
+  }
+
+  if (sRole === 'retailer') {
+    if (bRole !== 'consumer') {
+      throw new Error(`Rule Violation: Retailers (খুচরা বিক্রেতা) can ONLY sell to Consumers (ভোক্তা).`);
+    }
+  }
+
+  // 4. Consumer Trading Restrictions: Consumers can ONLY purchase from Retailers
+  if (bRole === 'consumer') {
+    if (sRole !== 'retailer') {
+      throw new Error(`Rule Violation: Consumers (ভোক্তা) can ONLY purchase from Retailers (খুচরা বিক্রেতা). Direct purchases from Farmers (কৃষক) or Wholesalers (পাইকার) are strictly blocked.`);
+    }
+  }
+
+  // 5. Consumers cannot sell produce
+  if (sRole === 'consumer') {
+    throw new Error(`Rule Violation: Consumers (ভোক্তা) cannot sell produce in the agricultural supply chain.`);
   }
 
   return true;

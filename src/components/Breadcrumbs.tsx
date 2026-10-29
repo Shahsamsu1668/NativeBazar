@@ -44,7 +44,11 @@ export const Breadcrumbs: React.FC<BreadcrumbsProps> = ({
   const t = (en: string, bn: string) => (language === 'bn' ? bn : en);
 
   const roleName = ROLE_TITLES[role] || { en: 'Dashboard', bn: 'ড্যাশবোর্ড' };
-  const viewInfo = VIEW_TITLES[activeView] || { en: 'View', bn: 'ভিউ' };
+  const viewInfo = activeView === 'orders' && role === 'retailer'
+    ? { en: 'Retailer Trade', bn: 'খুচরা বিক্রেতার বাণিজ্য' }
+    : activeView === 'orders' && role === 'consumer'
+    ? { en: 'Consumer Purchases', bn: 'ভোক্তার ক্রয়' }
+    : VIEW_TITLES[activeView] || { en: 'View', bn: 'ভিউ' };
 
   return (
     <nav
