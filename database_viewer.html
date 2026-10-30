@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>আমার হাট - ডেটাবেজ ভিউয়ার ও সম্পূর্ণ CRUD কন্ট্রোল প্যানেল (Amar Haat Full CRUD DB Explorer)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; background-color: #0f172a; color: #f8fafc; }
+    .table-scroll::-webkit-scrollbar { height: 8px; width: 8px; }
+    .table-scroll::-webkit-scrollbar-track { background: #1e293b; }
+    .table-scroll::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+    .table-scroll::-webkit-scrollbar-thumb:hover { background: #475569; }
+  </style>
+</head>
+<body class="p-4 md:p-8">
+  <div class="max-w-7xl mx-auto space-y-6">
+    <!-- Header -->
+    <div class="bg-gradient-to-r from-emerald-950 via-slate-900 to-stone-900 border border-emerald-800/40 rounded-2xl p-6 shadow-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div>
+        <div class="flex flex-wrap items-center gap-2 mb-2">
+          <span class="inline-flex items-center gap-2 px-3 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full text-xs font-semibold">
+            <i class="fa-solid fa-layer-group"></i> সম্পূর্ণ CRUD কন্ট্রোল সক্রিয় (Create • Read • Update • Delete)
+          </span>
+          <span id="server-status-pill" class="inline-flex items-center gap-2 px-3 py-1 bg-slate-800 text-slate-400 border border-slate-700 rounded-full text-xs font-semibold">
+            <span class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span> সার্ভার চেক করা হচ্ছে...
+          </span>
+        </div>
+        <h1 class="text-2xl md:text-3xl font-black text-white tracking-tight">আমার হাট - ডাটাবেজ কন্ট্রোল প্যানেল</h1>
+        <p class="text-slate-400 text-sm mt-1">
+          Persistent Storage Explorer • SQLite (<code class="text-emerald-400">nativebazar.db</code>) & JSON (<code class="text-amber-400">server_data/db.json</code>)
+        </p>
+      </div>
+      <div class="flex flex-wrap items-center gap-3">
+        <button onclick="openInsertModal()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-sm font-semibold flex items-center gap-2 shadow-lg shadow-emerald-950/40 transition-all cursor-pointer">
+          <i class="fa-solid fa-plus"></i> নতুন রেকর্ড যোগ করুন
+        </button>
+        <button onclick="syncLiveFromBackend()" class="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-slate-700 rounded-xl text-sm font-semibold flex items-center gap-2 transition-all cursor-pointer" title="সার্ভার থেকে লাইভ ডাটা আনুন">
+          <i class="fa-solid fa-cloud-arrow-down"></i> লাইভ সিঙ্ক
+        </button>
+        <button onclick="location.reload()" class="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-xl text-sm font-semibold flex items-center gap-2 transition-all cursor-pointer">
+          <i class="fa-solid fa-rotate"></i> রিফ্রেশ
+        </button>
+      </div>
+    </div>
+
+    <!-- Feedback Message Box -->
+    <div id="feedback-alert" class="hidden rounded-xl p-4 text-sm font-semibold border flex items-center gap-3 transition-all"></div>
+
+    <!-- Quick Stats Cards (Dynamic Counters) -->
+    <div id="stats-container" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3"></div>
+
+    <!-- Main Workspace: Sidebar & Table Content -->
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      <!-- Tables List Sidebar -->
+      <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-4">
+        <div>
+          <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+            <i class="fa-solid fa-table mr-1 text-emerald-400"></i> SQLite টেবিলসমূহ
+          </h2>
+          <div id="sqlite-table-nav" class="space-y-1"></div>
+        </div>
+
+        <div class="pt-3 border-t border-slate-800">
+          <h2 class="text-xs font-bold text-amber-400 uppercase tracking-wider mb-2">
+            <i class="fa-solid fa-file-code mr-1"></i> JSON কালেকশন
+          </h2>
+          <div id="json-table-nav" class="space-y-1"></div>
+        </div>
+      </div>
+
+      <!-- Table View -->
+      <div class="lg:col-span-3 bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+          <div class="flex items-center gap-3">
+            <span id="active-table-badge" class="px-3 py-1 bg-emerald-500/20 text-emerald-400 font-mono font-bold text-sm rounded-lg border border-emerald-500/30">
+              users
+            </span>
+            <span id="active-table-count" class="text-xs text-slate-400">0 records</span>
+            <span class="text-[11px] text-emerald-400 bg-emerald-950/60 border border-emerald-700/50 px-2 py-0.5 rounded-full">
+              <i class="fa-solid fa-bolt mr-1"></i> লাইভ সেভ ও ডিলিট
+            </span>
+          </div>
+          <div class="flex items-center gap-2 w-full sm:w-auto">
+            <div class="relative w-full sm:w-64">
+              <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs"></i>
+              <input id="search-input" type="text" placeholder="এই টেবিলে খুঁজুন..." oninput="filterCurrentTable()" class="w-full bg-slate-800 border border-slate-700 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500" />
+            </div>
+            <button onclick="openInsertModal()" class="sm:hidden px-3 py-1.5 bg-emerald-600 text-white text-xs font-semibold rounded-xl cursor-pointer">
+              <i class="fa-solid fa-plus"></i> যোগ
+            </button>
+          </div>
+        </div>
+
+        <div class="table-scroll overflow-x-auto flex-1 min-h-[420px] rounded-xl border border-slate-800/80 bg-slate-950/60">
+          <table id="records-table" class="min-w-full text-xs text-left">
+            <thead id="table-head" class="bg-slate-800/80 text-slate-300 font-bold sticky top-0 uppercase tracking-wider"></thead>
+            <tbody id="table-body" class="divide-y divide-slate-800 text-slate-300"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Insert Record Modal (CREATE) -->
+  <div id="insert-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+    <div class="bg-slate-900 border border-emerald-700/60 rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+      <div class="p-5 border-b border-slate-800 bg-slate-950 flex items-center justify-between">
+        <div>
+          <h3 class="text-base font-bold text-white flex items-center gap-2">
+            <i class="fa-solid fa-circle-plus text-emerald-400"></i>
+            <span>নতুন রেকর্ড যোগ করুন</span>
+          </h3>
+          <p id="insert-modal-subtitle" class="text-xs text-slate-400 mt-0.5">টার্গেট: users</p>
+        </div>
+        <button onclick="closeInsertModal()" class="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <div id="insert-form-container" class="p-5 overflow-y-auto space-y-4 flex-1">
+        <!-- Dynamic fields -->
+      </div>
+
+      <div class="p-4 border-t border-slate-800 bg-slate-950/60 flex items-center justify-end gap-3">
+        <button onclick="closeInsertModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold transition-colors cursor-pointer">
+          বাতিল (Cancel)
+        </button>
+        <button id="insert-submit-btn" onclick="submitInsertRecord()" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-lg transition-all flex items-center gap-2 cursor-pointer">
+          <i class="fa-solid fa-check"></i> রেকর্ড সংরক্ষণ করুন (Save Record)
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const data = {"sqlite":{"audit_logs":[],"market_prices":[{"id":"dam-bog-1","district":"Bogura","upazila":"Shibganj","market_name":"Mahasthangarh Mokam & Arat","market_name_bn":"মহাস্থানগড় মোকাম ও আড়ত","crop_name":"Tomato (Hybrid Ripe)","bangla_name":"হাইব্রিড পাকা টমেটো","category":"Vegetables","wholesale_price":38,"wholesale_dhaka":46,"retail_price":52,"unit":"kg","change_24h":2.5,"trend":"up","source":"Department of Agricultural Marketing (DAM)","last_updated":"2026-10-23T18:11:21.010Z"},{"id":"dam-bog-2","district":"Bogura","upazila":"Bogura Sadar","market_name":"Chak Jadu Wholesale Market","market_name_bn":"চক জাদু পাইকারি বাজার","crop_name":"Potato (Diamond Table)","bangla_name":"ডায়মন্ড আলু (খাবার)","category":"Tubers","wholesale_price":28,"wholesale_dhaka":34,"retail_price":40,"unit":"kg","change_24h":-1,"trend":"down","source":"Department of Agricultural Marketing (DAM)","last_updated":"2026-10-23T18:11:21.010Z"},{"id":"dam-bog-3","district":"Bogura","upazila":"Sariakandi","market_name":"Char Jamuna Mokam","market_name_bn":"চর যমুনা মোকাম","crop_name":"Green Chili (Fresh)","bangla_name":"তাজা কাঁচা মরিচ","category":"Spices","wholesale_price":85,"wholesale_dhaka":110,"retail_price":130,"unit":"kg","change_24h":5,"trend":"up","source":"Department of Agricultural Marketing (DAM)","last_updated":"2026-10-23T18:11:21.010Z"},{"id":"dam-bog-4","district":"Bogura","upazila":"Sherpur","market_name":"Sherpur Grain Arat","market_name_bn":"শেরপুর শস্য আড়ত","crop_name":"Paddy / Rice (BRRI-28)","bangla_name":"ব্রি ধান-২৮ (প্রতি মণ)","category":"Grains","wholesale_price":32,"wholesale_dhaka":36,"retail_price":64,"unit":"kg","change_24h":0.5,"trend":"stable","source":"Department of Agricultural Marketing (DAM)","last_updated":"2026-10-23T18:11:21.010Z"},{"id":"dam-raj-1","district":"Rajshahi","upazila":"Paba","market_name":"Baneswar Wholesale Arat","market_name_bn":"বানেশ্বর হাট আড়ত","crop_name":"Eggplant / Brinjal (Gol Begun)","bangla_name":"গোল বেগুন","category":"Vegetables","wholesale_price":36,"wholesale_dhaka":48,"retail_price":55,"unit":"kg","change_24h":1.5,"trend":"up","source":"Department of Agricultural Marketing (DAM)","last_updated":"2026-10-23T18:11:21.010Z"}],"order_items":[{"id":"item-t1-001","order_id":"ORD-T1-889012","product_id":"prod-far-301","crop_name":"Harvest Ready Hybrid Tomatoes","bangla_name":"ক্ষেতের পাকা হাইব্রিড টমেটো (জমিতে প্রস্তুত)","quantity_kg":500,"unit_price":38,"subtotal":19000},{"id":"item-t2-001","order_id":"ORD-T2-665241","product_id":"prod-who-201","crop_name":"Bulk Hybrid Tomatoes (Crate Wholesale)","bangla_name":"টমেটো পাইকারি ক্রেট (আড়ত)","quantity_kg":200,"unit_price":42,"subtotal":8400},{"id":"item-t3-001","order_id":"ORD-T3-334992","product_id":"prod-ret-101","crop_name":"Fresh Farm Table Tomatoes","bangla_name":"তাজা হাইব্রিড পাকা টমেটো","quantity_kg":5,"unit_price":52,"subtotal":260}],"orders":[{"id":"ORD-T1-889012","order_type":"farmer_to_wholesaler","buyer_id":"w-karwan-syndicate","buyer_name":"Karwan Bazar Wholesale Arat Syndicate","buyer_phone":"01992233445","buyer_email":"mojammel.arat@nativebazar.com","buyer_role":"wholesaler","seller_id":"far-shibganj-1","seller_name":"Farmer Rafiqul Islam (Shibganj Hub)","seller_phone":"01712458920","seller_role":"farmer","total_bdt":19000,"payment_method":"Bank Transfer / Arat Escrow","payment_status":"Escrow Held","delivery_status":"Confirmed","delivery_address":"Mahasthangarh Mokam Bay #3, Shibganj","district":"Bogura","tracking_code":"TRK-BOG-101001","notes":"Tier 1 direct farm procurement contract for hybrid tomatoes.","created_at":"2026-10-29T06:32:46.946Z","updated_at":"2026-10-29T06:32:46.946Z"},{"id":"ORD-T2-665241","order_type":"wholesaler_to_retailer","buyer_id":"usr-retailer-jafor","buyer_name":"Jafor","buyer_phone":"01911334200","buyer_email":"jafor.retailer@nativebazar.com","buyer_role":"retailer","seller_id":"w-karwan-syndicate","seller_name":"Karwan Bazar Wholesale Arat Syndicate","seller_phone":"01992233445","seller_role":"wholesaler","total_bdt":8400,"payment_method":"Bank Transfer / Wholesale Credit","payment_status":"Escrow Held","delivery_status":"Processing","delivery_address":"Jaleswaritola Market Outlet #14, Bogura Sadar","district":"Bogura","tracking_code":"TRK-BOG-202002","notes":"Tier 2 wholesale procurement of sorted crate tomatoes by Jafor Retail.","created_at":"2026-10-29T18:32:46.946Z","updated_at":"2026-10-29T18:32:46.946Z"},{"id":"ORD-T3-334992","order_type":"retailer_to_consumer","buyer_id":"usr-consumer-sumayya","buyer_name":"Sumayya Islam","buyer_phone":"01518347099","buyer_email":"sumayya.consumer@nativebazar.com","buyer_role":"consumer","seller_id":"usr-retailer-jafor","seller_name":"Jafor","seller_phone":"01911334200","seller_role":"retailer","total_bdt":260,"payment_method":"Cash on Delivery","payment_status":"Pending","delivery_status":"Delivered","delivery_address":"House 14, Road 3, Jaleswaritola, Bogura Sadar","district":"Bogura","tracking_code":"TRK-BOG-303003","notes":"Tier 3 fast van delivery to doorstep. 100% formalin-free checked.","created_at":"2026-10-30T04:32:46.946Z","updated_at":"2026-10-30T04:32:46.946Z"}],"products":[{"id":"prod-far-1793210560339","seller_id":"usr-farmer-1793171195763","seller_name":"shumona","seller_phone":"01666666666","seller_role":"farmer","target_role":"wholesaler","crop_name":"Onion (Deshi)","bangla_name":"দেশি পেঁয়াজ","category":"Spices","variety":"Taherpuri Deshi","quantity_kg":200,"available_kg":200,"min_order_kg":50,"price_per_kg":41,"market_price_per_kg":47.15,"quality_grade":"A","district":"Bogura","upazila":"Shibganj","location_details":"Shibganj, Bogura জমি","harvest_status":"Ready to Harvest","available_date":"In Stock","organic_certified":1,"image_url":"https://images.unsplash.com/photo-1618512496248-a07fe83aa8cb?w=800&auto=format&fit=crop&q=80","description":"Freshly harvested batch from our family farmland.","farmer_origin":"","wholesaler_arat":"","procurement_date":"","safety_note":"","created_at":"2026-10-28T18:02:40.339Z"},{"id":"prod-far-1793210621949","seller_id":"usr-farmer-1793171195763","seller_name":"shumona","seller_phone":"01666666666","seller_role":"farmer","target_role":"wholesaler","crop_name":"Vutta","bangla_name":"Vutta","category":"Grains","variety":"Taherpuri Deshi","quantity_kg":200,"available_kg":200,"min_order_kg":50,"price_per_kg":42,"market_price_per_kg":48.3,"quality_grade":"A","district":"Bogura","upazila":"Shibganj","location_details":"Shibganj, Bogura জমি","harvest_status":"Ready to Harvest","available_date":"In Stock","organic_certified":1,"image_url":"https://images.unsplash.com/photo-1595974482597-4b8da8879bc5?w=800&auto=format&fit=crop&q=80","description":"Freshly harvested batch from our family farmland.","farmer_origin":"","wholesaler_arat":"","procurement_date":"","safety_note":"","created_at":"2026-10-28T18:03:41.950Z"},{"id":"prod-ret-101","seller_id":"ret-bismillah-mart","seller_name":"Bismillah Krishi & Organic Corner","seller_phone":"01719887766","seller_role":"retailer","target_role":"consumer","crop_name":"Fresh Farm Table Tomatoes","bangla_name":"তাজা হাইব্রিড পাকা টমেটো","category":"Vegetables","variety":"Hybrid Shingro-3","quantity_kg":400,"available_kg":400,"min_order_kg":1,"price_per_kg":52,"market_price_per_kg":56,"quality_grade":"A","district":"Bogura","upazila":"Bogura Sadar","location_details":"Jaleswaritola Market Outlet #14","harvest_status":"Harvested Today","available_date":"Ready for Home Delivery","organic_certified":1,"image_url":"https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=800&auto=format&fit=crop&q=80","description":"Hand-picked table tomatoes directly sourced from Shibganj farmer fields. Rich red color, firm pulp, free from artificial ripening agents.","farmer_origin":"Shibganj Upazila, Bogura","wholesaler_arat":"Mahasthangarh Wholesale Arat Hub","procurement_date":"Sourced yesterday evening","safety_note":"Tested 100% formalin-free and safe for fresh family dining.","created_at":"2026-10-30T06:32:46.942Z"},{"id":"prod-ret-102","seller_id":"ret-bismillah-mart","seller_name":"Bismillah Krishi & Organic Corner","seller_phone":"01719887766","seller_role":"retailer","target_role":"consumer","crop_name":"Bogura Diamond Red Potatoes","bangla_name":"বগুড়ার ডায়মন্ড গোল আলু","category":"Tubers","variety":"Diamond Premium","quantity_kg":850,"available_kg":850,"min_order_kg":2,"price_per_kg":38,"market_price_per_kg":42,"quality_grade":"A","district":"Bogura","upazila":"Sherpur","location_details":"Bogura City Distribution Point","harvest_status":"Farm Fresh","available_date":"In Stock","organic_certified":0,"image_url":"https://images.unsplash.com/photo-1518977676601-b53f82aba655?w=800&auto=format&fit=crop&q=80","description":"World-renowned Bogura Diamond table potatoes. Clean skin, optimal starch content, ideal for daily curry, mashed aloo bhorta and crispy fries.","farmer_origin":"Sherpur Upazila, Bogura","wholesaler_arat":"Sherpur Agro Highway Hub","procurement_date":"Fresh cold-chain dispatch","safety_note":"Unwashed natural skin preserves flavor and prevents bacterial growth.","created_at":"2026-10-30T06:32:46.942Z"},{"id":"prod-ret-103","seller_id":"ret-green-bazar","seller_name":"Suborno Farm Fresh Retailers","seller_phone":"01723445566","seller_role":"retailer","target_role":"consumer","crop_name":"Pungent Green Chilies (Spicy)","bangla_name":"তাজা বগুড়ার কাঁচা মরিচ","category":"Spices","variety":"Char Bindu Hybrid","quantity_kg":180,"available_kg":180,"min_order_kg":0.5,"price_per_kg":120,"market_price_per_kg":135,"quality_grade":"A","district":"Bogura","upazila":"Sariakandi","location_details":"Town Central Grocery Pavilion","harvest_status":"Harvested Today","available_date":"Ready for Home Delivery","organic_certified":1,"image_url":"https://images.unsplash.com/photo-1588252303782-cb80119abd6d?w=800&auto=format&fit=crop&q=80","description":"Ultra-fresh, crisp, aromatic green chilies grown on alluvial Jamuna riverbank fields. High capsaicin content and long shelf life.","farmer_origin":"Sariakandi Char, Bogura","wholesaler_arat":"Char Jamuna Mokam","procurement_date":"Procured this morning at 6:00 AM","safety_note":"Grown with organic compost; zero chemical pesticide spray in final 15 days.","created_at":"2026-10-30T06:32:46.942Z"},{"id":"prod-ret-104","seller_id":"ret-green-bazar","seller_name":"Suborno Farm Fresh Retailers","seller_phone":"01723445566","seller_role":"retailer","target_role":"consumer","crop_name":"Winter Crisp Cauliflower","bangla_name":"তাজা সাদা ফুলকপি","category":"Vegetables","variety":"Snow White Early","quantity_kg":250,"available_kg":250,"min_order_kg":1,"price_per_kg":42,"market_price_per_kg":48,"quality_grade":"A","district":"Rangpur","upazila":"Mithapukur","location_details":"Central Wholesale Depo Outlet","harvest_status":"Harvested Today","available_date":"In Stock","organic_certified":0,"image_url":"https://images.unsplash.com/photo-1568584711075-3d021a7c3ca3?w=800&auto=format&fit=crop&q=80","description":"Dense, white, crisp curd cauliflowers without yellow blemishes. Packed securely in ventilated crates.","farmer_origin":"Mithapukur Upazila, Rangpur","wholesaler_arat":"Mithapukur Haat","procurement_date":"Delivered today at 7:30 AM","safety_note":"Pre-washed with clean water and food-grade packaging.","created_at":"2026-10-30T06:32:46.942Z"},{"id":"prod-who-201","seller_id":"w-karwan-syndicate","seller_name":"Karwan Bazar Wholesale Arat Syndicate","seller_phone":"01711209934","seller_role":"wholesaler","target_role":"retailer","crop_name":"Bulk Hybrid Tomatoes (Crate Wholesale)","bangla_name":"টমেটো পাইকারি ক্রেট (আড়ত)","category":"Vegetables","variety":"Hybrid Shingro-3","quantity_kg":2500,"available_kg":2500,"min_order_kg":50,"price_per_kg":42,"market_price_per_kg":45,"quality_grade":"A","district":"Bogura","upazila":"Shibganj","location_details":"Mahasthangarh Mokam Bay #3","harvest_status":"Pre-sorted in 25kg Plastic Crates","available_date":"Immediate dispatch","organic_certified":0,"image_url":"https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=800&auto=format&fit=crop&q=80","description":"Procured direct from contract farmers at Shibganj. Graded, sorted and packed in returnable standard crates.","farmer_origin":"Shibganj Farmer Clusters","wholesaler_arat":"Mahasthangarh Arat","procurement_date":"Daily fresh arrival","safety_note":"Verified quality grading by licensed Arat Inspector.","created_at":"2026-10-30T06:32:46.942Z"},{"id":"prod-who-202","seller_id":"w-bogura-arat","seller_name":"Bogura Arat Sourcing Consortium","seller_phone":"01712001122","seller_role":"wholesaler","target_role":"retailer","crop_name":"Diamond Potatoes Bulk (50kg Sacks)","bangla_name":"ডায়মন্ড আলু ৫০ কেজি বস্তা (পাইকারি)","category":"Tubers","variety":"Diamond Table Grade","quantity_kg":6000,"available_kg":6000,"min_order_kg":100,"price_per_kg":30,"market_price_per_kg":33,"quality_grade":"A","district":"Bogura","upazila":"Sherpur","location_details":"Sherpur Highway Cold Depot","harvest_status":"Sorted Jute Bags","available_date":"Immediate dispatch","organic_certified":0,"image_url":"https://images.unsplash.com/photo-1518977676601-b53f82aba655?w=800&auto=format&fit=crop&q=80","description":"Diamond table potatoes sorted for grocery retailers. Guaranteed under 2% sorting loss with moisture-free packing.","farmer_origin":"Sherpur Contract Farmers","wholesaler_arat":"North Bengal Cold Storage Hub","procurement_date":"Stored under temperature-controlled climate","safety_note":"Government certified weight verified at digital weighbridge.","created_at":"2026-10-30T06:32:46.942Z"},{"id":"prod-far-301","seller_id":"far-shibganj-1","seller_name":"Farmer Rafiqul Islam (Shibganj Hub)","seller_phone":"01712458920","seller_role":"farmer","target_role":"wholesaler","crop_name":"Harvest Ready Hybrid Tomatoes","bangla_name":"ক্ষেতের পাকা হাইব্রিড টমেটো (জমিতে প্রস্তুত)","category":"Vegetables","variety":"Shingro-3 Hybrid","quantity_kg":3500,"available_kg":3500,"min_order_kg":200,"price_per_kg":38,"market_price_per_kg":40,"quality_grade":"A","district":"Bogura","upazila":"Shibganj","location_details":"Chandanpur Village, Shibganj","harvest_status":"Harvesting in Progress","available_date":"Today & Tomorrow","organic_certified":1,"image_url":"https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=800&auto=format&fit=crop&q=80","description":"3.5 bigha farm harvest ready. Uniform size, firm texture, pesticide-safe. Buyer truck can load directly at farm road.","farmer_origin":"Self-cultivated farm, Shibganj","wholesaler_arat":"Available for Aratdar pickup","procurement_date":"Direct farm gate harvest","safety_note":"14-day pre-harvest interval strictly maintained.","created_at":"2026-10-30T06:32:46.942Z"},{"id":"prod-far-302","seller_id":"far-sherpur-1","seller_name":"Farmer Abul Kashem Mondol","seller_phone":"01823991204","seller_role":"farmer","target_role":"wholesaler","crop_name":"Diamond Potatoes Farm Harvest","bangla_name":"ডায়মন্ড আলু (মাঠ থেকে সরাসরি)","category":"Tubers","variety":"Diamond Seed Grade A","quantity_kg":8000,"available_kg":8000,"min_order_kg":500,"price_per_kg":27,"market_price_per_kg":29,"quality_grade":"A","district":"Bogura","upazila":"Sherpur","location_details":"Mirzapur Math, Sherpur","harvest_status":"Freshly Dug from Soil","available_date":"This week","organic_certified":0,"image_url":"https://images.unsplash.com/photo-1518977676601-b53f82aba655?w=800&auto=format&fit=crop&q=80","description":"High-yield Diamond potato crop. Completely rot-free and dry soil cured. Direct bulk arat contracts welcome.","farmer_origin":"Mirzapur, Sherpur","wholesaler_arat":"Direct field loading point","procurement_date":"Freshly dug","safety_note":"Proper curing ensures over 4 months storage life.","created_at":"2026-10-30T06:32:46.942Z"},{"id":"crop-chi-103","seller_id":"user-farmer-rafiq","seller_name":"Md. Rafiqul Islam","seller_phone":"01712458920","seller_role":"farmer","target_role":"wholesaler","crop_name":"Green Chili","bangla_name":"তাজা বগুড়ার কাঁচা মরিচ","category":"Vegetables","variety":"Char Bindu Hybrid","quantity_kg":800,"available_kg":800,"min_order_kg":1,"price_per_kg":85,"market_price_per_kg":92,"quality_grade":"A","district":"Bogura","upazila":"Shibganj","location_details":null,"harvest_status":"Growing","available_date":"Ready to Harvest","organic_certified":1,"image_url":"https://images.unsplash.com/photo-1588252303782-cb80119abd6d?w=600&auto=format&fit=crop&q=80","description":null,"farmer_origin":null,"wholesaler_arat":null,"procurement_date":null,"safety_note":null,"created_at":"2026-10-18T07:25:00.000Z"},{"id":"crop-pot-102","seller_id":"user-farmer-rafiq","seller_name":"Md. Rafiqul Islam","seller_phone":"01712458920","seller_role":"farmer","target_role":"wholesaler","crop_name":"Diamond Red Potato","bangla_name":"ডায়মন্ড লাল খাবার আলু","category":"Vegetables","variety":"Diamond Seed Grade A","quantity_kg":6000,"available_kg":6000,"min_order_kg":1,"price_per_kg":28,"market_price_per_kg":32,"quality_grade":"A","district":"Bogura","upazila":"Shibganj","location_details":null,"harvest_status":"Ready to Harvest","available_date":"In Stock","organic_certified":0,"image_url":"https://images.unsplash.com/photo-1518977676601-b53f82aba655?w=600&auto=format&fit=crop&q=80","description":null,"farmer_origin":null,"wholesaler_arat":null,"procurement_date":null,"safety_note":null,"created_at":"2026-10-18T07:20:00.000Z"},{"id":"crop-tom-101","seller_id":"user-farmer-rafiq","seller_name":"Md. Rafiqul Islam","seller_phone":"01712458920","seller_role":"farmer","target_role":"wholesaler","crop_name":"Hybrid Tomato","bangla_name":"হাইব্রিড পাকা টমেটো","category":"Vegetables","variety":"Shingro-3 Hybrid","quantity_kg":3500,"available_kg":3500,"min_order_kg":1,"price_per_kg":38,"market_price_per_kg":42,"quality_grade":"A","district":"Bogura","upazila":"Shibganj","location_details":null,"harvest_status":"Growing","available_date":"Ready to Harvest","organic_certified":1,"image_url":"https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=600&auto=format&fit=crop&q=80","description":null,"farmer_origin":null,"wholesaler_arat":null,"procurement_date":null,"safety_note":null,"created_at":"2026-10-18T07:15:00.000Z"}],"users":[{"id":"usr-retailer-jafor","role":"retailer","name":"Jafor","name_bn":"জাফর","phone":"01911334200","email":"jafor.retailer@nativebazar.com","password_hash":"sha256_c89a77b28658db72712d8530dd4324529336c483ec5928c0f38d079342bb232a","district":"Bogura","upazila":"Bogura Sadar","verified":1,"farm_size_acres":null,"primary_crops":null,"business_name":null,"business_type":null,"shop_name":"Jafor Agro Retail Store","license_number":null,"trade_address":null,"created_at":"2026-10-28T05:28:16.762Z","last_login_at":"2026-10-28T05:28:16.762Z"},{"id":"w-bogura-arat","role":"wholesaler","name":"Bogura Arat Sourcing Consortium","name_bn":"বগুড়া আড়ত কনসোর্টিয়াম","phone":"01712001122","email":"bogura.arat@nativebazar.com","password_hash":"sha256_aaf4f025c3e2102c326a2d1f0bce580e1d324d6834a9b0653c4fe9d0f78ce7ae","district":"Bogura","upazila":"Sherpur","verified":1,"farm_size_acres":null,"primary_crops":null,"business_name":"Bogura Arat Sourcing Consortium","business_type":null,"shop_name":null,"license_number":null,"trade_address":null,"created_at":"2026-10-28T05:28:16.762Z","last_login_at":"2026-10-28T05:28:16.762Z"},{"id":"ret-bismillah-mart","role":"retailer","name":"Bismillah Krishi & Organic Corner","name_bn":"বিসমিল্লাহ কৃষি কর্নার","phone":"01719887766","email":"bismillah.retail@nativebazar.com","password_hash":"sha256_2520978dfcaaf93c091777b06ed22e231298069d7065cba307ebd54e1df5d0c6","district":"Bogura","upazila":"Bogura Sadar","verified":1,"farm_size_acres":null,"primary_crops":null,"business_name":null,"business_type":null,"shop_name":"Bismillah Krishi & Organic Corner","license_number":null,"trade_address":null,"created_at":"2026-10-28T05:28:16.762Z","last_login_at":"2026-10-28T05:28:16.762Z"},{"id":"ret-green-bazar","role":"retailer","name":"Suborno Farm Fresh Retailers","name_bn":"সুবর্ণ ফার্ম ফ্রেশ রিটেইলার্স","phone":"01723445566","email":"suborno.retail@nativebazar.com","password_hash":"sha256_2520978dfcaaf93c091777b06ed22e231298069d7065cba307ebd54e1df5d0c6","district":"Bogura","upazila":"Sariakandi","verified":1,"farm_size_acres":null,"primary_crops":null,"business_name":null,"business_type":null,"shop_name":"Suborno Farm Fresh Retailers","license_number":null,"trade_address":null,"created_at":"2026-10-28T05:28:16.762Z","last_login_at":"2026-10-28T05:28:16.762Z"},{"id":"usr-consumer-sumayya","role":"consumer","name":"Sumayya Islam","name_bn":"সুমাইয়া ইসলাম","phone":"01518347099","email":"sumayya.consumer@nativebazar.com","password_hash":"sha256_1652bc1f2116a4be14400c036ec52bd9118e5589b54fdd51208980e31be048d6","district":"Bogura","upazila":"Bogura Sadar","verified":1,"farm_size_acres":null,"primary_crops":null,"business_name":null,"business_type":null,"shop_name":null,"license_number":null,"trade_address":null,"created_at":"2026-10-28T05:28:16.762Z","last_login_at":"2026-10-28T05:28:16.762Z"},{"id":"guest-consumer","role":"consumer","name":"Guest Consumer","name_bn":"অতিথি ক্রেতা","phone":"01700000001","email":"guest@nativebazar.com","password_hash":"sha256_d88d629e7cce3a9da6bf8c71bfb8591816995f21cf7a536d09c000698d652e28","district":"Bogura","upazila":"Bogura Sadar","verified":1,"farm_size_acres":null,"primary_crops":null,"business_name":null,"business_type":null,"shop_name":null,"license_number":null,"trade_address":null,"created_at":"2026-10-28T05:28:16.762Z","last_login_at":"2026-10-28T05:28:16.762Z"},{"id":"usr-farmer-1793167770835","role":"farmer","name":"Shakib","name_bn":null,"phone":"01711111111","email":null,"password_hash":"sha256_6145ee87ba5997d41e909fce3f8d93c1390702c1f28bb8f742e9c2682d3991a5","district":"Dhaka","upazila":"Mirpur","verified":1,"farm_size_acres":3,"primary_crops":"[\"Potato\",\"Tomato\",\"Onion\",\"Chili\"]","business_name":null,"business_type":null,"shop_name":null,"license_number":null,"trade_address":null,"created_at":"2026-10-28T06:09:30.836Z","last_login_at":"2026-10-28T07:09:58.411Z"},{"id":"usr-farmer-1793171195763","role":"farmer","name":"shumona","name_bn":null,"phone":"01666666666","email":null,"password_hash":"sha256_6145ee87ba5997d41e909fce3f8d93c1390702c1f28bb8f742e9c2682d3991a5","district":"Bogura","upazila":"Shibganj","verified":1,"farm_size_acres":3,"primary_crops":"[\"Potato\",\"Tomato\"]","business_name":null,"business_type":null,"shop_name":null,"license_number":null,"trade_address":null,"created_at":"2026-10-28T07:06:35.763Z","last_login_at":"2026-10-29T21:23:44.291Z"},{"id":"admin-root","role":"admin","name":"NativeBazar System Administrator","name_bn":"নেটিভবাজার সিস্টেম অ্যাডমিন","phone":"NativeBazarSJS","email":"admin@nativebazar.gov.bd","password_hash":"sha256_02007e55_8","district":"Bogura","upazila":"Bogura Sadar","verified":1,"farm_size_acres":null,"primary_crops":null,"business_name":null,"business_type":null,"shop_name":null,"license_number":null,"trade_address":null,"created_at":"2026-10-18T07:04:38.551Z","last_login_at":null},{"id":"user-wholesaler-sumaiya","role":"wholesaler","name":"Sumaiya Islam","name_bn":"সুমাইয়া ইসলাম","phone":"01711209934","email":"i.sumayyaislam@gmail.com","password_hash":"sha256_1d916122_19","district":"Bogura","upazila":"Bogura Sadar","verified":1,"farm_size_acres":null,"primary_crops":null,"business_name":"Islam Agro Wholesale Syndicate","business_type":"Wholesaler","shop_name":null,"license_number":null,"trade_address":null,"created_at":"2026-10-18T07:15:00.000Z","last_login_at":null},{"id":"user-supplier-meghna","role":"retailer","name":"Meghna Agro Depot Manager","name_bn":"মেঘনা সার ও বীজ বিতান","phone":"01715889900","email":"meghna.depot@nativebazar.com","password_hash":"sha256_4a4f011d_21","district":"Bogura","upazila":"Shibganj","verified":1,"farm_size_acres":null,"primary_crops":null,"business_name":null,"business_type":null,"shop_name":"যমুনা ও মেঘনা সার বিতান","license_number":"BCIC-BGR-2026-889","trade_address":null,"created_at":"2026-10-18T07:20:00.000Z","last_login_at":null},{"id":"usr_1792730301926_i2pl","role":"retailer","name":"Shakib","name_bn":null,"phone":"01777777777","email":"shakib@gmail.com","password_hash":"sha256_034afd86_6","district":"Dhaka","upazila":"Mirpur","verified":1,"farm_size_acres":null,"primary_crops":null,"business_name":null,"business_type":null,"shop_name":"Goriber Bondhu Dokan","license_number":null,"trade_address":null,"created_at":"2026-10-23T04:38:21.926Z","last_login_at":"2026-10-23T16:33:18.582Z"},{"id":"usr_1792730505087_9qd2","role":"farmer","name":"Shahriar","name_bn":null,"phone":"01888888888","email":"shahriar@gmail.com","password_hash":"sha256_034afd86_6","district":"Dhaka","upazila":"Savar","verified":1,"farm_size_acres":3,"primary_crops":"[\"Potato\",\"Tomato\",\"Green Chili\",\"Eggplant\",\"Cauliflower\",\"Onion\",\"Paddy\",\"Cabbage\",\"Carrot\"]","business_name":null,"business_type":null,"shop_name":null,"license_number":null,"trade_address":null,"created_at":"2026-10-23T04:41:45.087Z","last_login_at":"2026-10-23T16:10:09.354Z"},{"id":"usr_1792731363361_eawr","role":"consumer","name":"Sakib","name_bn":null,"phone":"01999999999","email":"sakib@gmail.com","password_hash":"sha256_034afd86_6","district":"Dhaka","upazila":"Savar","verified":1,"farm_size_acres":null,"primary_crops":null,"business_name":null,"business_type":null,"shop_name":null,"license_number":null,"trade_address":null,"created_at":"2026-10-23T04:56:03.361Z","last_login_at":null}],"wholesaler_offers":[{"id":"bid-101","wholesaler_id":"w-karwan-syndicate","wholesaler_name":"Karwan Bazar Wholesale Arat Syndicate","wholesaler_phone":"01711209934","business_name":"Karwan Bazar Agro Procurement Hub","crop_name":"Hybrid Tomato","crop_bangla":"হাইব্রিড পাকা টমেটো","quantity_kg_needed":3000,"fulfilled_kg":800,"offered_price_per_kg":42,"district":"Bogura","upazila":"Shibganj","location":"Mahasthangarh Mokam Delivery Hub","deadline":"Within 7 days","urgent":1,"verified":1,"notes":"Immediate cash on crate inspection or verified escrow guarantee.","created_at":"2026-10-23T18:11:21.011Z"},{"id":"bid-102","wholesaler_id":"w-bogura-arat","wholesaler_name":"Bogura Arat Sourcing Consortium","wholesaler_phone":"01712001122","business_name":"North Bengal Cold Storage & Arat","crop_name":"Diamond Potato","crop_bangla":"ডায়মন্ড খাবার আলু","quantity_kg_needed":10000,"fulfilled_kg":3500,"offered_price_per_kg":29,"district":"Bogura","upazila":"Sherpur","location":"Sherpur Highway Depot","deadline":"Within 14 days","urgent":0,"verified":1,"notes":"Grade A table potato. Sacks provided by buyer upon booking.","created_at":"2026-10-23T18:11:21.011Z"},{"id":"bid-103","wholesaler_id":"w-rajshahi-traders","wholesaler_name":"Padma Agro Supply Traders","wholesaler_phone":"01822334455","business_name":"Rajshahi Division Wholesale Arat","crop_name":"Green Chili","crop_bangla":"তাজা কাঁচা মরিচ","quantity_kg_needed":1500,"fulfilled_kg":200,"offered_price_per_kg":88,"district":"Bogura","upazila":"Sariakandi","location":"Char Jamuna Ghat Mokam","deadline":"Within 5 days","urgent":1,"verified":1,"notes":"Freshly harvested dry chili; weight verified at digital weighbridge.","created_at":"2026-10-23T18:11:21.011Z"}]},"json":{"version":"1.0.0","users":[{"id":"admin-root","role":"admin","name":"NativeBazar System Administrator","nameBn":"নেটিভবাজার সিস্টেম অ্যাডমিন","phone":"NativeBazarSJS","email":"admin@nativebazar.gov.bd","passwordHash":"sha256_02007e55_8","district":"Bogura","upazila":"Bogura Sadar","verified":true,"twoFactorEnabled":false,"securityPin":"883650","createdAt":"2026-10-18T07:04:38.551Z"},{"id":"user-farmer-rafiq","role":"farmer","name":"Md. Rafiqul Islam","nameBn":"মো. রফিকুল ইসলাম","phone":"01712458920","email":"rafiqul.farmer@nativebazar.com","passwordHash":"sha256_631dba5c_17","district":"Bogura","upazila":"Shibganj","farmSizeAcres":3.5,"primaryCrops":["Hybrid Tomato","Diamond Red Potato","Green Chili"],"verified":true,"education":"Diploma in Agriculture (Bogura ATI)","twoFactorEnabled":false,"createdAt":"2026-10-18T07:10:00.000Z","sessionToken":"nb_sec_1792736228728_tgn3ng","lastLoginAt":"2026-10-23T06:17:08.729Z"},{"id":"user-wholesaler-sumaiya","role":"wholesaler","name":"Sumaiya Islam","nameBn":"সুমাইয়া ইসলাম","phone":"01711209934","email":"i.sumayyaislam@gmail.com","passwordHash":"sha256_1d916122_19","district":"Bogura","upazila":"Bogura Sadar","businessName":"Islam Agro Wholesale Syndicate","businessType":"Wholesaler","verified":true,"education":"BBA - Agricultural Marketing","twoFactorEnabled":false,"createdAt":"2026-10-18T07:15:00.000Z"},{"id":"user-supplier-meghna","role":"retailer","name":"Meghna Agro Depot Manager","nameBn":"মেঘনা সার ও বীজ বিতান","phone":"01715889900","email":"meghna.depot@nativebazar.com","passwordHash":"sha256_4a4f011d_21","district":"Bogura","upazila":"Shibganj","shopName":"যমুনা ও মেঘনা সার বিতান","licenseNumber":"BCIC-BGR-2026-889","isOrganicCertified":true,"verified":true,"twoFactorEnabled":false,"createdAt":"2026-10-18T07:20:00.000Z"},{"id":"usr_1792730301926_i2pl","role":"retailer","name":"Shakib","phone":"01777777777","email":"shakib@gmail.com","passwordHash":"sha256_034afd86_6","district":"Dhaka","upazila":"Mirpur","verified":true,"createdAt":"2026-10-23T04:38:21.926Z","shopName":"Goriber Bondhu Dokan","isOrganicCertified":false,"sessionToken":"nb_sec_1792773198582_mzh16r","lastLoginAt":"2026-10-23T16:33:18.582Z"},{"id":"usr_1792730505087_9qd2","role":"farmer","name":"Shahriar","phone":"01888888888","email":"shahriar@gmail.com","passwordHash":"sha256_034afd86_6","district":"Dhaka","upazila":"Savar","verified":true,"createdAt":"2026-10-23T04:41:45.087Z","farmSizeAcres":3,"primaryCrops":["Potato","Tomato","Green Chili","Eggplant","Cauliflower","Onion","Paddy","Cabbage","Carrot"],"isOrganicCertified":false,"sessionToken":"nb_sec_1792771809354_vl9dzw","lastLoginAt":"2026-10-23T16:10:09.354Z"},{"id":"usr_1792731363361_eawr","role":"consumer","name":"Sakib","phone":"01999999999","email":"sakib@gmail.com","passwordHash":"sha256_034afd86_6","district":"Dhaka","upazila":"Savar","verified":true,"createdAt":"2026-10-23T04:56:03.361Z","isOrganicCertified":false,"sessionToken":"nb_sec_1792731363361_jov0ck"},{"id":"usr-retailer-jafor","role":"retailer","name":"Jafor","nameBn":"জাফর","phone":"01911334200","email":"jafor.retailer@nativebazar.com","passwordHash":"sha256_c89a77b28658db72712d8530dd4324529336c483ec5928c0f38d079342bb232a","district":"Bogura","upazila":"Bogura Sadar","verified":true,"createdAt":"2026-10-28T05:28:16.762Z","lastLoginAt":"2026-10-28T05:28:16.762Z","shopName":"Jafor Agro Retail Store"},{"id":"w-bogura-arat","role":"wholesaler","name":"Bogura Arat Sourcing Consortium","nameBn":"বগুড়া আড়ত কনসোর্টিয়াম","phone":"01712001122","email":"bogura.arat@nativebazar.com","passwordHash":"sha256_aaf4f025c3e2102c326a2d1f0bce580e1d324d6834a9b0653c4fe9d0f78ce7ae","district":"Bogura","upazila":"Sherpur","verified":true,"createdAt":"2026-10-28T05:28:16.762Z","lastLoginAt":"2026-10-28T05:28:16.762Z","businessName":"Bogura Arat Sourcing Consortium"},{"id":"ret-bismillah-mart","role":"retailer","name":"Bismillah Krishi & Organic Corner","nameBn":"বিসমিল্লাহ কৃষি কর্নার","phone":"01719887766","email":"bismillah.retail@nativebazar.com","passwordHash":"sha256_2520978dfcaaf93c091777b06ed22e231298069d7065cba307ebd54e1df5d0c6","district":"Bogura","upazila":"Bogura Sadar","verified":true,"createdAt":"2026-10-28T05:28:16.762Z","lastLoginAt":"2026-10-28T05:28:16.762Z","shopName":"Bismillah Krishi & Organic Corner"},{"id":"ret-green-bazar","role":"retailer","name":"Suborno Farm Fresh Retailers","nameBn":"সুবর্ণ ফার্ম ফ্রেশ রিটেইলার্স","phone":"01723445566","email":"suborno.retail@nativebazar.com","passwordHash":"sha256_2520978dfcaaf93c091777b06ed22e231298069d7065cba307ebd54e1df5d0c6","district":"Bogura","upazila":"Sariakandi","verified":true,"createdAt":"2026-10-28T05:28:16.762Z","lastLoginAt":"2026-10-28T05:28:16.762Z","shopName":"Suborno Farm Fresh Retailers"},{"id":"usr-consumer-sumayya","role":"consumer","name":"Sumayya Islam","nameBn":"সুমাইয়া ইসলাম","phone":"01518347099","email":"sumayya.consumer@nativebazar.com","passwordHash":"sha256_1652bc1f2116a4be14400c036ec52bd9118e5589b54fdd51208980e31be048d6","district":"Bogura","upazila":"Bogura Sadar","verified":true,"createdAt":"2026-10-28T05:28:16.762Z","lastLoginAt":"2026-10-28T05:28:16.762Z"},{"id":"guest-consumer","role":"consumer","name":"Guest Consumer","nameBn":"অতিথি ক্রেতা","phone":"01700000001","email":"guest@nativebazar.com","passwordHash":"sha256_d88d629e7cce3a9da6bf8c71bfb8591816995f21cf7a536d09c000698d652e28","district":"Bogura","upazila":"Bogura Sadar","verified":true,"createdAt":"2026-10-28T05:28:16.762Z","lastLoginAt":"2026-10-28T05:28:16.762Z"},{"id":"usr-farmer-1793167770835","role":"farmer","name":"Shakib","phone":"01711111111","passwordHash":"sha256_6145ee87ba5997d41e909fce3f8d93c1390702c1f28bb8f742e9c2682d3991a5","district":"Dhaka","upazila":"Mirpur","verified":true,"createdAt":"2026-10-28T06:09:30.836Z","lastLoginAt":"2026-10-28T07:09:58.411Z","farmSizeAcres":3,"primaryCrops":["Potato","Tomato","Onion","Chili"]},{"id":"usr-farmer-1793171195763","role":"farmer","name":"shumona","phone":"01666666666","passwordHash":"sha256_6145ee87ba5997d41e909fce3f8d93c1390702c1f28bb8f742e9c2682d3991a5","district":"Bogura","upazila":"Shibganj","verified":true,"createdAt":"2026-10-28T07:06:35.763Z","lastLoginAt":"2026-10-29T21:23:44.291Z","farmSizeAcres":3,"primaryCrops":["Potato","Tomato"],"sessionToken":"nb_token_1793309024296_c8d983u"},{"id":"user-consumer-tanveer","role":"consumer","name":"Dr. Tanveer Mahmud","nameBn":"ড. তানভীর মাহমুদ","phone":"01711889922","email":"tanveer.consumer@gmail.com","passwordHash":"sha256_5e923064_18","district":"Bogura","upazila":"Bogura Sadar","verified":true,"twoFactorEnabled":false,"createdAt":"2026-10-18T07:30:00.000Z"}],"crops":[{"id":"crop-tom-101","farmerId":"user-farmer-rafiq","farmerName":"Md. Rafiqul Islam","farmerPhone":"01712458920","district":"Bogura","upazila":"Shibganj","cropName":"Hybrid Tomato","cropBangla":"হাইব্রিড পাকা টমেটো","variety":"Shingro-3 Hybrid","quantityKg":3500,"availableDate":"Ready to Harvest","expectedPricePerKg":38,"marketBenchmarkPrice":42,"status":"Growing","imageUrl":"https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=600&auto=format&fit=crop&q=80","qualityGrade":"A","organicCertified":true,"createdAt":"2026-10-18T07:15:00.000Z"},{"id":"crop-pot-102","farmerId":"user-farmer-rafiq","farmerName":"Md. Rafiqul Islam","farmerPhone":"01712458920","district":"Bogura","upazila":"Shibganj","cropName":"Diamond Red Potato","cropBangla":"ডায়মন্ড লাল খাবার আলু","variety":"Diamond Seed Grade A","quantityKg":6000,"availableDate":"In Stock","expectedPricePerKg":28,"marketBenchmarkPrice":32,"status":"Ready to Harvest","imageUrl":"https://images.unsplash.com/photo-1518977676601-b53f82aba655?w=600&auto=format&fit=crop&q=80","qualityGrade":"A","organicCertified":false,"createdAt":"2026-10-18T07:20:00.000Z"},{"id":"crop-chi-103","farmerId":"user-farmer-rafiq","farmerName":"Md. Rafiqul Islam","farmerPhone":"01712458920","district":"Bogura","upazila":"Shibganj","cropName":"Green Chili","cropBangla":"তাজা বগুড়ার কাঁচা মরিচ","variety":"Char Bindu Hybrid","quantityKg":800,"availableDate":"Ready to Harvest","expectedPricePerKg":85,"marketBenchmarkPrice":92,"status":"Growing","imageUrl":"https://images.unsplash.com/photo-1588252303782-cb80119abd6d?w=600&auto=format&fit=crop&q=80","qualityGrade":"A","organicCertified":true,"createdAt":"2026-10-18T07:25:00.000Z"},{"id":"prod-far-1793210560339","farmerId":"usr-farmer-1793171195763","farmerName":"shumona","farmerPhone":"01666666666","district":"Bogura","upazila":"Shibganj","cropName":"Onion (Deshi)","cropBangla":"দেশি পেঁয়াজ","variety":"Taherpuri Deshi","quantityKg":200,"availableDate":"In Stock","expectedPricePerKg":41,"marketBenchmarkPrice":47.15,"status":"Ready to Harvest","imageUrl":"https://images.unsplash.com/photo-1618512496248-a07fe83aa8cb?w=800&auto=format&fit=crop&q=80","qualityGrade":"A","organicCertified":true,"createdAt":"2026-10-28T18:02:40.339Z"},{"id":"prod-far-1793210621949","farmerId":"usr-farmer-1793171195763","farmerName":"shumona","farmerPhone":"01666666666","district":"Bogura","upazila":"Shibganj","cropName":"Vutta","cropBangla":"Vutta","variety":"Taherpuri Deshi","quantityKg":200,"availableDate":"In Stock","expectedPricePerKg":42,"marketBenchmarkPrice":48.3,"status":"Ready to Harvest","imageUrl":"https://images.unsplash.com/photo-1595974482597-4b8da8879bc5?w=800&auto=format&fit=crop&q=80","qualityGrade":"A","organicCertified":true,"createdAt":"2026-10-28T18:03:41.950Z"},{"id":"prod-far-301","farmerId":"far-shibganj-1","farmerName":"Farmer Rafiqul Islam (Shibganj Hub)","farmerPhone":"01712458920","district":"Bogura","upazila":"Shibganj","cropName":"Harvest Ready Hybrid Tomatoes","cropBangla":"ক্ষেতের পাকা হাইব্রিড টমেটো (জমিতে প্রস্তুত)","variety":"Shingro-3 Hybrid","quantityKg":3500,"availableDate":"Today & Tomorrow","expectedPricePerKg":38,"marketBenchmarkPrice":40,"status":"Harvesting in Progress","imageUrl":"https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=800&auto=format&fit=crop&q=80","qualityGrade":"A","organicCertified":true,"createdAt":"2026-10-30T06:32:46.942Z"},{"id":"prod-far-302","farmerId":"far-sherpur-1","farmerName":"Farmer Abul Kashem Mondol","farmerPhone":"01823991204","district":"Bogura","upazila":"Sherpur","cropName":"Diamond Potatoes Farm Harvest","cropBangla":"ডায়মন্ড আলু (মাঠ থেকে সরাসরি)","variety":"Diamond Seed Grade A","quantityKg":8000,"availableDate":"This week","expectedPricePerKg":27,"marketBenchmarkPrice":29,"status":"Freshly Dug from Soil","imageUrl":"https://images.unsplash.com/photo-1518977676601-b53f82aba655?w=800&auto=format&fit=crop&q=80","qualityGrade":"A","organicCertified":false,"createdAt":"2026-10-30T06:32:46.942Z"}],"supplierProducts":[{"id":"sup-meghna-potash","supplierId":"user-supplier-meghna","supplierName":"Meghna Agro Depot Manager","shopName":"যমুনা ও মেঘনা সার বিতান","category":"Fertilizer","name":"Muriate of Potash (MOP)","banglaName":"এমওপি পটাশ সার (সরকারি রেট)","brand":"BCIC Govt. Supply","unitPriceBDT":22,"unit":"kg","inStock":true,"stockQty":850,"phone":"01715889900","suitableCrops":["Potato","Tomato","Chili","Cauliflower"],"description":"সরকারি প্রত্যায়িত মানসম্মত লাল পটাশ সার।","organicCertified":false,"certificationNumber":"BCIC-BGR-2026","deliveryRadiusKm":25,"createdAt":"2026-10-18T08:00:00.000Z"},{"id":"sup-meghna-tricho","supplierId":"user-supplier-meghna","supplierName":"Meghna Agro Depot Manager","shopName":"যমুনা ও মেঘনা সার বিতান","category":"Organic","name":"Trichoderma Bio-Fungicide","banglaName":"ট্রাইকোডার্মা জৈব ছত্রাকনাশক","brand":"GreenBio Organic Agro","unitPriceBDT":180,"unit":"500g pack","inStock":true,"stockQty":120,"phone":"01715889900","suitableCrops":["All Vegetables","Potato","Tomato"],"description":"মাটি শোধন ও মূল পচা রোধে প্রাকৃতিক উপকারী অনুজীব ছত্রাকনাশক।","organicCertified":true,"certificationNumber":"BIO-2026-OK","deliveryRadiusKm":30,"createdAt":"2026-10-18T08:15:00.000Z"},{"id":"sup-meghna-seed","supplierId":"user-supplier-meghna","supplierName":"Meghna Agro Depot Manager","shopName":"যমুনা ও মেঘনা সার বিতান","category":"Seeds","name":"Lal Teer Hybrid Tomato Seeds (Bijli Plus)","banglaName":"লাল তীর হাইব্রিড টমেটো বীজ (বিজলি প্লাস)","brand":"Lal Teer Seed Ltd.","unitPriceBDT":280,"unit":"10g pack","inStock":true,"stockQty":90,"phone":"01715889900","suitableCrops":["Tomato"],"description":"উচ্চফলনশীল ও রোগপ্রতিরোধী বিজলি প্লাস জাতের প্রত্যায়িত বীজ।","organicCertified":false,"deliveryRadiusKm":35,"createdAt":"2026-10-18T08:30:00.000Z"}],"orders":[{"id":"ORD-T1-889012","orderType":"b2b_trade","customerId":"user-wholesaler-sumaiya","customerName":"Sumaiya Islam (Islam Agro Wholesale Syndicate)","phone":"01711209934","sellerId":"user-farmer-rafiq","sellerName":"Md. Rafiqul Islam","sellerRole":"farmer","items":[{"itemId":"crop-tom-101","itemName":"Hybrid Tomato","itemBangla":"হাইব্রিড পাকা টমেটো","unitPrice":38,"unit":"kg","quantity":500,"subtotal":19000}],"totalBDT":19000,"paymentMethod":"Bank Transfer","deliveryAddress":"Mahasthangarh Mokam Bay #3, Shibganj","district":"Bogura","upazila":"Shibganj","status":"Delivered","trackingCode":"TRK-BOG-101001","orderDate":"2026-10-25T10:00:00.000Z"},{"id":"ORD-T3-334992","orderType":"consumer_retail","customerId":"user-consumer-tanveer","customerName":"Dr. Tanveer Mahmud","phone":"01711889922","sellerId":"usr-retailer-jafor","sellerName":"Jafor (Jafor Agro Retail Store)","sellerRole":"retailer","items":[{"itemId":"prod-ret-101","itemName":"Fresh Farm Table Tomatoes","itemBangla":"তাজা হাইব্রিড পাকা টমেটো","unitPrice":52,"unit":"kg","quantity":5,"subtotal":260}],"totalBDT":260,"paymentMethod":"Cash on Delivery","deliveryAddress":"House 14, Road 3, Jaleswaritola, Bogura Sadar","district":"Bogura","upazila":"Bogura Sadar","status":"Confirmed","trackingCode":"TRK-BOG-303003","orderDate":"2026-10-28T09:00:00.000Z"},{"id":"ORD-T2-665241","orderType":"wholesaler_to_retailer","customerId":"usr-retailer-jafor","customerName":"Jafor","phone":"01911334200","items":[{"itemId":"prod-who-201","itemName":"Bulk Hybrid Tomatoes (Crate Wholesale)","itemBangla":"টমেটো পাইকারি ক্রেট (আড়ত)","unitPrice":42,"unit":"kg","quantity":200,"subtotal":8400}],"totalBDT":8400,"paymentMethod":"Bank Transfer / Wholesale Credit","deliveryAddress":"Jaleswaritola Market Outlet #14, Bogura Sadar","district":"Bogura","upazila":"Bogura Sadar","status":"Processing","trackingCode":"TRK-BOG-202002","orderDate":"2026-10-29T18:32:46.946Z","sellerId":"w-karwan-syndicate","sellerName":"Karwan Bazar Wholesale Arat Syndicate","sellerRole":"wholesaler"}],"reviews":[],"auditLogs":[{"id":"log-1792773198598-6yye","timestamp":"2026-10-23T16:33:18.597Z","phone":"01777777777","role":"supplier","status":"SUCCESS","ip":"127.0.0.1","device":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36","details":"Session established"},{"id":"log-1792771809360-jvlu","timestamp":"2026-10-23T16:10:09.360Z","phone":"01888888888","role":"farmer","status":"SUCCESS","ip":"127.0.0.1","device":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36","details":"Session established"},{"id":"log-1792771765485-ixpf","timestamp":"2026-10-23T16:09:25.484Z","phone":"01777777777","role":"supplier","status":"SUCCESS","ip":"127.0.0.1","device":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36","details":"Session established"},{"id":"log-1792771756556-m5xx","timestamp":"2026-10-23T16:09:16.553Z","phone":"01777777777","role":"farmer","status":"FAILED_PASSWORD","ip":"127.0.0.1","device":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36","details":"User account not found"},{"id":"log-1792771751102-jd4c","timestamp":"2026-10-23T16:09:11.097Z","phone":"01777777777","role":"farmer","status":"FAILED_PASSWORD","ip":"127.0.0.1","device":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36","details":"User account not found"},{"id":"log-1792736228737-0l6t","timestamp":"2026-10-23T06:17:08.737Z","phone":"01712458920","role":"farmer","status":"SUCCESS","ip":"127.0.0.1","device":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36","details":"Session established"},{"id":"log-1792736166288-p13e","timestamp":"2026-10-23T06:16:06.285Z","phone":"01712458920","role":"admin","status":"FAILED_PASSWORD","ip":"127.0.0.1","device":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36","details":"User account not found"},{"id":"log-1792735910744-19bc","timestamp":"2026-10-23T06:11:50.744Z","phone":"01712458920","role":"farmer","status":"FAILED_PASSWORD","ip":"127.0.0.1","device":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36","details":"Incorrect password entered"},{"id":"log-1792735760655-89fd","timestamp":"2026-10-23T06:09:20.655Z","phone":"01712458920","role":"farmer","status":"FAILED_PASSWORD","ip":"127.0.0.1","device":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36","details":"Incorrect password entered"},{"id":"log-1792735647390-nsid","timestamp":"2026-10-23T06:07:27.389Z","phone":"01712458920","role":"farmer","status":"FAILED_PASSWORD","ip":"127.0.0.1","device":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36","details":"Incorrect password entered"},{"id":"log-1792735373144-zag4","timestamp":"2026-10-23T06:02:53.143Z","phone":"01712345678","role":"farmer","status":"FAILED_PASSWORD","ip":"127.0.0.1","device":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36","details":"User account not found"},{"id":"log-1792735231536-q87p","timestamp":"2026-10-23T06:00:31.534Z","phone":"01712458920","role":"farmer","status":"FAILED_PASSWORD","ip":"127.0.0.1","device":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36","details":"Incorrect password entered"},{"id":"log-1792731363370-bqpx","timestamp":"2026-10-23T04:56:03.369Z","phone":"01999999999","role":"customer","status":"SUCCESS","ip":"127.0.0.1","device":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36","details":"New genuine customer account registered"},{"id":"log-1792730586724-f7ul","timestamp":"2026-10-23T04:43:06.724Z","phone":"01777777777","role":"supplier","status":"SUCCESS","ip":"127.0.0.1","device":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36","details":"Session established"},{"id":"log-1792730571767-kckz","timestamp":"2026-10-23T04:42:51.767Z","phone":"Goriber Bondhu Dokan","role":"supplier","status":"FAILED_PASSWORD","ip":"127.0.0.1","device":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36","details":"User account not found"},{"id":"log-1792730505092-w8oc","timestamp":"2026-10-23T04:41:45.092Z","phone":"01888888888","role":"farmer","status":"SUCCESS","ip":"127.0.0.1","device":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36","details":"New genuine farmer account registered"},{"id":"log-1792730444930-f34t","timestamp":"2026-10-23T04:40:44.930Z","phone":"Goriber Bondhu Dokan","role":"farmer","status":"FAILED_PASSWORD","ip":"127.0.0.1","device":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36","details":"User account not found"},{"id":"log-1792730442649-jnlo","timestamp":"2026-10-23T04:40:42.649Z","phone":"Goriber Bondhu Dokan","role":"farmer","status":"FAILED_PASSWORD","ip":"127.0.0.1","device":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36","details":"User account not found"},{"id":"log-1792730301933-oe3t","timestamp":"2026-10-23T04:38:21.933Z","phone":"01777777777","role":"supplier","status":"SUCCESS","ip":"127.0.0.1","device":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36","details":"New genuine supplier account registered"},{"id":"log-1792730181850-rez6","timestamp":"2026-10-23T04:36:21.850Z","phone":"01712458920","role":"supplier","status":"FAILED_PASSWORD","ip":"127.0.0.1","device":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36","details":"User account not found"},{"id":"log-1792730176487-m59a","timestamp":"2026-10-23T04:36:16.487Z","phone":"01712458920","role":"supplier","status":"FAILED_PASSWORD","ip":"127.0.0.1","device":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36","details":"User account not found"},{"id":"log-1792730083862-sebi","timestamp":"2026-10-23T04:34:43.862Z","phone":"01712458920","role":"farmer","status":"SUCCESS","ip":"127.0.0.1","device":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36","details":"Session established"}],"messages":[{"id":"msg-1792734940919-73j8","senderId":"user-farmer-rafiq","senderName":"Md. Rafiqul Islam","senderRole":"farmer","recipientId":"user-wholesaler-sumaiya","recipientName":"Sumaiya Islam","recipientRole":"businessman","content":"Hello Sumaiya, I have 500kg diamond potatoes ready.","createdAt":"2026-10-23T05:55:40.919Z","read":false},{"id":"msg-1792771710779-mf8d","senderId":"usr_1792731363361_eawr","senderName":"Sakib","senderRole":"customer","recipientId":"usr_1792730505087_9qd2","recipientName":"Shahriar","recipientRole":"farmer","content":"hi","createdAt":"2026-10-23T16:08:30.781Z","read":true},{"id":"msg-1792771789920-kr36","senderId":"usr_1792730301926_i2pl","senderName":"Shakib","senderRole":"supplier","recipientId":"usr_1792730505087_9qd2","recipientName":"Shahriar","recipientRole":"farmer","content":"hi","createdAt":"2026-10-23T16:09:49.920Z","read":true},{"id":"msg-1792771828945-u6xe","senderId":"usr_1792730505087_9qd2","senderName":"Shahriar","senderRole":"farmer","recipientId":"usr_1792731363361_eawr","recipientName":"Sakib","recipientRole":"customer","content":"hlw","createdAt":"2026-10-23T16:10:28.945Z","read":false},{"id":"msg-1792771845870-5gwq","senderId":"usr_1792730505087_9qd2","senderName":"Shahriar","senderRole":"farmer","recipientId":"usr_1792730301926_i2pl","recipientName":"Shakib","recipientRole":"supplier","content":"ইউরিয়া/ডিএপি সার কি বর্তমানে স্টকে আছে?","createdAt":"2026-10-23T16:10:45.870Z","read":false}],"connections":[{"id":"conn-1792735087425-hs2i","requesterId":"user-farmer-rafiq","requesterName":"Md. Rafiqul Islam","requesterRole":"farmer","requesterPhone":"01712458920","requesterDistrict":"Bogura","recipientId":"user-wholesaler-sumaiya","recipientName":"Sumaiya Islam","recipientRole":"businessman","recipientPhone":"01711209934","recipientDistrict":"Bogura","status":"pending","createdAt":"2026-10-23T05:58:07.425Z"}],"notifications":[{"id":"notif-test-1793343506045","userId":"user-farmer-rafiq","title":"টেস্ট নোটিফিকেশন","body":"CRUD যাচাই সম্পন্ন","read":false,"createdAt":"2026-10-30T06:58:26.045Z"},{"id":"notif-1792771845870-q5hf","userId":"usr_1792730301926_i2pl","title":"নতুন বার্তা: Shahriar","message":"ইউরিয়া/ডিএপি সার কি বর্তমানে স্টকে আছে?","type":"info","actionUrl":"/contacts?tab=chat&userId=usr_1792730505087_9qd2","read":false,"createdAt":"2026-10-23T16:10:45.870Z"},{"id":"notif-1792771828945-ir1p","userId":"usr_1792731363361_eawr","title":"নতুন বার্তা: Shahriar","message":"hlw","type":"info","actionUrl":"/contacts?tab=chat&userId=usr_1792730505087_9qd2","read":false,"createdAt":"2026-10-23T16:10:28.945Z"},{"id":"notif-1792771789920-bv2v","userId":"usr_1792730505087_9qd2","title":"নতুন বার্তা: Shakib","message":"hi","type":"info","actionUrl":"/contacts?tab=chat&userId=usr_1792730301926_i2pl","read":false,"createdAt":"2026-10-23T16:09:49.920Z"},{"id":"notif-1792771710781-3rnl","userId":"usr_1792730505087_9qd2","title":"নতুন বার্তা: Sakib","message":"hi","type":"info","actionUrl":"/contacts?tab=chat&userId=usr_1792731363361_eawr","read":false,"createdAt":"2026-10-23T16:08:30.781Z"},{"id":"notif-1792735087426-h0ac","userId":"user-wholesaler-sumaiya","title":"নতুন সংযোগের অনুরোধ / New Connection Request","message":"Md. Rafiqul Islam (FARMER) আপনার সাথে যুক্ত হতে অনুরোধ পাঠিয়েছেন।","type":"info","actionUrl":"/contacts?tab=connections","read":false,"createdAt":"2026-10-23T05:58:07.426Z"},{"id":"notif-1792734940919-zpke","userId":"user-wholesaler-sumaiya","title":"নতুন বার্তা: Md. Rafiqul Islam","message":"Hello Sumaiya, I have 500kg diamond potatoes ready.","type":"info","actionUrl":"/contacts?tab=chat&userId=user-farmer-rafiq","read":false,"createdAt":"2026-10-23T05:55:40.919Z"}],"callLogs":[],"catalog":[{"id":"cat-veg-01","name":"Hybrid Tomato","nameBn":"হাইব্রিড পাকা টমেটো","category":"vegetables","categoryLabelEn":"Vegetables","categoryLabelBn":"সবজি","unit":"kg","unitBn":"কেজি","keywords":["tomato","tometo","টমেটো","পাকা টমেটো","বিজলি","vegetable"],"imageUrl":"https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":40,"descriptionBn":"টাটকা লাল পাকা হাইব্রিড টমেটো, পুষ্টিকর ও সুস্বাদু।","descriptionEn":"Fresh ripe hybrid tomatoes, rich in vitamins."},{"id":"cat-veg-02","name":"Diamond Red Potato","nameBn":"ডায়মন্ড লাল গোল আলু","category":"vegetables","categoryLabelEn":"Vegetables","categoryLabelBn":"সবজি","unit":"kg","unitBn":"কেজি","keywords":["potato","alu","আলু","লাল আলু","ডায়মন্ড আলু","গোল আলু"],"imageUrl":"https://images.unsplash.com/photo-1518977676601-b53f82aba655?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":28,"descriptionBn":"বগুড়ার বিখ্যাত ডায়মন্ড জাতের লাল গোল আলু।","descriptionEn":"Premium Diamond variety red potatoes from Bogura."},{"id":"cat-veg-03","name":"Eggplant / Brinjal","nameBn":"গোল তাল বেগুন","category":"vegetables","categoryLabelEn":"Vegetables","categoryLabelBn":"সবজি","unit":"kg","unitBn":"কেজি","keywords":["brinjal","eggplant","begun","বেগুন","তাল বেগুন"],"imageUrl":"https://images.unsplash.com/photo-1659261200833-ec8761558af7?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":38,"descriptionBn":"কীটনাশকমুক্ত দেশি নরম গোল তাল বেগুন।","descriptionEn":"Fresh tender round brinjals, perfect for roasting and curries."},{"id":"cat-veg-04","name":"Snowball Cauliflower","nameBn":"স্নোবল তাজা ফুলকপি","category":"vegetables","categoryLabelEn":"Vegetables","categoryLabelBn":"সবজি","unit":"piece","unitBn":"পিস","keywords":["cauliflower","fulkopi","ফুলকপি","স্নোবল কপি"],"imageUrl":"https://images.unsplash.com/photo-1568584711075-3d021a7c3ca3?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":30,"descriptionBn":"সাদা নিরেট তাজা ফুলকপি, ক্ষেত থেকে সরাসরি সংগৃহীত।","descriptionEn":"Firm white fresh snowball cauliflowers."},{"id":"cat-veg-05","name":"Green Cabbage","nameBn":"সবুজ পাতাকপি / বাঁধাকপি","category":"vegetables","categoryLabelEn":"Vegetables","categoryLabelBn":"সবজি","unit":"piece","unitBn":"পিস","keywords":["cabbage","badhakopi","বাঁধাকপি","পাতাকপি"],"imageUrl":"https://images.unsplash.com/photo-1611105637889-3e75e1141703?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":25,"descriptionBn":"মুচমুচে তাজা শক্ত সবুজ বাঁধাকপি।","descriptionEn":"Crisp green freshly harvested cabbage heads."},{"id":"cat-veg-06","name":"Green Chili","nameBn":"দেশি তাজা কাঁচা মরিচ","category":"vegetables","categoryLabelEn":"Vegetables","categoryLabelBn":"সবজি","unit":"kg","unitBn":"কেজি","keywords":["chili","green chili","morich","কাঁচা মরিচ","ঝাল মরিচ"],"imageUrl":"https://images.unsplash.com/photo-1588252303782-cb80119abd6d?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":85,"descriptionBn":"তীব্র ঝাঁঝালো তাজা দেশি বিন্দু ও হাইব্রিড কাঁচা মরিচ।","descriptionEn":"Fresh pungent green chilies straight from local farms."},{"id":"cat-veg-07","name":"Pointed Gourd (Patal)","nameBn":"দেশি কচি পটল","category":"vegetables","categoryLabelEn":"Vegetables","categoryLabelBn":"সবজি","unit":"kg","unitBn":"কেজি","keywords":["pointed gourd","patal","potol","পটল","কচি পটল"],"imageUrl":"https://images.unsplash.com/photo-1626074353765-517a681e40be?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":42,"descriptionBn":"সুস্বাদু ও আঁশযুক্ত কচি দেশি পটল।","descriptionEn":"Fresh tender pointed gourds (patal)."},{"id":"cat-veg-08","name":"Bitter Gourd (Korola)","nameBn":"দেশি উচ্ছে ও করলা","category":"vegetables","categoryLabelEn":"Vegetables","categoryLabelBn":"সবজি","unit":"kg","unitBn":"কেজি","keywords":["bitter gourd","korola","ucche","করলা","উচ্ছে"],"imageUrl":"https://images.unsplash.com/photo-1615485500704-8e990f9900f7?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":50,"descriptionBn":"ঔষধি গুণসম্পন্ন টাটকা গাঢ় সবুজ করলা।","descriptionEn":"Fresh healthy bitter gourds with natural medicinal value."},{"id":"cat-veg-09","name":"Bottle Gourd (Lau)","nameBn":"কচি মিষ্টি কচি লাউ","category":"vegetables","categoryLabelEn":"Vegetables","categoryLabelBn":"সবজি","unit":"piece","unitBn":"পিস","keywords":["bottle gourd","lau","লাউ","কদু","মিষ্টি লাউ"],"imageUrl":"https://images.unsplash.com/photo-1598170845058-32b9d6a5da37?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":45,"descriptionBn":"মাটির পুষ্টিতে উৎপাদিত সুস্বাদু কচি মিষ্টি লাউ।","descriptionEn":"Tender fresh bottle gourds, light green and juicy."},{"id":"cat-veg-10","name":"Ridge Gourd (Jhinga)","nameBn":"দেশি কচি ঝিঙা","category":"vegetables","categoryLabelEn":"Vegetables","categoryLabelBn":"সবজি","unit":"kg","unitBn":"কেজি","keywords":["ridge gourd","jhinga","ঝিঙা","ঝিঙে"],"imageUrl":"https://images.unsplash.com/photo-1628773822503-930a84b3d875?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":45,"descriptionBn":"খাদ্যআঁশসমৃদ্ধ কচি দেশি ঝিঙা।","descriptionEn":"Fiber-rich fresh ridge gourds."},{"id":"cat-veg-11","name":"Snake Gourd (Chichinga)","nameBn":"চিচিঙ্গা / কাইতা","category":"vegetables","categoryLabelEn":"Vegetables","categoryLabelBn":"সবজি","unit":"kg","unitBn":"কেজি","keywords":["snake gourd","chichinga","চিচিঙ্গা","কাইতা"],"imageUrl":"https://images.unsplash.com/photo-1597362925123-77861d3fbac7?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":35,"descriptionBn":"পানি ও পুষ্টিসমৃদ্ধ নরম চিচিঙ্গা।","descriptionEn":"Long fresh snake gourds, tender and easy to cook."},{"id":"cat-veg-12","name":"Yardlong Bean (Barbati)","nameBn":"সবুজ লম্বা বরবটি","category":"vegetables","categoryLabelEn":"Vegetables","categoryLabelBn":"সবজি","unit":"kg","unitBn":"কেজি","keywords":["yardlong bean","barbati","বরবটি","লম্বা সিম"],"imageUrl":"https://images.unsplash.com/photo-1567375698348-5d9d5ae99de0?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":48,"descriptionBn":"টাটকা কচি সবুজ লম্বা বরবটি।","descriptionEn":"Crisp green yardlong beans full of plant protein."},{"id":"cat-veg-13","name":"Country Bean (Sheem)","nameBn":"দেশি নলডক শিম","category":"vegetables","categoryLabelEn":"Vegetables","categoryLabelBn":"সবজি","unit":"kg","unitBn":"কেজি","keywords":["country bean","sheem","shim","শিম","নলডক শিম"],"imageUrl":"https://images.unsplash.com/photo-1592417817098-8f3d69104a47?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":55,"descriptionBn":"শীতের সুস্বাদু বীজযুক্ত দেশি শিম।","descriptionEn":"Winter favorite fresh flat country beans."},{"id":"cat-veg-14","name":"Okra / Lady Finger (Dherosh)","nameBn":"কচি তাজা ঢেঁড়শ","category":"vegetables","categoryLabelEn":"Vegetables","categoryLabelBn":"সবজি","unit":"kg","unitBn":"কেজি","keywords":["okra","lady finger","dherosh","ঢেঁড়শ","ভেন্ডি"],"imageUrl":"https://images.unsplash.com/photo-1622206151226-18ca2c9ab4a1?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":40,"descriptionBn":"আঁশযুক্ত কচি নরম ঢেঁড়শ।","descriptionEn":"Tender green okra fresh from the vine."},{"id":"cat-veg-15","name":"Fresh Radish (Mula)","nameBn":"সাদা দেশি মুলা","category":"vegetables","categoryLabelEn":"Vegetables","categoryLabelBn":"সবজি","unit":"kg","unitBn":"কেজি","keywords":["radish","mula","মুলা","সাদা মুলা"],"imageUrl":"https://images.unsplash.com/photo-1593105544559-ecb03bf76f82?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":22,"descriptionBn":"রসালো তাজা সাদা দেশি মুলা।","descriptionEn":"Crisp and juicy white winter radishes."},{"id":"cat-veg-16","name":"Orange Carrot (Gajor)","nameBn":"মিষ্টি কমলা গাজর","category":"vegetables","categoryLabelEn":"Vegetables","categoryLabelBn":"সবজি","unit":"kg","unitBn":"কেজি","keywords":["carrot","gajor","গাজর","কমলা গাজর"],"imageUrl":"https://images.unsplash.com/photo-1598170845058-32b9d6a5da37?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":45,"descriptionBn":"ভিটামিন-এ সমৃদ্ধ মিষ্টি তাজা গাজর।","descriptionEn":"Sweet crunchy orange carrots high in Vitamin A."},{"id":"cat-veg-17","name":"Sweet Pumpkin (Misti Kumra)","nameBn":"পরিপক্ক মিষ্টি কুমড়া","category":"vegetables","categoryLabelEn":"Vegetables","categoryLabelBn":"সবজি","unit":"kg","unitBn":"কেজি","keywords":["pumpkin","sweet pumpkin","misti kumra","মিষ্টি কুমড়া"],"imageUrl":"https://images.unsplash.com/photo-1570586437503-903009b33cb7?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":32,"descriptionBn":"গাঢ় হলুদ সুস্বাদু পুষ্টিকর মিষ্টি কুমড়া।","descriptionEn":"Golden ripe sweet pumpkins packed with beta-carotene."},{"id":"cat-veg-18","name":"Ash Gourd (Chalkumra)","nameBn":"দেশি চালকুমড়া","category":"vegetables","categoryLabelEn":"Vegetables","categoryLabelBn":"সবজি","unit":"piece","unitBn":"পিস","keywords":["ash gourd","chalkumra","চালকুমড়া","কুমিড়া"],"imageUrl":"https://images.unsplash.com/photo-1590779033100-9f60a05a013d?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":40,"descriptionBn":"মোরব্বা ও তরকারির জন্য আদর্শ দেশি চালকুমড়া।","descriptionEn":"Fresh whole ash gourd for healthy curries."},{"id":"cat-veg-19","name":"Teasle Gourd (Kakrol)","nameBn":"দেশি কাঁকরোল","category":"vegetables","categoryLabelEn":"Vegetables","categoryLabelBn":"সবজি","unit":"kg","unitBn":"কেজি","keywords":["teasle gourd","kakrol","কাঁকরোল","কাকরোল"],"imageUrl":"https://images.unsplash.com/photo-1601648764658-cf37e8c89b70?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":58,"descriptionBn":"পুষ্টিকর সুস্বাদু সবুজ কাঁকরোল।","descriptionEn":"Fresh spiny teasle gourds (kakrol), fried or curried."},{"id":"cat-veg-20","name":"Green Papaya (Kacha Pepe)","nameBn":"সবুজ কাঁচা পেঁপে","category":"vegetables","categoryLabelEn":"Vegetables","categoryLabelBn":"সবজি","unit":"kg","unitBn":"কেজি","keywords":["green papaya","kacha pepe","কাঁচা পেঁপে","পেঁপে"],"imageUrl":"https://images.unsplash.com/photo-1517282009859-f000ec3b26fe?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":28,"descriptionBn":"হজমে সহায়ক টাটকা সবুজ কাঁচা পেঁপে।","descriptionEn":"Crisp green papaya, excellent for digestion and curries."},{"id":"cat-frt-01","name":"Haribhanga Mango","nameBn":"রংপুরের হাঁড়িভাঙা আম","category":"fruits","categoryLabelEn":"Fruits","categoryLabelBn":"ফল","unit":"kg","unitBn":"কেজি","keywords":["mango","haribhanga","aam","আম","হাঁড়িভাঙা আম","আম্রপালি"],"imageUrl":"https://images.unsplash.com/photo-1553279768-865429fa0078?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":90,"descriptionBn":"রংপুর ও উত্তরাঞ্চলের মিষ্টি সুবাসিত আঁশহীন হাঁড়িভাঙা আম।","descriptionEn":"Famous Haribhanga fiberless sweet mangoes from northern Bangladesh."},{"id":"cat-frt-02","name":"Ripe Jackfruit","nameBn":"জাতীয় ফল পাকা কাঁঠাল","category":"fruits","categoryLabelEn":"Fruits","categoryLabelBn":"ফল","unit":"piece","unitBn":"পিস","keywords":["jackfruit","kathal","কাঁঠাল","পাকা কাঁঠাল"],"imageUrl":"https://images.unsplash.com/photo-1568702846914-96b305d2aaeb?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":120,"descriptionBn":"রসালো মিষ্টি ঘ্রাণের দেশি পাকা কাঁঠাল।","descriptionEn":"Sweet aromatic Bangladesh national ripe jackfruit."},{"id":"cat-frt-03","name":"Sagor Banana","nameBn":"নরসিংদীর অমৃতসাগর কলা","category":"fruits","categoryLabelEn":"Fruits","categoryLabelBn":"ফল","unit":"bunch","unitBn":"ডজন","keywords":["banana","sagor kola","kola","কলা","সাগর কলা","সবরি কলা"],"imageUrl":"https://images.unsplash.com/photo-1571771894821-ce9b6c11b08e?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":80,"descriptionBn":"রাসায়নিকমুক্ত প্রাকৃতিকভাবে পাকা মিষ্টি সাগর কলা (১২ পিস)।","descriptionEn":"Naturally ripened sweet Sagor bananas (dozen)."},{"id":"cat-frt-04","name":"Thai Guava (Peyara)","nameBn":"মিষ্টি কাজী ও থাই পেয়ারা","category":"fruits","categoryLabelEn":"Fruits","categoryLabelBn":"ফল","unit":"kg","unitBn":"কেজি","keywords":["guava","peyara","পেয়ারা","কাজী পেয়ারা","থাই পেয়ারা"],"imageUrl":"https://images.unsplash.com/photo-1536511135899-73600f7b1580?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":60,"descriptionBn":"মুচমুচে তাজা মিষ্টি থাই ও কাজী পেয়ারা।","descriptionEn":"Crisp and sweet fresh Thai seedless guavas."},{"id":"cat-frt-05","name":"Ripe Red Papaya","nameBn":"মিষ্টি পাকা শাহী পেঁপে","category":"fruits","categoryLabelEn":"Fruits","categoryLabelBn":"ফল","unit":"kg","unitBn":"কেজি","keywords":["ripe papaya","paka pepe","পাকা পেঁপে","পেঁপে"],"imageUrl":"https://images.unsplash.com/photo-1528825871115-3581a5387919?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":50,"descriptionBn":"গাছপাকা লাল মিষ্টি রসালো শাহী পেঁপে।","descriptionEn":"Naturally tree-ripened red sweet papayas."},{"id":"cat-frt-06","name":"Sweet Watermelon","nameBn":"ভোলার লাল রসালো তরমুজ","category":"fruits","categoryLabelEn":"Fruits","categoryLabelBn":"ফল","unit":"kg","unitBn":"কেজি","keywords":["watermelon","tormuj","তরমুজ","লাল তরমুজ"],"imageUrl":"https://images.unsplash.com/photo-1587049352846-4a222e784d38?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":35,"descriptionBn":"দক্ষিণাঞ্চলের লাল টকটকে মিষ্টি তরমুজ।","descriptionEn":"Sweet and refreshing red-fleshed watermelons."},{"id":"cat-frt-07","name":"Honey Queen Pineapple","nameBn":"মধুপুরের আনারস (হানি কুইন)","category":"fruits","categoryLabelEn":"Fruits","categoryLabelBn":"ফল","unit":"piece","unitBn":"পিস","keywords":["pineapple","anaras","আনারস","হানি কুইন"],"imageUrl":"https://images.unsplash.com/photo-1550258987-190a2d41a8ba?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":40,"descriptionBn":"মধুপুরের বিখ্যাত মিষ্টি রসালো হানি কুইন আনারস।","descriptionEn":"Juicy and sweet Honey Queen pineapples from Modhupur."},{"id":"cat-frt-08","name":"Dinajpur Bedana Litchi","nameBn":"দিনাজপুরের বেদানা লিচু","category":"fruits","categoryLabelEn":"Fruits","categoryLabelBn":"ফল","unit":"bunch","unitBn":"শত (১০০ পিস)","keywords":["litchi","lichu","লিচু","বেদানা লিচু","বোম্বাই লিচু"],"imageUrl":"https://images.unsplash.com/photo-1582281298055-e25b84a30b0b?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":420,"descriptionBn":"দিনাজপুরের সেরা মিষ্টি রসালো বেদানা জাতের লিচু।","descriptionEn":"Famous sweet Bedana litchis from Dinajpur orchards."},{"id":"cat-frt-09","name":"Apple Plum (Boroi)","nameBn":"মিষ্টি কাশ্মীরি আপেল কুল / বরই","category":"fruits","categoryLabelEn":"Fruits","categoryLabelBn":"ফল","unit":"kg","unitBn":"কেজি","keywords":["plum","jujube","boroi","kul","কুল","বরই","আপেল কুল"],"imageUrl":"https://images.unsplash.com/photo-1616684000357-329215c2d3ec?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":75,"descriptionBn":"মুচমুচে তাজা মিষ্টি আপেল কুল ও বাউকুল।","descriptionEn":"Sweet crunchy Apple Jujube (Boroi) fresh harvest."},{"id":"cat-frt-10","name":"Red Pomegranate (Dalim)","nameBn":"লাল ডালিম / বেদানা","category":"fruits","categoryLabelEn":"Fruits","categoryLabelBn":"ফল","unit":"kg","unitBn":"কেজি","keywords":["pomegranate","dalim","bedana","ডালিম","বেদানা","আনার"],"imageUrl":"https://images.unsplash.com/photo-1615485290382-441e4d049cb5?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":280,"descriptionBn":"লাল দানাদার অ্যান্টিঅক্সিডেন্টসমৃদ্ধ পুষ্টিকর ডালিম।","descriptionEn":"Ruby red fresh pomegranates full of antioxidants."},{"id":"cat-frt-11","name":"Fresh Hog Plum (Amra)","nameBn":"বরিশালের মিষ্টি দেশি আমড়া","category":"fruits","categoryLabelEn":"Fruits","categoryLabelBn":"ফল","unit":"kg","unitBn":"কেজি","keywords":["hog plum","amra","আমড়া","বরিশালের আমড়া"],"imageUrl":"https://images.unsplash.com/photo-1596483739996-51d8b672722b?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":45,"descriptionBn":"ভিটামিন-সি সমৃদ্ধ বরিশালের মিষ্টি আমড়া।","descriptionEn":"Vitamin C rich fresh sweet hog plums from Barisal."},{"id":"cat-frt-12","name":"Starfruit (Kamranga)","nameBn":"রসালো মিষ্টি কামরাঙা","category":"fruits","categoryLabelEn":"Fruits","categoryLabelBn":"ফল","unit":"kg","unitBn":"কেজি","keywords":["starfruit","kamranga","কামরাঙা","মিষ্টি কামরাঙা"],"imageUrl":"https://images.unsplash.com/photo-1514733670139-4d87a1941d55?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":50,"descriptionBn":"হলুদ পাকা মিষ্টি তাজা কামরাঙা।","descriptionEn":"Sweet ripe starfruits bursting with juice."},{"id":"cat-frt-13","name":"Wood Apple (Bel)","nameBn":"সুমিষ্ট সুবাসিত বেলের শরবত উপযোগী বেল","category":"fruits","categoryLabelEn":"Fruits","categoryLabelBn":"ফল","unit":"piece","unitBn":"পিস","keywords":["wood apple","bel","বেল","কদবেল"],"imageUrl":"https://images.unsplash.com/photo-1628773822503-930a84b3d875?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":35,"descriptionBn":"পেটের জন্য মহৌষধ পাকা সুস্বাদু বেল।","descriptionEn":"Aromatic ripe wood apple, ideal for digestive health and juice."},{"id":"cat-frt-14","name":"Pomelo (Jambura)","nameBn":"লাল রসালো জাম্বুরা / বাতাবি লেবু","category":"fruits","categoryLabelEn":"Fruits","categoryLabelBn":"ফল","unit":"piece","unitBn":"পিস","keywords":["pomelo","jambura","batabi lebu","জাম্বুরা","বাতাবি লেবু"],"imageUrl":"https://images.unsplash.com/photo-1587132137056-bfbf0166836e?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":40,"descriptionBn":"গোলাপি কোয়ার সুস্বাদু রসালো মিষ্টি জাম্বুরা।","descriptionEn":"Sweet pink-fleshed local pomelo fruit."},{"id":"cat-frt-15","name":"Kagzi Lemon (Lebu)","nameBn":"সুগন্ধি কাগজি লেবু","category":"fruits","categoryLabelEn":"Fruits","categoryLabelBn":"ফল","unit":"bunch","unitBn":"হালি (৪ পিস)","keywords":["lemon","lebu","kagzi lebu","লেবু","কাগজি লেবু","এলাচি লেবু"],"imageUrl":"https://images.unsplash.com/photo-1590502593747-42a996133562?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":20,"descriptionBn":"প্রচুর রস ও তীব্র সুগন্ধযুক্ত টাটকা কাগজি লেবু (৪ পিস)।","descriptionEn":"Aromatic juicy Kagzi lemons (4 pcs pack)."},{"id":"cat-frt-16","name":"Red Dragon Fruit","nameBn":"লাল ড্রাগন ফল","category":"fruits","categoryLabelEn":"Fruits","categoryLabelBn":"ফল","unit":"kg","unitBn":"কেজি","keywords":["dragon fruit","pitaya","ড্রাগন ফল","ড্রাগন"],"imageUrl":"https://images.unsplash.com/photo-1527324688151-0e627063f2b1?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":220,"descriptionBn":"দেশি বাগানে উৎপাদিত তাজা লাল ড্রাগন ফল।","descriptionEn":"Locally cultivated fresh red dragon fruit."},{"id":"cat-frt-17","name":"Sweet Malta (Bari Malta-1)","nameBn":"বারি মাল্টা-১ (মিষ্টি সবুজ মাল্টা)","category":"fruits","categoryLabelEn":"Fruits","categoryLabelBn":"ফল","unit":"kg","unitBn":"কেজি","keywords":["malta","orange","লেবু","মাল্টা","বারি মাল্টা"],"imageUrl":"https://images.unsplash.com/photo-1547514701-42782101795e?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":120,"descriptionBn":"কৃষি গবেষণা ইনস্টিটিউট উদ্ভাবিত অতি সুমিষ্ট বারি মাল্টা-১।","descriptionEn":"Locally produced juicy BARI Malta-1 sweet citrus."},{"id":"cat-frt-18","name":"Sour Tamarind (Tetul)","nameBn":"দেশি পাকা টক-মিষ্টি তেঁতুল","category":"fruits","categoryLabelEn":"Fruits","categoryLabelBn":"ফল","unit":"kg","unitBn":"কেজি","keywords":["tamarind","tetul","তেঁতুল","পাকা তেঁতুল"],"imageUrl":"https://images.unsplash.com/photo-1615485290382-441e4d049cb5?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":140,"descriptionBn":"হজমে উপকারী তাজা দেশি মিষ্টি-টক তেঁতুল।","descriptionEn":"Tangy and sweet ripe tamarind pods."},{"id":"cat-frt-19","name":"Indian Gooseberry (Amloki)","nameBn":"দেশি ঔষধি আমলকী","category":"fruits","categoryLabelEn":"Fruits","categoryLabelBn":"ফল","unit":"kg","unitBn":"কেজি","keywords":["amla","amloki","gooseberry","আমলকী","আমলকি"],"imageUrl":"https://images.unsplash.com/photo-1601648764658-cf37e8c89b70?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":90,"descriptionBn":"প্রাকৃতিক ভিটামিন-সি ভাণ্ডার তাজা দেশি আমলকী।","descriptionEn":"Fresh Indian gooseberries (Amloki) loaded with Vitamin C."},{"id":"cat-frt-20","name":"Sapodilla (Sofeda)","nameBn":"মিষ্টি পাকা সফেদা","category":"fruits","categoryLabelEn":"Fruits","categoryLabelBn":"ফল","unit":"kg","unitBn":"কেজি","keywords":["sapodilla","chikoo","sofeda","সফেদা","সবেদা"],"imageUrl":"https://images.unsplash.com/photo-1596483739996-51d8b672722b?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":85,"descriptionBn":"হালকা বাদামি মিষ্টি নরম পাকা দেশি সফেদা।","descriptionEn":"Sweet honey-flavored ripe sapodilla (chikoo)."},{"id":"cat-shak-01","name":"Red Spinach (Lal Shak)","nameBn":"তাজা রক্তিম লাল শাক","category":"leafy_greens","categoryLabelEn":"Leafy Greens","categoryLabelBn":"শাক","unit":"bunch","unitBn":"আঁটি","keywords":["red spinach","lal shak","শাক","লাল শাক","রক্তিম শাক"],"imageUrl":"https://images.unsplash.com/photo-1576045057995-568f588f82fb?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":15,"descriptionBn":"আয়রন ও ভিটামিন সমৃদ্ধ তাজা কচি লাল শাকের আঁটি।","descriptionEn":"Iron-rich fresh red amaranth leaves."},{"id":"cat-shak-02","name":"Green Spinach (Palong Shak)","nameBn":"সবুজ দেশি পালং শাক","category":"leafy_greens","categoryLabelEn":"Leafy Greens","categoryLabelBn":"শাক","unit":"bunch","unitBn":"আঁটি","keywords":["spinach","palong shak","পালং শাক","সবুজ শাক"],"imageUrl":"https://images.unsplash.com/photo-1576045057995-568f588f82fb?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":20,"descriptionBn":"তাজা কচি সবুজ পাতার পালং শাক।","descriptionEn":"Fresh tender green spinach leaves."},{"id":"cat-shak-03","name":"Malabar Spinach (Pui Shak)","nameBn":"রসালো ডাঁটাযুক্ত পুঁই শাক","category":"leafy_greens","categoryLabelEn":"Leafy Greens","categoryLabelBn":"শাক","unit":"kg","unitBn":"কেজি","keywords":["pui shak","malabar spinach","পুঁই শাক","পুঁই"],"imageUrl":"https://images.unsplash.com/photo-1540420773420-3366772f4999?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":30,"descriptionBn":"ক্যালসিয়াম ও ভিটামিনে ভরপুর তাজা পুঁই শাক।","descriptionEn":"Succulent fresh green Malabar spinach."},{"id":"cat-shak-04","name":"Water Spinach (Kolmi Shak)","nameBn":"কচি দেশি কলমি শাক","category":"leafy_greens","categoryLabelEn":"Leafy Greens","categoryLabelBn":"শাক","unit":"bunch","unitBn":"আঁটি","keywords":["kolmi shak","water spinach","কলমি শাক","কলমি"],"imageUrl":"https://images.unsplash.com/photo-1576045057995-568f588f82fb?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":15,"descriptionBn":"প্রাকৃতিক জলাশয় ও খামারের সতেজ কচি কলমি শাক।","descriptionEn":"Crispy and tender fresh water spinach."},{"id":"cat-shak-05","name":"Amaranth Stem Greens (Data Shak)","nameBn":"কচি ডাঁটা শাক","category":"leafy_greens","categoryLabelEn":"Leafy Greens","categoryLabelBn":"শাক","unit":"bunch","unitBn":"আঁটি","keywords":["data shak","amaranth greens","ডাঁটা শাক","ডাটা"],"imageUrl":"https://images.unsplash.com/photo-1540420773420-3366772f4999?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":20,"descriptionBn":"নরম সুস্বাদু আঁটি বাঁধা কচি ডাঁটা শাক।","descriptionEn":"Green amaranth stem greens, soft and fibrous."},{"id":"cat-shak-06","name":"Jute Leaves (Pat Shak)","nameBn":"তেতো ও মিষ্টি পাট শাক","category":"leafy_greens","categoryLabelEn":"Leafy Greens","categoryLabelBn":"শাক","unit":"bunch","unitBn":"আঁটি","keywords":["jute leaves","pat shak","পাট শাক","মিঠা পাট শাক"],"imageUrl":"https://images.unsplash.com/photo-1576045057995-568f588f82fb?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":15,"descriptionBn":"হজমে পরম উপকারী দেশি কচি মিষ্টি পাট শাক।","descriptionEn":"Fresh young jute leaves, traditionally cherished."},{"id":"cat-shak-07","name":"Mustard Greens (Sorisha Shak)","nameBn":"শীতকালীন সতেজ সরিষা শাক","category":"leafy_greens","categoryLabelEn":"Leafy Greens","categoryLabelBn":"শাক","unit":"bunch","unitBn":"আঁটি","keywords":["mustard greens","sorisha shak","সরিষা শাক","সরিষা"],"imageUrl":"https://images.unsplash.com/photo-1540420773420-3366772f4999?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":18,"descriptionBn":"শীতের মাঠে উৎপাদিত ঝাঁঝালো তাজা সরিষা শাক।","descriptionEn":"Pungent and nutritious winter mustard greens."},{"id":"cat-shak-08","name":"Bottle Gourd Leaves (Lau Shak)","nameBn":"কচি মিষ্টি লাউ শাকের ডগা","category":"leafy_greens","categoryLabelEn":"Leafy Greens","categoryLabelBn":"শাক","unit":"bunch","unitBn":"আঁটি","keywords":["lau shak","bottle gourd leaves","লাউ শাক","লাউ ডগা"],"imageUrl":"https://images.unsplash.com/photo-1540420773420-3366772f4999?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":25,"descriptionBn":"নরম কচি ডগাসহ টাটকা লাউ শাক।","descriptionEn":"Tender fresh bottle gourd shoots and leaves."},{"id":"cat-shak-09","name":"Pumpkin Leaves (Kumra Shak)","nameBn":"কচি মিষ্টি কুমড়া শাক","category":"leafy_greens","categoryLabelEn":"Leafy Greens","categoryLabelBn":"শাক","unit":"bunch","unitBn":"আঁটি","keywords":["kumra shak","pumpkin greens","কুমড়া শাক","মিষ্টি কুমড়া শাক"],"imageUrl":"https://images.unsplash.com/photo-1540420773420-3366772f4999?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":20,"descriptionBn":"চিংড়ি বা ভর্তার জন্য উপযোগী কচি কুমড়া পাতা ও ডগা।","descriptionEn":"Tender pumpkin greens, ideal for stir fries."},{"id":"cat-shak-10","name":"Fenugreek Leaves (Methi Shak)","nameBn":"ঔষধি তাজা মেথি শাক","category":"leafy_greens","categoryLabelEn":"Leafy Greens","categoryLabelBn":"শাক","unit":"bunch","unitBn":"আঁটি","keywords":["fenugreek","methi shak","মেথি শাক","মেথি"],"imageUrl":"https://images.unsplash.com/photo-1576045057995-568f588f82fb?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":25,"descriptionBn":"ডায়াবেটিস ও পেটের জন্য উপকারী সুবাসিত মেথি শাক।","descriptionEn":"Fresh aromatic fenugreek greens (methi)."},{"id":"cat-shak-11","name":"Coriander Leaves (Dhone Pata)","nameBn":"সুগন্ধি দেশি ধনে পাতা","category":"leafy_greens","categoryLabelEn":"Leafy Greens","categoryLabelBn":"শাক","unit":"kg","unitBn":"কেজি","keywords":["coriander","dhone pata","ধনে পাতা","ধনিয়া পাতা"],"imageUrl":"https://images.unsplash.com/photo-1588879460618-924b6f17e3f4?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":120,"descriptionBn":"তীব্র মনকাড়া সুগন্ধযুক্ত দেশি টাটকা ধনে পাতা।","descriptionEn":"Fresh fragrant native coriander leaves."},{"id":"cat-shak-12","name":"Mint Leaves (Pudina Pata)","nameBn":"তাজা সুবাসিত পুদিনা পাতা","category":"leafy_greens","categoryLabelEn":"Leafy Greens","categoryLabelBn":"শাক","unit":"bunch","unitBn":"আঁটি","keywords":["mint","pudina pata","পুদিনা পাতা","পুদিনা"],"imageUrl":"https://images.unsplash.com/photo-1628556270448-4d4e4148e1b1?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":20,"descriptionBn":"সতেজ সতেজ সুবাসিত পুদিনা পাতার আঁটি।","descriptionEn":"Refreshing and aromatic fresh mint leaves."},{"id":"cat-shak-13","name":"Bathua Greens (Bathua Shak)","nameBn":"শীতের সুস্বাদু বাথুয়া শাক","category":"leafy_greens","categoryLabelEn":"Leafy Greens","categoryLabelBn":"শাক","unit":"bunch","unitBn":"আঁটি","keywords":["bathua","bathua shak","বাথুয়া শাক","বাথুয়া"],"imageUrl":"https://images.unsplash.com/photo-1576045057995-568f588f82fb?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":15,"descriptionBn":"শীতকালের পুষ্টিকর দেশি বাথুয়া শাক।","descriptionEn":"Nutritious wild winter bathua greens (chenopodium)."},{"id":"cat-shak-14","name":"Taro Leaf Greens (Kochu Shak)","nameBn":"কালো ও সবুজ কচু শাক","category":"leafy_greens","categoryLabelEn":"Leafy Greens","categoryLabelBn":"শাক","unit":"bunch","unitBn":"আঁটি","keywords":["taro leaves","kochu shak","কচু শাক","কালো কচু"],"imageUrl":"https://images.unsplash.com/photo-1540420773420-3366772f4999?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":18,"descriptionBn":"প্রচুর আয়রনসমৃদ্ধ কচি কচু শাকের ডগা।","descriptionEn":"Iron-packed native taro leaf greens (kochu shak)."},{"id":"cat-shak-15","name":"Helencha Greens (Helencha Shak)","nameBn":"ঔষধি দেশি হেলেনচা শাক","category":"leafy_greens","categoryLabelEn":"Leafy Greens","categoryLabelBn":"শাক","unit":"bunch","unitBn":"আঁটি","keywords":["helencha shak","heloncha","হেলেনচা শাক","হেলেনচা"],"imageUrl":"https://images.unsplash.com/photo-1576045057995-568f588f82fb?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":20,"descriptionBn":"লিভারের সুরক্ষায় প্রাচীন উপকারী হেলেনচা শাক।","descriptionEn":"Medicinal aquatic herb Helencha greens."},{"id":"cat-shak-16","name":"Fiddlehead Fern (Dheki Shak)","nameBn":"প্রাকৃতিক বনজ ঢেঁকি শাক","category":"leafy_greens","categoryLabelEn":"Leafy Greens","categoryLabelBn":"শাক","unit":"bunch","unitBn":"আঁটি","keywords":["fiddlehead fern","dheki shak","ঢেঁকি শাক","ঢেঁকিয়া"],"imageUrl":"https://images.unsplash.com/photo-1540420773420-3366772f4999?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":25,"descriptionBn":"সম্পূর্ণ প্রাকৃতিকভাবে গজানো সুস্বাদু ঢেঁকি শাক।","descriptionEn":"Organic wild fiddlehead fern shoots (Dheki Shak)."},{"id":"cat-shak-17","name":"Brahmi Greens (Brahmi Shak)","nameBn":"স্মৃতিবর্ধক ব্রাহ্মী শাক","category":"leafy_greens","categoryLabelEn":"Leafy Greens","categoryLabelBn":"শাক","unit":"bunch","unitBn":"আঁটি","keywords":["brahmi","brahmi shak","ব্রাহ্মী শাক","ব্রাহ্মি"],"imageUrl":"https://images.unsplash.com/photo-1576045057995-568f588f82fb?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":30,"descriptionBn":"স্মৃতিশক্তি ও মেধার বিকাশে কার্যকর ব্রাহ্মী শাক।","descriptionEn":"Medicinal memory-boosting Brahmi herb greens."},{"id":"cat-shak-18","name":"Shushni Greens (Shushni Shak)","nameBn":"ঘুম ও প্রশান্তিদায়ক সুশনি শাক","category":"leafy_greens","categoryLabelEn":"Leafy Greens","categoryLabelBn":"শাক","unit":"bunch","unitBn":"আঁটি","keywords":["shushni shak","সুশনি শাক","সুসুনি"],"imageUrl":"https://images.unsplash.com/photo-1540420773420-3366772f4999?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":25,"descriptionBn":"সুনিদ্রা ও রক্তচাপ নিয়ন্ত্রণে উপকারী সুশনি শাক।","descriptionEn":"Traditional soothing Shushni greens (Marsilea)."},{"id":"cat-shak-19","name":"Ceylon Spinach (Ceylon Shak)","nameBn":"রসালো সিলন শাক","category":"leafy_greens","categoryLabelEn":"Leafy Greens","categoryLabelBn":"শাক","unit":"bunch","unitBn":"আঁটি","keywords":["ceylon spinach","ceylon shak","সিলন শাক","সিলন"],"imageUrl":"https://images.unsplash.com/photo-1576045057995-568f588f82fb?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":20,"descriptionBn":"নরম কচি পাতার পুষ্টিকর সিলন শাক।","descriptionEn":"Soft nutrient-dense Ceylon spinach greens."},{"id":"cat-shak-20","name":"Sweet Potato Greens (Misti Aloo Shak)","nameBn":"মিষ্টি আলুর কচি শাক","category":"leafy_greens","categoryLabelEn":"Leafy Greens","categoryLabelBn":"শাক","unit":"bunch","unitBn":"আঁটি","keywords":["sweet potato leaves","aloo shak","মিষ্টি আলু শাক","আলু শাক"],"imageUrl":"https://images.unsplash.com/photo-1540420773420-3366772f4999?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":15,"descriptionBn":"ভিটামিন-সি ও আঁশ সমৃদ্ধ মিষ্টি আলুর ডগা ও শাক।","descriptionEn":"Healthy young sweet potato vine greens."},{"id":"cat-oth-01","name":"Aman Paddy (Aman Dhan)","nameBn":"সোনালী আমন ধান","category":"other","categoryLabelEn":"Grains & Pulses","categoryLabelBn":"দানা, ডাল ও অন্যান্য","unit":"maund","unitBn":"মণ (৪০ কেজি)","keywords":["paddy","dhan","aman dhan","ধান","আমন ধান","বোরো ধান"],"imageUrl":"https://images.unsplash.com/photo-1586201375761-83865001e31c?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":1250,"descriptionBn":"বগুড়া ও রাজশাহী মোকামের শুকনো পরিপুষ্ট আমন ধান।","descriptionEn":"High-quality golden Aman paddy grain (40kg maund)."},{"id":"cat-oth-02","name":"Boro Paddy (BRRI Dhan-28)","nameBn":"ব্রি ধান-২৮ বোরো ধান","category":"other","categoryLabelEn":"Grains & Pulses","categoryLabelBn":"দানা, ডাল ও অন্যান্য","unit":"maund","unitBn":"মণ (৪০ কেজি)","keywords":["boro dhan","brri dhan 28","ধান","বোরো ধান","ব্রি ২৮"],"imageUrl":"https://images.unsplash.com/photo-1536304993881-ff6e9eefa2a6?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":1180,"descriptionBn":"উচ্চফলনশীল তাজা ব্রি ধান-২৮ শুকনো দানা।","descriptionEn":"High-yielding BRRI Dhan-28 clean boro paddy."},{"id":"cat-oth-03","name":"Miniket Rice","nameBn":"সরু মিনিকেট চাল","category":"other","categoryLabelEn":"Grains & Pulses","categoryLabelBn":"দানা, ডাল ও অন্যান্য","unit":"kg","unitBn":"কেজি","keywords":["miniket rice","chal","miniket chal","চাল","মিনিকেট চাল"],"imageUrl":"https://images.unsplash.com/photo-1586201375761-83865001e31c?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":72,"descriptionBn":"ঝরঝরে চিকন চকচকে প্রিমিয়াম মিনিকেট চাল।","descriptionEn":"Fine slender premium Miniket rice."},{"id":"cat-oth-04","name":"Nazirshail Rice","nameBn":"আসল নাজিরশাইল চাল","category":"other","categoryLabelEn":"Grains & Pulses","categoryLabelBn":"দানা, ডাল ও অন্যান্য","unit":"kg","unitBn":"কেজি","keywords":["nazirshail rice","chal","চাল","নাজিরশাইল চাল"],"imageUrl":"https://images.unsplash.com/photo-1536304993881-ff6e9eefa2a6?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":82,"descriptionBn":"সুস্বাদু পুষ্টিকর ঐতিহ্যবাহী নাজিরশাইল চাল।","descriptionEn":"Traditional nutritious slender Nazirshail rice."},{"id":"cat-oth-05","name":"Chinigura Aromatic Rice","nameBn":"সুগন্ধি চিনিগুঁড়া পোলাও চাল","category":"other","categoryLabelEn":"Grains & Pulses","categoryLabelBn":"দানা, ডাল ও অন্যান্য","unit":"kg","unitBn":"কেজি","keywords":["chinigura","polao chal","পোলাও চাল","চিনিগুঁড়া","সুগন্ধি চাল"],"imageUrl":"https://images.unsplash.com/photo-1586201375761-83865001e31c?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":140,"descriptionBn":"পোলাও ও পায়েসের জন্য তীব্র সুবাসিত সরু চিনিগুঁড়া চাল।","descriptionEn":"Highly fragrant native Chinigura aromatic polao rice."},{"id":"cat-oth-06","name":"Golden Wheat Grain (Gom)","nameBn":"দেশি পুষ্ট সোনালী গম","category":"other","categoryLabelEn":"Grains & Pulses","categoryLabelBn":"দানা, ডাল ও অন্যান্য","unit":"kg","unitBn":"কেজি","keywords":["wheat","gom","গম","আটা গম"],"imageUrl":"https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":42,"descriptionBn":"আটা ও ময়দা তৈরির পরিপুষ্ট দেশি গম দানা।","descriptionEn":"Plump golden whole wheat grains for milling."},{"id":"cat-oth-07","name":"Yellow Maize / Corn (Bhutta)","nameBn":"হলুদ দানা ভুট্টা","category":"other","categoryLabelEn":"Grains & Pulses","categoryLabelBn":"দানা, ডাল ও অন্যান্য","unit":"kg","unitBn":"কেজি","keywords":["maize","corn","bhutta","ভুট্টা","হলুদ ভুট্টা"],"imageUrl":"https://images.unsplash.com/photo-1551754655-cd27e38d2076?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":30,"descriptionBn":"ফিড ও পপকর্ন তৈরির শুকনো হলুদ পুষ্ট ভুট্টা।","descriptionEn":"Dried clean yellow maize kernels."},{"id":"cat-oth-08","name":"Red Lentil (Musur Dal)","nameBn":"দেশি মসুর ডাল","category":"other","categoryLabelEn":"Grains & Pulses","categoryLabelBn":"দানা, ডাল ও অন্যান্য","unit":"kg","unitBn":"কেজি","keywords":["red lentil","musur dal","ডাল","মসুর ডাল","দেশি ডাল"],"imageUrl":"https://images.unsplash.com/photo-1515543237350-b3eea1ec8082?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":135,"descriptionBn":"দ্রুত সেদ্ধ হওয়া সুস্বাদু লাল দেশি মসুর ডাল।","descriptionEn":"Premium quick-cooking native split red lentils."},{"id":"cat-oth-09","name":"Mung Bean (Moong Dal)","nameBn":"সোনালী ভাজা মুগ ডাল","category":"other","categoryLabelEn":"Grains & Pulses","categoryLabelBn":"দানা, ডাল ও অন্যান্য","unit":"kg","unitBn":"কেজি","keywords":["mung bean","moong dal","মুগ ডাল","মুগ"],"imageUrl":"https://images.unsplash.com/photo-1515543237350-b3eea1ec8082?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":155,"descriptionBn":"সুগন্ধি প্রোটিনসমৃদ্ধ পরিষ্কার সোনালী মুগ ডাল।","descriptionEn":"High-protein golden yellow split mung beans."},{"id":"cat-oth-10","name":"Black Gram (Mashkalai Dal)","nameBn":"দেশি মাষকলাই ডাল","category":"other","categoryLabelEn":"Grains & Pulses","categoryLabelBn":"দানা, ডাল ও অন্যান্য","unit":"kg","unitBn":"কেজি","keywords":["mashkalai","black gram","মাষকলাই ডাল","কলাই ডাল"],"imageUrl":"https://images.unsplash.com/photo-1515543237350-b3eea1ec8082?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":160,"descriptionBn":"রুটি ও বড়ার জন্য বিশেষ সুস্বাদু মাষকলাই ডাল।","descriptionEn":"Traditional black gram lentils (Mashkalai)."},{"id":"cat-oth-11","name":"Chickpea (Chhola)","nameBn":"দেশি অস্ট্রেলিয়ান ছোলা / বুট","category":"other","categoryLabelEn":"Grains & Pulses","categoryLabelBn":"দানা, ডাল ও অন্যান্য","unit":"kg","unitBn":"কেজি","keywords":["chickpea","chhola","ছোলা","বুট","ছোলা বুট"],"imageUrl":"https://images.unsplash.com/photo-1515543237350-b3eea1ec8082?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":105,"descriptionBn":"পরিপুষ্ট পরিষ্কার পুষ্টিকর তাজা ছোলা।","descriptionEn":"Plump nutrient-dense chickpeas (chhola)."},{"id":"cat-oth-12","name":"Mustard Seeds (Sorisha)","nameBn":"তেল নিষ্কাশন উপযোগী হলুদ ও কালো সরিষা","category":"other","categoryLabelEn":"Oilseeds & Spices","categoryLabelBn":"দানা, ডাল ও অন্যান্য","unit":"kg","unitBn":"কেজি","keywords":["mustard seeds","sorisha","সরিষা","হলুদ সরিষা","সরিষার তেল"],"imageUrl":"https://images.unsplash.com/photo-1599940824399-b87987ceb72a?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":95,"descriptionBn":"উচ্চ তেল ধারণক্ষমতাসম্পন্ন দেশি শুকনো সরিষা বীজ।","descriptionEn":"Oil-rich premium yellow and black mustard seeds."},{"id":"cat-oth-13","name":"Sesame Seeds (Til)","nameBn":"সাদা ও কালো তিল","category":"other","categoryLabelEn":"Oilseeds & Spices","categoryLabelBn":"দানা, ডাল ও অন্যান্য","unit":"kg","unitBn":"কেজি","keywords":["sesame","til","তিল","সাদা তিল","কালো তিল"],"imageUrl":"https://images.unsplash.com/photo-1599940824399-b87987ceb72a?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":160,"descriptionBn":"তেল ও খাদ্য উপযোগী পরিষ্কার পুষ্টিকর তিল।","descriptionEn":"Clean high-grade sesame seeds (Til)."},{"id":"cat-oth-14","name":"Groundnut / Peanut (Cheena Badam)","nameBn":"খোসাযুক্ত চিনা বাদাম","category":"other","categoryLabelEn":"Oilseeds & Spices","categoryLabelBn":"দানা, ডাল ও অন্যান্য","unit":"kg","unitBn":"কেজি","keywords":["peanut","groundnut","badam","বাদাম","চিনা বাদাম"],"imageUrl":"https://images.unsplash.com/photo-1567894340315-735d7c361db0?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":110,"descriptionBn":"চরের বালুমাটিতে উৎপাদিত মুচমুচে মিষ্টি কাঁচা চিনা বাদাম।","descriptionEn":"Crunchy raw groundnuts in shell from river silt soils."},{"id":"cat-oth-15","name":"Soybean Seeds (Soyabin)","nameBn":"উচ্চ প্রোটিনযুক্ত সয়াবিন দানা","category":"other","categoryLabelEn":"Oilseeds & Spices","categoryLabelBn":"দানা, ডাল ও অন্যান্য","unit":"kg","unitBn":"কেজি","keywords":["soybean","soyabin","সয়াবিন","সয়াবিন দানা"],"imageUrl":"https://images.unsplash.com/photo-1599940824399-b87987ceb72a?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":70,"descriptionBn":"লক্ষ্মীপুর ও নোয়াখালীতে উৎপাদিত পুষ্ট সয়াবিন।","descriptionEn":"High-protein clean dried soybean seeds."},{"id":"cat-oth-16","name":"Local Red Onion (Peyaj)","nameBn":"পাবনা ও তাহেরপুরী দেশি লাল পেঁয়াজ","category":"other","categoryLabelEn":"Oilseeds & Spices","categoryLabelBn":"দানা, ডাল ও অন্যান্য","unit":"kg","unitBn":"কেজি","keywords":["onion","peyaj","piyaj","পেঁয়াজ","তাহেরপুরী পেঁয়াজ","লাল পেঁয়াজ"],"imageUrl":"https://images.unsplash.com/photo-1587049352846-4a222e784d38?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":65,"descriptionBn":"ঝাঁঝালো স্বাদ ও দীর্ঘস্থায়ী সংরক্ষণের আসল তাহেরপুরী দেশি পেঁয়াজ।","descriptionEn":"Pungent native red onions from Pabna and Taherpur."},{"id":"cat-oth-17","name":"Native Garlic (Roshun)","nameBn":"নাটোরের দেশি সাদা রসুন","category":"other","categoryLabelEn":"Oilseeds & Spices","categoryLabelBn":"দানা, ডাল ও অন্যান্য","unit":"kg","unitBn":"কেজি","keywords":["garlic","roshun","রসুন","দেশি রসুন"],"imageUrl":"https://images.unsplash.com/photo-1540148426945-6cf22a6b2383?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":180,"descriptionBn":"নাটোর ও চলনবিলের তীব্র ঝাঁঝালো শুকনো দেশি রসুন।","descriptionEn":"Aromatic dry native garlic bulbs from Natore."},{"id":"cat-oth-18","name":"Fresh Ginger (Ada)","nameBn":"পাহাড়ি ও নীলফামারীর রসালো আদা","category":"other","categoryLabelEn":"Oilseeds & Spices","categoryLabelBn":"দানা, ডাল ও অন্যান্য","unit":"kg","unitBn":"কেজি","keywords":["ginger","ada","আদা","দেশি আদা"],"imageUrl":"https://images.unsplash.com/photo-1615485290382-441e4d049cb5?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":190,"descriptionBn":"তাজা তীব্র ঝাঁঝালো রসালো দেশি আদা।","descriptionEn":"Fresh aromatic native ginger roots."},{"id":"cat-oth-19","name":"Raw Turmeric (Kacha Halud)","nameBn":"পাহাড়ি সোনালী কাঁচা হলুদ","category":"other","categoryLabelEn":"Oilseeds & Spices","categoryLabelBn":"দানা, ডাল ও অন্যান্য","unit":"kg","unitBn":"কেজি","keywords":["turmeric","halud","kacha halud","হলুদ","কাঁচা হলুদ"],"imageUrl":"https://images.unsplash.com/photo-1615485290382-441e4d049cb5?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":85,"descriptionBn":"কারকিউমিন সমৃদ্ধ গাঢ় হলুদ রঙের কাঁচা হলুদ।","descriptionEn":"High-curcumin golden raw turmeric rhizomes."},{"id":"cat-oth-20","name":"Coriander Seeds (Dhonia)","nameBn":"সুগন্ধি পরিষ্কার গোটা ধনে","category":"other","categoryLabelEn":"Oilseeds & Spices","categoryLabelBn":"দানা, ডাল ও অন্যান্য","unit":"kg","unitBn":"কেজি","keywords":["coriander seeds","dhonia","ধনে","গোটা ধনে","ধনিয়া"],"imageUrl":"https://images.unsplash.com/photo-1599940824399-b87987ceb72a?w=600&auto=format&fit=crop&q=80","damBenchmarkPrice":150,"descriptionBn":"মসলা গুঁড়া করার উপযোগী তীব্র সুবাসিত দেশি ধনে বীজ।","descriptionEn":"Sun-dried aromatic whole coriander seeds."}]}};
+    let activeSource = 'sqlite';
+    let activeTableName = 'users';
+    let editingRowId = null;
+    let editFormData = {};
+    let deletingRowId = null;
+    let newRecordData = {};
+
+    // Dynamic API origin detection
+    const API_BASE = (window.location.origin && window.location.origin.startsWith('http') && !window.location.origin.includes('5173'))
+      ? window.location.origin
+      : 'http://localhost:3000';
+
+    const AUTH_HEADERS = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Authorization': 'Bearer NativeBazarSJS'
+    };
+
+    function init() {
+      renderStats();
+      renderNav();
+      showTable('sqlite', 'users');
+      pingServerHealth();
+      setInterval(pingServerHealth, 10000);
+      fetchLiveDatabase();
+    }
+
+    // Live full database loader — guarantees data NEVER reverts on browser refresh (F5)
+    async function fetchLiveDatabase() {
+      try {
+        const res = await fetch(`${API_BASE}/api/admin/db/all`, { headers: AUTH_HEADERS });
+        if (res.ok) {
+          const resData = await res.json();
+          if (resData.success && resData.data) {
+            if (resData.data.sqlite) data.sqlite = resData.data.sqlite;
+            if (resData.data.json) data.json = resData.data.json;
+            renderStats();
+            renderNav();
+            renderTableRows(document.getElementById('search-input')?.value || '');
+          }
+        }
+      } catch (e) {
+        // Fall back gracefully to embedded data if server is offline
+        console.log('Backend offline on initial load; using embedded offline cache');
+      }
+    }
+
+    async function pingServerHealth() {
+      const pill = document.getElementById('server-status-pill');
+      try {
+        const res = await fetch(`${API_BASE}/api/admin/db/stats`, {
+          method: 'GET',
+          headers: AUTH_HEADERS
+        });
+        if (res.ok) {
+          pill.className = "inline-flex items-center gap-2 px-3 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full text-xs font-semibold";
+          pill.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> ব্যাকএন্ড: অনলাইন (' + API_BASE + ')';
+        } else {
+          throw new Error('Status ' + res.status);
+        }
+      } catch (e) {
+        pill.className = "inline-flex items-center gap-2 px-3 py-1 bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded-full text-xs font-semibold cursor-pointer";
+        pill.title = "সার্ভার চালু করতে টার্মিনালে চালান: npm start";
+        pill.innerHTML = '<span class="w-2 h-2 rounded-full bg-rose-400"></span> ব্যাকএন্ড: অফলাইন (চালান: npm start)';
+      }
+    }
+
+    async function syncLiveFromBackend() {
+      showFeedback('লাইভ ডাটাবেজ থেকে সম্পূর্ণ ডাটা রিফ্রেশ হচ্ছে...', 'info');
+      try {
+        const res = await fetch(`${API_BASE}/api/admin/db/all`, { headers: AUTH_HEADERS });
+        const resData = await res.json();
+        if (!res.ok || !resData.success) {
+          throw new Error(resData.error || 'লাইভ ডাটা রিফ্রেশ ব্যর্থ');
+        }
+
+        if (resData.data?.sqlite) data.sqlite = resData.data.sqlite;
+        if (resData.data?.json) data.json = resData.data.json;
+
+        renderStats();
+        renderNav();
+        renderTableRows(document.getElementById('search-input')?.value || '');
+        showFeedback('লাইভ সার্ভার থেকে সর্বশেষ সম্পূর্ণ ডাটাবেজ সফলভাবে সিঙ্ক হয়েছে!', 'success');
+      } catch (err) {
+        const msg = err.message.includes('Failed to fetch')
+          ? 'সার্ভার সংযোগ বিচ্ছিন্ন (Failed to fetch)। নিশ্চিত করুন ব্যাকএন্ড সার্ভার চালু আছে: টার্মিনালে npm start চালান এবং ' + API_BASE + ' সচল আছে।'
+          : 'সিঙ্ক ত্রুটি: ' + err.message;
+        showFeedback(msg, 'error');
+      }
+    }
+
+    /* ========================================================
+     * DYNAMIC COUNTERS: Top Dashboard Stats Cards
+     * ======================================================== */
+    function renderStats() {
+      const container = document.getElementById('stats-container');
+      if (!container) return;
+      container.innerHTML = '';
+      
+      const statsList = [
+        { label: 'ব্যবহারকারী (Users)', count: (data.sqlite.users || data.json.users || []).length, icon: 'fa-users', color: 'emerald' },
+        { label: 'পণ্য (Products)', count: (data.sqlite.products || data.json.crops || []).length, icon: 'fa-seedling', color: 'teal' },
+        { label: 'অর্ডার (Orders)', count: (data.sqlite.orders || data.json.orders || []).length, icon: 'fa-cart-shopping', color: 'blue' },
+        { label: 'বাজার দর (Prices)', count: (data.sqlite.market_prices || []).length, icon: 'fa-chart-line', color: 'indigo' },
+        { label: 'বার্তা (Messages)', count: (data.json.messages || []).length, icon: 'fa-envelope', color: 'amber' },
+        { label: 'নোটিফিকেশন', count: (data.json.notifications || []).length, icon: 'fa-bell', color: 'rose' }
+      ];
+
+      statsList.forEach(s => {
+        const card = document.createElement('div');
+        card.className = "bg-slate-900 border border-slate-800 rounded-xl p-3.5 flex flex-col justify-between";
+        card.innerHTML = `
+          <div class="flex items-center justify-between text-slate-400 text-xs mb-1">
+            <span class="truncate">${s.label}</span>
+            <i class="fa-solid ${s.icon}"></i>
+          </div>
+          <div class="text-2xl font-black text-white">${s.count.toLocaleString()}</div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    /* ========================================================
+     * SIDEBAR NAVIGATION & DYNAMIC BADGE COUNTERS
+     * ======================================================== */
+    function renderNav() {
+      const sqliteNav = document.getElementById('sqlite-table-nav');
+      sqliteNav.innerHTML = '';
+      Object.keys(data.sqlite).forEach(name => {
+        const btn = document.createElement('button');
+        btn.id = `btn-sqlite-${name}`;
+        btn.onclick = () => showTable('sqlite', name);
+        btn.className = "w-full text-left px-3 py-2 rounded-xl text-xs font-medium flex items-center justify-between transition-all hover:bg-slate-800 text-slate-400 cursor-pointer";
+        btn.innerHTML = `
+          <span class="truncate">${name}</span>
+          <span class="nav-badge px-1.5 py-0.5 rounded bg-slate-800 text-[10px] font-mono text-slate-400">${(data.sqlite[name] || []).length}</span>
+        `;
+        sqliteNav.appendChild(btn);
+      });
+
+      const jsonNav = document.getElementById('json-table-nav');
+      jsonNav.innerHTML = '';
+      const jsonKeys = ['messages', 'connections', 'notifications', 'callLogs', 'catalog', 'users', 'crops', 'orders'];
+      jsonKeys.forEach(name => {
+        if (!data.json[name]) return;
+        const btn = document.createElement('button');
+        btn.id = `btn-json-${name}`;
+        btn.onclick = () => showTable('json', name);
+        btn.className = "w-full text-left px-3 py-2 rounded-xl text-xs font-medium flex items-center justify-between transition-all hover:bg-slate-800 text-slate-400 cursor-pointer";
+        btn.innerHTML = `
+          <span class="truncate">${name}</span>
+          <span class="nav-badge px-1.5 py-0.5 rounded bg-slate-800 text-[10px] font-mono text-amber-400">${(data.json[name] || []).length}</span>
+        `;
+        jsonNav.appendChild(btn);
+      });
+
+      // Highlight only the currently active table button and reset all others
+      highlightActiveNavButton();
+    }
+
+    /* ========================================================
+     * SIDEBAR ACTIVE STATE CONTROLLER
+     * Guarantees only the clicked table stays active and removes
+     * active classes from all siblings across both lists.
+     * ======================================================== */
+    function highlightActiveNavButton() {
+      // 1. Remove active styles from ALL buttons and badges in both SQLite and JSON navs
+      document.querySelectorAll('#sqlite-table-nav button, #json-table-nav button').forEach(b => {
+        b.className = "w-full text-left px-3 py-2 rounded-xl text-xs font-medium flex items-center justify-between transition-all hover:bg-slate-800 text-slate-400 cursor-pointer";
+        const badge = b.querySelector('.nav-badge');
+        if (badge) {
+          badge.className = "nav-badge px-1.5 py-0.5 rounded bg-slate-800 text-[10px] font-mono " +
+            (b.id.startsWith('btn-sqlite') ? 'text-slate-400' : 'text-amber-400');
+        }
+      });
+
+      // 2. Apply active styling ONLY to the currently selected table button
+      const activeBtn = document.getElementById(`btn-${activeSource}-${activeTableName}`);
+      if (activeBtn) {
+        activeBtn.className = activeSource === 'sqlite'
+          ? "w-full text-left px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-between transition-all bg-emerald-600 text-white shadow-md cursor-pointer"
+          : "w-full text-left px-3 py-2 rounded-xl text-xs font-bold flex items-center justify-between transition-all bg-amber-600 text-white shadow-md cursor-pointer";
+        const activeBadge = activeBtn.querySelector('.nav-badge');
+        if (activeBadge) {
+          activeBadge.className = "nav-badge px-1.5 py-0.5 rounded bg-white/20 text-[10px] font-mono text-white";
+        }
+      }
+    }
+
+    function showTable(source, name) {
+      activeSource = source;
+      activeTableName = name;
+      editingRowId = null;
+      editFormData = {};
+      deletingRowId = null;
+
+      // Update active state cleanly
+      highlightActiveNavButton();
+
+      document.getElementById('active-table-badge').innerText = `${source === 'sqlite' ? 'SQLite' : 'JSON'}: ${name}`;
+      document.getElementById('search-input').value = '';
+      renderTableRows();
+    }
+
+    /* ========================================================
+     * CREATE: Insert Record Modal Logic
+     * ======================================================== */
+    function openInsertModal() {
+      const records = (activeSource === 'sqlite' ? data.sqlite[activeTableName] : data.json[activeTableName]) || [];
+      const subtitle = document.getElementById('insert-modal-subtitle');
+      subtitle.innerText = `টার্গেট স্টোরেজ: ${activeSource.toUpperCase()} • কালেকশন / টেবিল: ${activeTableName}`;
+
+      const container = document.getElementById('insert-form-container');
+      container.innerHTML = '';
+      newRecordData = {};
+
+      const lockedCols = new Set(['id', 'created_at', 'createdAt', 'updated_at', 'updatedAt', 'password_hash', 'passwordHash', 'sessionToken']);
+      
+      let columns = [];
+      if (records.length > 0) {
+        columns = Object.keys(records[0]).filter(c => !lockedCols.has(c));
+      } else {
+        if (activeTableName.includes('user')) columns = ['name', 'phone', 'role', 'division', 'district', 'upazila', 'status', 'is_verified'];
+        else if (activeTableName.includes('product') || activeTableName.includes('crop')) columns = ['name', 'category', 'price_per_kg', 'stock_kg', 'min_order_kg', 'location', 'farmer_name', 'farmer_phone'];
+        else columns = ['name', 'title', 'value', 'status'];
+      }
+
+      const grid = document.createElement('div');
+      grid.className = "grid grid-cols-1 sm:grid-cols-2 gap-4";
+
+      columns.forEach(col => {
+        const fieldWrapper = document.createElement('div');
+        fieldWrapper.className = "space-y-1.5";
+
+        let inputHtml = '';
+        if (col === 'role') {
+          newRecordData[col] = 'farmer';
+          inputHtml = `
+            <select onchange="handleNewFieldChange('${col}', this.value)" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500">
+              <option value="farmer">কৃষক (Farmer)</option>
+              <option value="buyer">ক্রেতা / পাইকার (Buyer)</option>
+              <option value="wholesaler">আড়তদার (Wholesaler)</option>
+              <option value="retailer">খুচরা বিক্রেতা (Retailer)</option>
+              <option value="admin">অ্যাডমিন (Admin)</option>
+            </select>`;
+        } else if (col === 'status' || col === 'delivery_status' || col === 'payment_status') {
+          newRecordData[col] = col === 'payment_status' ? 'Paid' : 'active';
+          inputHtml = `
+            <select onchange="handleNewFieldChange('${col}', this.value)" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500">
+              <option value="active">সক্রিয় (Active)</option>
+              <option value="pending">অপেক্ষমান (Pending)</option>
+              <option value="completed">সম্পন্ন (Completed)</option>
+              <option value="suspended">স্থগিত (Suspended)</option>
+              <option value="Paid">পরিশোধিত (Paid)</option>
+            </select>`;
+        } else if (col === 'is_verified' || col === 'verified' || col === 'organic_certified') {
+          newRecordData[col] = 1;
+          inputHtml = `
+            <select onchange="handleNewFieldChange('${col}', Number(this.value))" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500">
+              <option value="1">হ্যাঁ / ভেরিফাইড (1 / True)</option>
+              <option value="0">না / আনভেরিফাইড (0 / False)</option>
+            </select>`;
+        } else {
+          const sampleVal = records[0] ? records[0][col] : null;
+          const isNum = typeof sampleVal === 'number' || col.includes('price') || col.includes('stock') || col.includes('kg') || col.includes('rate') || col.includes('amount') || col.includes('total');
+          newRecordData[col] = isNum ? 0 : '';
+          inputHtml = `
+            <input
+              type="${isNum ? 'number' : 'text'}"
+              placeholder="${col} লিখুন..."
+              oninput="handleNewFieldChange('${col}', this.type === 'number' ? Number(this.value) : this.value)"
+              class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+            />`;
+        }
+
+        fieldWrapper.innerHTML = `
+          <label class="block text-xs font-semibold text-slate-300 capitalize">${col.replace(/_/g, ' ')}</label>
+          ${inputHtml}
+        `;
+        grid.appendChild(fieldWrapper);
+      });
+
+      container.appendChild(grid);
+      document.getElementById('insert-modal').classList.remove('hidden');
+    }
+
+    function closeInsertModal() {
+      document.getElementById('insert-modal').classList.add('hidden');
+      newRecordData = {};
+    }
+
+    function handleNewFieldChange(col, val) {
+      newRecordData[col] = val;
+    }
+
+    async function submitInsertRecord() {
+      const tableKey = activeSource === 'sqlite' ? activeTableName : 'json:' + activeTableName;
+      const submitBtn = document.getElementById('insert-submit-btn');
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> যুক্ত হচ্ছে...';
+
+      try {
+        const res = await fetch(`${API_BASE}/api/admin/db/record/${tableKey}`, {
+          method: 'POST',
+          headers: AUTH_HEADERS,
+          body: JSON.stringify({ record: newRecordData })
+        });
+
+        const resData = await res.json();
+        // Server returns HTTP 201 Created — accept 200 or 201
+        if ((res.status < 200 || res.status >= 300) || !resData.success) {
+          throw new Error(resData.error || 'নতুন রেকর্ড তৈরি ব্যর্থ হয়েছে');
+        }
+
+        const insertedRecord = resData.record || { ...newRecordData, id: resData.id || 'id_' + Date.now() };
+
+        // Append to local dataset ONLY after confirmed 200/201 response from backend
+        if (activeSource === 'sqlite') {
+          data.sqlite[activeTableName] = data.sqlite[activeTableName] || [];
+          data.sqlite[activeTableName].unshift(insertedRecord);
+          // Bi-directional memory sync
+          if (activeTableName === 'users') {
+            data.json.users = data.json.users || [];
+            data.json.users.unshift(insertedRecord);
+          } else if (activeTableName === 'products') {
+            data.json.crops = data.json.crops || [];
+            data.json.crops.unshift(insertedRecord);
+          } else if (activeTableName === 'orders') {
+            data.json.orders = data.json.orders || [];
+            data.json.orders.unshift(insertedRecord);
+          }
+        } else {
+          data.json[activeTableName] = data.json[activeTableName] || [];
+          data.json[activeTableName].unshift(insertedRecord);
+          // Bi-directional memory sync
+          if (activeTableName === 'users') {
+            data.sqlite.users = data.sqlite.users || [];
+            data.sqlite.users.unshift(insertedRecord);
+          } else if (activeTableName === 'crops') {
+            data.sqlite.products = data.sqlite.products || [];
+            data.sqlite.products.unshift(insertedRecord);
+          } else if (activeTableName === 'orders') {
+            data.sqlite.orders = data.sqlite.orders || [];
+            data.sqlite.orders.unshift(insertedRecord);
+          }
+        }
+
+        closeInsertModal();
+
+        // DYNAMIC COUNTERS: Update sidebar counts and dashboard stats immediately in the DOM
+        renderNav();
+        renderStats();
+        renderTableRows(document.getElementById('search-input')?.value || '');
+        showFeedback('নতুন রেকর্ড সফলভাবে তৈরি ও সংরক্ষণ করা হয়েছে! (SQLite ও db.json উভয় স্টোরেজ আপডেট সম্পন্ন)', 'success');
+      } catch (err) {
+        console.error('Insert error:', err);
+        const msg = err.message.includes('Failed to fetch')
+          ? 'সার্ভারে সংযোগ ব্যর্থ (Failed to fetch)। নিশ্চিত করুন ব্যাকএন্ড সার্ভার চালু রয়েছে (npm start) এবং ' + API_BASE + ' সচল আছে।'
+          : 'রেকর্ড তৈরিতে ত্রুটি: ' + err.message;
+        showFeedback(msg, 'error');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="fa-solid fa-check"></i> রেকর্ড সংরক্ষণ করুন (Save Record)';
+      }
+    }
+
+    /* ========================================================
+     * UPDATE: Inline Row Editing Logic
+     * ======================================================== */
+    function startEdit(rowId) {
+      editingRowId = rowId;
+      deletingRowId = null;
+      const records = (activeSource === 'sqlite' ? data.sqlite[activeTableName] : data.json[activeTableName]) || [];
+      const row = records.find(r => r.id === rowId);
+      editFormData = row ? { ...row } : {};
+      renderTableRows(document.getElementById('search-input')?.value || '');
+    }
+
+    function cancelEdit() {
+      editingRowId = null;
+      editFormData = {};
+      renderTableRows(document.getElementById('search-input')?.value || '');
+    }
+
+    function handleFieldChange(col, val) {
+      editFormData[col] = val;
+    }
+
+    async function saveRow(rowId) {
+      const tableKey = activeSource === 'sqlite' ? activeTableName : 'json:' + activeTableName;
+      showFeedback('সংরক্ষণ হচ্ছে...', 'info');
+
+      try {
+        const res = await fetch(`${API_BASE}/api/admin/db/record/${tableKey}/${encodeURIComponent(rowId)}`, {
+          method: 'PUT',
+          headers: AUTH_HEADERS,
+          body: JSON.stringify({ updates: editFormData })
+        });
+
+        const resData = await res.json();
+        if (!res.ok || !resData.success) {
+          throw new Error(resData.error || 'সংরক্ষণ ব্যর্থ হয়েছে');
+        }
+
+        // Update in-memory data ONLY after confirmed backend response
+        const records = (activeSource === 'sqlite' ? data.sqlite[activeTableName] : data.json[activeTableName]) || [];
+        const idx = records.findIndex(r => r.id === rowId);
+        if (idx !== -1) {
+          records[idx] = resData.record || { ...records[idx], ...editFormData };
+        }
+
+        editingRowId = null;
+        editFormData = {};
+        showFeedback('সফলভাবে সংরক্ষিত হয়েছে! backend storage ও db.json-এ ডাটা আপডেট নিশ্চিত।', 'success');
+        renderTableRows(document.getElementById('search-input')?.value || '');
+        renderStats();
+      } catch (err) {
+        console.error('Save error:', err);
+        const msg = err.message.includes('Failed to fetch')
+          ? 'সার্ভারে সংযোগ ব্যর্থ (Failed to fetch)। নিশ্চিত করুন ব্যাকএন্ড সার্ভার চালু রয়েছে (npm start) এবং ' + API_BASE + ' সচল আছে।'
+          : 'সংরক্ষণ ত্রুটি: ' + err.message;
+        showFeedback(msg, 'error');
+      }
+    }
+
+    /* ========================================================
+     * DELETE: Row Deletion Logic with Dynamic Counter Updates
+     * ======================================================== */
+    function confirmDeleteRow(rowId) {
+      deletingRowId = rowId;
+      editingRowId = null;
+      renderTableRows(document.getElementById('search-input')?.value || '');
+    }
+
+    function cancelDeleteRow() {
+      deletingRowId = null;
+      renderTableRows(document.getElementById('search-input')?.value || '');
+    }
+
+    async function executeDeleteRow(rowId) {
+      const tableKey = activeSource === 'sqlite' ? activeTableName : 'json:' + activeTableName;
+      showFeedback('মুছে ফেলা হচ্ছে...', 'info');
+
+      try {
+        const res = await fetch(`${API_BASE}/api/admin/db/record/${tableKey}/${encodeURIComponent(rowId)}`, {
+          method: 'DELETE',
+          headers: AUTH_HEADERS
+        });
+
+        const resData = await res.json();
+        if (!res.ok || !resData.success) {
+          throw new Error(resData.error || 'মুছে ফেলা ব্যর্থ হয়েছে');
+        }
+
+        // Remove from in-memory cache ONLY after confirmed 200 response from backend
+        if (activeSource === 'sqlite') {
+          data.sqlite[activeTableName] = (data.sqlite[activeTableName] || []).filter(r => r.id !== rowId);
+          if (activeTableName === 'users' && data.json.users) {
+            data.json.users = data.json.users.filter(r => r.id !== rowId);
+          } else if (activeTableName === 'products' && data.json.crops) {
+            data.json.crops = data.json.crops.filter(r => r.id !== rowId);
+          } else if (activeTableName === 'orders' && data.json.orders) {
+            data.json.orders = data.json.orders.filter(r => r.id !== rowId);
+          }
+        } else {
+          data.json[activeTableName] = (data.json[activeTableName] || []).filter(r => r.id !== rowId);
+          if (activeTableName === 'users' && data.sqlite.users) {
+            data.sqlite.users = data.sqlite.users.filter(r => r.id !== rowId);
+          } else if (activeTableName === 'crops' && data.sqlite.products) {
+            data.sqlite.products = data.sqlite.products.filter(r => r.id !== rowId);
+          } else if (activeTableName === 'orders' && data.sqlite.orders) {
+            data.sqlite.orders = data.sqlite.orders.filter(r => r.id !== rowId);
+          }
+        }
+
+        deletingRowId = null;
+
+        // DYNAMIC COUNTERS: Update sidebar counts and dashboard stats immediately in the DOM
+        renderNav();
+        renderStats();
+        renderTableRows(document.getElementById('search-input')?.value || '');
+        showFeedback('রেকর্ড সফলভাবে মুছে ফেলা হয়েছে (SQLite ও JSON উভয় স্টোরেজে স্থায়ীভাবে আপডেট সম্পন্ন)', 'success');
+      } catch (err) {
+        console.error('Delete error:', err);
+        const msg = err.message.includes('Failed to fetch')
+          ? 'সার্ভারে সংযোগ ব্যর্থ (Failed to fetch)। নিশ্চিত করুন ব্যাকএন্ড সার্ভার চালু রয়েছে (npm start) এবং ' + API_BASE + ' সচল আছে।'
+          : 'মুছে ফেলতে ত্রুটি: ' + err.message;
+        showFeedback(msg, 'error');
+      }
+    }
+
+    function showFeedback(msg, type) {
+      const el = document.getElementById('feedback-alert');
+      el.className = "rounded-xl p-3.5 text-xs font-semibold border flex items-center gap-2.5 transition-all " +
+        (type === 'success' ? 'bg-emerald-950/80 text-emerald-300 border-emerald-600' :
+         type === 'error' ? 'bg-rose-950/80 text-rose-300 border-rose-600' :
+         'bg-blue-950/80 text-blue-300 border-blue-600');
+      el.innerHTML = `<i class="fa-solid ${type === 'success' ? 'fa-check-circle' : type === 'error' ? 'fa-triangle-exclamation' : 'fa-circle-info'}"></i> <span>${msg}</span>`;
+      el.classList.remove('hidden');
+      if (type === 'success') {
+        setTimeout(() => el.classList.add('hidden'), 5000);
+      }
+    }
+
+    function renderTableRows(filterQuery = '') {
+      const records = (activeSource === 'sqlite' ? data.sqlite[activeTableName] : data.json[activeTableName]) || [];
+      const thead = document.getElementById('table-head');
+      const tbody = document.getElementById('table-body');
+      const countSpan = document.getElementById('active-table-count');
+
+      thead.innerHTML = '';
+      tbody.innerHTML = '';
+
+      if (!records || records.length === 0) {
+        countSpan.innerText = '0 records';
+        tbody.innerHTML = '<tr><td colspan="10" class="text-center py-12 text-slate-500">কোনো তথ্য নেই (No records found)</td></tr>';
+        return;
+      }
+
+      const q = filterQuery.toLowerCase().trim();
+      const filtered = q ? records.filter(r => Object.values(r).some(v => String(v).toLowerCase().includes(q))) : records;
+      countSpan.innerText = `${filtered.length} of ${records.length} records`;
+
+      const columns = Object.keys(records[0] || {});
+      const headRow = document.createElement('tr');
+      headRow.innerHTML = '<th class="p-3 text-slate-400 w-32 text-center">অ্যাকশন (Actions)</th><th class="p-3 text-slate-500 w-10">#</th>';
+      columns.forEach(col => {
+        headRow.innerHTML += `<th class="p-3 whitespace-nowrap">${col}</th>`;
+      });
+      thead.appendChild(headRow);
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="' + (columns.length + 2) + '" class="text-center py-12 text-slate-500">খোঁজ অনুযায়ী কোনো রেকর্ড পাওয়া যায়নি</td></tr>';
+        return;
+      }
+
+      const lockedCols = new Set(['id', 'created_at', 'createdAt', 'password_hash', 'passwordHash', 'sessionToken']);
+
+      filtered.forEach((row, idx) => {
+        const tr = document.createElement('tr');
+        const isEditing = editingRowId === row.id;
+        const isDeleting = deletingRowId === row.id;
+
+        tr.className = isEditing 
+          ? "bg-emerald-950/40 border border-emerald-600/50" 
+          : isDeleting 
+            ? "bg-rose-950/40 border border-rose-600/50" 
+            : "hover:bg-slate-800/40 transition-colors";
+
+        let actionsHtml = '';
+        if (isEditing) {
+          actionsHtml = `<td class="p-2 whitespace-nowrap text-center">
+            <button onclick="saveRow('${row.id}')" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-[11px] font-bold mr-1 shadow cursor-pointer">
+              <i class="fa-solid fa-floppy-disk mr-1"></i> সেভ
+            </button>
+            <button onclick="cancelEdit()" class="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded text-[11px] cursor-pointer">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </td>`;
+        } else if (isDeleting) {
+          actionsHtml = `<td class="p-2 whitespace-nowrap text-center">
+            <button onclick="executeDeleteRow('${row.id}')" class="px-2.5 py-1 bg-rose-600 hover:bg-rose-500 text-white rounded text-[11px] font-bold mr-1 shadow animate-pulse cursor-pointer">
+              নিশ্চিত?
+            </button>
+            <button onclick="cancelDeleteRow()" class="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded text-[11px] cursor-pointer">
+              না
+            </button>
+          </td>`;
+        } else {
+          actionsHtml = `<td class="p-2 whitespace-nowrap text-center space-x-1">
+            <button onclick="startEdit('${row.id}')" class="px-2.5 py-1 bg-slate-800 hover:bg-emerald-600/80 text-slate-300 hover:text-white rounded text-[11px] font-medium border border-slate-700 hover:border-emerald-500 transition-colors cursor-pointer" title="রেকর্ড এডিট করুন">
+              <i class="fa-solid fa-pen mr-1"></i> এডিট
+            </button>
+            <button onclick="confirmDeleteRow('${row.id}')" class="px-2 py-1 bg-slate-800 hover:bg-rose-950 hover:text-rose-400 text-slate-400 rounded text-[11px] border border-slate-700 hover:border-rose-700 transition-colors cursor-pointer" title="মুছে ফেলুন">
+              <i class="fa-solid fa-trash-can"></i>
+            </button>
+          </td>`;
+        }
+
+        let rowHtml = actionsHtml + `<td class="p-3 text-slate-500 font-mono">${idx + 1}</td>`;
+
+        columns.forEach(col => {
+          const isLocked = lockedCols.has(col);
+          let currentVal = isEditing ? editFormData[col] : row[col];
+
+          if (isEditing && !isLocked) {
+            const isNumeric = typeof row[col] === 'number' || col.includes('price') || col.includes('kg') || col.includes('acres') || col.includes('amount') || col.includes('rate') || col.includes('total');
+            rowHtml += `<td class="p-1.5">
+              <input
+                type="${isNumeric ? 'number' : 'text'}"
+                value="${currentVal !== undefined && currentVal !== null ? currentVal : ''}"
+                onchange="handleFieldChange('${col}', this.type === 'number' ? Number(this.value) : this.value)"
+                class="bg-slate-800 border border-emerald-500 rounded px-2 py-1 text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-400 w-full min-w-[90px]"
+              />
+            </td>`;
+          } else {
+            let val = row[col];
+            if (col === 'password_hash' || col === 'passwordHash') {
+              val = '<span class="text-slate-600">[PROTECTED HASH]</span>';
+            } else if (val === null || val === undefined) {
+              val = '<span class="text-slate-600">—</span>';
+            } else if (typeof val === 'boolean') {
+              val = val ? '<span class="text-emerald-400 font-bold">✓ True</span>' : '<span class="text-rose-400">✗ False</span>';
+            } else if (typeof val === 'object') {
+              val = `<span class="font-mono text-[10px] text-slate-400">${JSON.stringify(val).slice(0, 50)}...</span>`;
+            } else {
+              val = String(val);
+              if (col === 'role') {
+                val = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-emerald-400 border border-slate-700">${val}</span>`;
+              }
+            }
+            rowHtml += `<td class="p-3 max-w-xs truncate" title="${String(row[col] ?? '')}">${val}</td>`;
+          }
+        });
+
+        tr.innerHTML = rowHtml;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function filterCurrentTable() {
+      const q = document.getElementById('search-input')?.value || '';
+      renderTableRows(q);
+    }
+
+    init();
+  </script>
+</body>
+</html>

@@ -34,6 +34,7 @@ import { FarmerDashboard } from './components/FarmerDashboard';
 import { WholesalerDashboard } from './components/WholesalerDashboard';
 import { RetailerDashboard } from './components/RetailerDashboard';
 import { CustomerMarketplace } from './components/CustomerMarketplace';
+import { LandingPage } from './components/LandingPage';
 import { AdminDashboard } from './components/AdminDashboard';
 import { MarketRatesView } from './components/MarketRatesView';
 import { OrdersView } from './components/OrdersView';
@@ -81,6 +82,14 @@ export default function App() {
 
   // Auth Modal State (When guest clicks Sign In / Register)
   const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const [authRole, setAuthRole] = useState<'farmer' | 'wholesaler' | 'retailer' | 'consumer'>('farmer');
+
+  const handleOpenAuth = (mode: 'login' | 'register' = 'login', role?: 'farmer' | 'wholesaler' | 'retailer' | 'consumer') => {
+    setAuthMode(mode);
+    if (role) setAuthRole(role);
+    setIsAuthOpen(true);
+  };
 
   // Cart state
   const [cart, setCart] = useState<CartItem[]>(() => CartStore.get());
@@ -324,6 +333,8 @@ export default function App() {
       <div className="min-h-screen bg-stone-100 flex flex-col">
         <AuthPage
           language={language}
+          initialMode={authMode}
+          initialRole={authRole}
           onLanguageToggle={() => setLanguage((prev) => (prev === 'bn' ? 'en' : 'bn'))}
           onBack={() => setIsAuthOpen(false)}
           onAuthSuccess={(user) => {
@@ -382,7 +393,7 @@ export default function App() {
         onLogout={handleLogout}
         onCallUser={handleStartCall}
         onOpenProfile={() => setViewedUser(currentUser)}
-        onOpenAuth={() => setIsAuthOpen(true)}
+        onOpenAuth={() => handleOpenAuth('login')}
         theme={theme}
         onThemeToggle={() => setTheme(ThemeStore.toggle())}
       />
@@ -441,12 +452,20 @@ export default function App() {
             {/* Default Dashboard / Marketplace View */}
             {activeView === 'dashboard' && (
               <>
-                {/* 1. Guest or Consumer -> Instant Social-Feed Marketplace with zero login */}
-                {(!currentUser || canonicalRole === 'consumer') && (
+                {/* 1. Unauthenticated Visitor -> Public Landing Page */}
+                {!currentUser && (
+                  <LandingPage
+                    language={language}
+                    onOpenAuth={handleOpenAuth}
+                  />
+                )}
+
+                {/* 2. Consumer Role -> Verified Consumer Produce Hub */}
+                {currentUser && canonicalRole === 'consumer' && (
                   <CustomerMarketplace
                     language={language}
                     currentUser={currentUser}
-                    onOpenAuth={() => setIsAuthOpen(true)}
+                    onOpenAuth={() => handleOpenAuth('login')}
                   />
                 )}
 
@@ -473,7 +492,7 @@ export default function App() {
 
                 {/* 5. Restricted Administrator Access */}
                 {currentUser && canonicalRole === 'admin' && (
-                  <AdminDashboard matches={aiMatches} language={language} />
+                  <AdminDashboard matches={aiMatches} language={language} currentUser={currentUser} />
                 )}
               </>
             )}

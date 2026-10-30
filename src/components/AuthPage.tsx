@@ -28,6 +28,8 @@ interface AuthPageProps {
   onLanguageToggle: () => void;
   onAuthSuccess: (user: User) => void;
   onBack?: () => void;
+  initialMode?: 'login' | 'register';
+  initialRole?: 'farmer' | 'wholesaler' | 'retailer' | 'consumer';
 }
 
 // Popular crops in Bangladesh for interactive one-click farmer selection
@@ -49,10 +51,18 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   onLanguageToggle,
   onAuthSuccess,
   onBack,
+  initialMode = 'login',
+  initialRole = 'farmer',
 }) => {
-  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [mode, setMode] = useState<'login' | 'register'>(initialMode);
+  useEffect(() => {
+    if (initialMode) setMode(initialMode);
+  }, [initialMode]);
   // ONLY 4 public roles
-  const [selectedRole, setSelectedRole] = useState<'farmer' | 'wholesaler' | 'retailer' | 'consumer'>('farmer');
+  const [selectedRole, setSelectedRole] = useState<'farmer' | 'wholesaler' | 'retailer' | 'consumer'>(initialRole);
+  useEffect(() => {
+    if (initialRole) setSelectedRole(initialRole);
+  }, [initialRole]);
 
   // Login credentials - completely blank by default (NO hardcoded demo passwords)
   const [loginIdentifier, setLoginIdentifier] = useState('');

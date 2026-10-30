@@ -165,8 +165,8 @@ export function initDatabase() {
   seedDemoUsers();
   seedOfficialMarketPrices();
   seedWholesalerOffers();
-  // seedInitialProductCatalogs();
-  // seedInitialOrders();
+  seedInitialProductCatalogs();
+  seedInitialOrders();
 }
 
 // ─── PASSWORD HASHING HELPER ────────────────────────────────────────────────
@@ -573,9 +573,6 @@ function seedWholesalerOffers() {
 // Note: These represent initial marketplace listings across the 3 supply stages
 // so visitors can immediately test browsing, purchasing, and order workflows.
 function seedInitialProductCatalogs() {
-  const countStmt = db.prepare('SELECT COUNT(*) as count FROM products');
-  const { count } = countStmt.get() as { count: number };
-  if (count > 0) return;
 
   const nowIso = new Date().toISOString();
   const insertStmt = db.prepare(`
@@ -853,16 +850,16 @@ function seedInitialProductCatalogs() {
   ];
 
   const insertMany = db.transaction((prods: any[]) => {
-    for (const p of prods) insertStmt.run(p);
+    for (const p of prods) {
+      const exists = db.prepare('SELECT id FROM products WHERE id = ?').get(p.id);
+      if (!exists) insertStmt.run(p);
+    }
   });
   insertMany(initialProducts);
 }
 
 // ─── SEED INITIAL ORDERS ACROSS 3 TIERS (PREVENTS EMPTY ORDER REGISTRY) ─────
 function seedInitialOrders() {
-  const countStmt = db.prepare('SELECT COUNT(*) as count FROM orders');
-  const { count } = countStmt.get() as { count: number };
-  if (count > 0) return;
 
   const pastIso1 = new Date(Date.now() - 3600000 * 24).toISOString();
   const pastIso2 = new Date(Date.now() - 3600000 * 12).toISOString();
@@ -870,6 +867,7 @@ function seedInitialOrders() {
 
   // 1. Tier 1: Farmer -> Wholesaler (১ম স্তর: কৃষক → পাইকার)
   const order1Id = 'ORD-T1-889012';
+  if (!db.prepare('SELECT id FROM orders WHERE id = ?').get(order1Id)) {
   db.prepare(`
     INSERT INTO orders (
       id, order_type, buyer_id, buyer_name, buyer_phone, buyer_email, buyer_role,
@@ -893,10 +891,12 @@ function seedInitialOrders() {
     'item-t1-001', order1Id, 'prod-far-301', 'Harvest Ready Hybrid Tomatoes',
     'ক্ষেতের পাকা হাইব্রিড টমেটো (জমিতে প্রস্তুত)', 500, 38, 19000
   );
+  }
 
   // 2. Tier 2: Wholesaler -> Retailer (২য় স্তর: পাইকার → খুচরা)
   // Demo retailer "Jafor" purchasing wholesale lot from Arat
   const order2Id = 'ORD-T2-665241';
+  if (!db.prepare('SELECT id FROM orders WHERE id = ?').get(order2Id)) {
   db.prepare(`
     INSERT INTO orders (
       id, order_type, buyer_id, buyer_name, buyer_phone, buyer_email, buyer_role,
@@ -920,10 +920,12 @@ function seedInitialOrders() {
     'item-t2-001', order2Id, 'prod-who-201', 'Bulk Hybrid Tomatoes (Crate Wholesale)',
     'টমেটো পাইকারি ক্রেট (আড়ত)', 200, 42, 8400
   );
+  }
 
   // 3. Tier 3: Retailer -> Consumer (৩য় স্তর: খুচরা → ভোক্তা)
   // Consumer purchasing from Jafor Retail
   const order3Id = 'ORD-T3-334992';
+  if (!db.prepare('SELECT id FROM orders WHERE id = ?').get(order3Id)) {
   db.prepare(`
     INSERT INTO orders (
       id, order_type, buyer_id, buyer_name, buyer_phone, buyer_email, buyer_role,
@@ -947,6 +949,7 @@ function seedInitialOrders() {
     'item-t3-001', order3Id, 'prod-ret-101', 'Fresh Farm Table Tomatoes',
     'তাজা হাইব্রিড পাকা টমেটো', 5, 52, 260
   );
+  }
 }
 
 // ─── STRICT SUPPLY CHAIN ROLE VALIDATION ────────────────────────────────────

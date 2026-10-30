@@ -143,7 +143,12 @@ export const Header: React.FC<HeaderProps> = ({
   }, []);
 
   const t = (en: string, bn: string) => language === 'bn' ? bn : en;
-  const visibleNavItems = NAV_ITEMS.filter(n => !n.roles || n.roles.includes(role));
+  const visibleNavItems = !currentUser
+    ? [
+        { id: 'dashboard' as ActiveView, icon: <Sprout className="w-4 h-4" />, labelEn: 'Home', labelBn: 'হোম' },
+        { id: 'market_rates' as ActiveView, icon: <TrendingUp className="w-4 h-4" />, labelEn: 'DAM Market Rates', labelBn: 'বাজার দর' },
+      ]
+    : NAV_ITEMS.filter(n => !n.roles || n.roles.includes(role));
 
   const handleNotificationClick = (n: Notification) => {
     const isCallNotif =
@@ -237,7 +242,9 @@ export const Header: React.FC<HeaderProps> = ({
                 </span>
               </div>
               <p className="text-[10px] text-stone-500 font-medium leading-none">
-                {language === 'bn' ? `${toBanglaDistrict(profileDistrict)} • বাংলাদেশ` : `${profileDistrict} • Bangladesh`}
+                {currentUser
+                  ? (language === 'bn' ? `${toBanglaDistrict(profileDistrict)} • বাংলাদেশ` : `${profileDistrict} • Bangladesh`)
+                  : (language === 'bn' ? 'ডিজিটাল কৃষি প্ল্যাটফর্ম • বাংলাদেশ' : 'Digital Agri Platform • Bangladesh')}
               </p>
             </div>
           </button>
@@ -268,7 +275,8 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             )}
 
-            {/* District Selector (Filtering only - does not alter user profile) */}
+            {/* District Selector (Only for authenticated users) */}
+            {currentUser && (
             <div className="flex items-center gap-1 bg-stone-100 border border-stone-200 rounded-lg px-2 py-1.5 text-xs">
               <MapPin className="w-3.5 h-3.5 text-stone-500 shrink-0" />
               <select
@@ -285,6 +293,7 @@ export const Header: React.FC<HeaderProps> = ({
                 <option value="Mymensingh">{language === 'bn' ? 'ময়মনসিংহ' : 'Mymensingh (ময়মনসিংহ)'}</option>
               </select>
             </div>
+            )}
 
             {/* Dark / Light Theme Toggle */}
             <button
@@ -307,7 +316,7 @@ export const Header: React.FC<HeaderProps> = ({
               <span>{language === 'bn' ? 'বাং' : 'EN'}</span>
             </button>
 
-            {/* Notifications Dropdown */}
+            {currentUser && (
             <div className="relative" ref={notifRef}>
               <button
                 onClick={() => { setShowNotifs(v => !v); setShowUserMenu(false); }}
@@ -401,6 +410,7 @@ export const Header: React.FC<HeaderProps> = ({
                 </div>
               )}
             </div>
+            )}
 
             {/* Quick Direct Messages / Contacts Button (For registered traders) */}
             {currentUser && role !== 'consumer' && (
@@ -509,7 +519,7 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
 
-      {/* Navigation Links Bar with Active Page Indicators */}
+      {currentUser && (
       <nav className="border-t border-stone-200 bg-stone-50/70" aria-label="Main Navigation">
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-1">
@@ -540,6 +550,7 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
       </nav>
+      )}
 
       {/* Mobile Drawer */}
       {mobileMenuOpen && (

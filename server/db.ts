@@ -294,7 +294,68 @@ function createInitialDatabase(): DatabaseSchema {
         createdAt: '2026-10-18T07:30:00.000Z',
       },
     ],
-    crops: [],
+    crops: [
+      {
+        id: 'crop-tom-101',
+        farmerId: 'user-farmer-rafiq',
+        farmerName: 'Md. Rafiqul Islam',
+        farmerPhone: '01712458920',
+        district: 'Bogura',
+        upazila: 'Shibganj',
+        cropName: 'Hybrid Tomato',
+        cropBangla: 'হাইব্রিড পাকা টমেটো',
+        variety: 'Shingro-3 Hybrid',
+        quantityKg: 3500,
+        availableDate: 'Ready to Harvest',
+        expectedPricePerKg: 38,
+        marketBenchmarkPrice: 42,
+        status: 'Growing',
+        imageUrl: 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=600&auto=format&fit=crop&q=80',
+        qualityGrade: 'A',
+        organicCertified: true,
+        createdAt: '2026-10-18T07:15:00.000Z',
+      },
+      {
+        id: 'crop-pot-102',
+        farmerId: 'user-farmer-rafiq',
+        farmerName: 'Md. Rafiqul Islam',
+        farmerPhone: '01712458920',
+        district: 'Bogura',
+        upazila: 'Shibganj',
+        cropName: 'Diamond Red Potato',
+        cropBangla: 'ডায়মন্ড লাল খাবার আলু',
+        variety: 'Diamond Seed Grade A',
+        quantityKg: 6000,
+        availableDate: 'In Stock',
+        expectedPricePerKg: 28,
+        marketBenchmarkPrice: 32,
+        status: 'Ready to Harvest',
+        imageUrl: 'https://images.unsplash.com/photo-1518977676601-b53f82aba655?w=600&auto=format&fit=crop&q=80',
+        qualityGrade: 'A',
+        organicCertified: false,
+        createdAt: '2026-10-18T07:20:00.000Z',
+      },
+      {
+        id: 'crop-chi-103',
+        farmerId: 'user-farmer-rafiq',
+        farmerName: 'Md. Rafiqul Islam',
+        farmerPhone: '01712458920',
+        district: 'Bogura',
+        upazila: 'Shibganj',
+        cropName: 'Green Chili',
+        cropBangla: 'তাজা বগুড়ার কাঁচা মরিচ',
+        variety: 'Char Bindu Hybrid',
+        quantityKg: 800,
+        availableDate: 'Ready to Harvest',
+        expectedPricePerKg: 85,
+        marketBenchmarkPrice: 92,
+        status: 'Growing',
+        imageUrl: 'https://images.unsplash.com/photo-1588252303782-cb80119abd6d?w=600&auto=format&fit=crop&q=80',
+        qualityGrade: 'A',
+        organicCertified: true,
+        createdAt: '2026-10-18T07:25:00.000Z',
+      },
+    ],
     supplierProducts: [
       {
         id: 'sup-meghna-potash',
@@ -359,12 +420,156 @@ function createInitialDatabase(): DatabaseSchema {
         createdAt: '2026-10-18T08:30:00.000Z',
       },
     ],
-    orders: [],
-    reviews: [],
+    orders: [
+      {
+        id: 'ORD-T1-889012',
+        orderType: 'b2b_trade',
+        customerId: 'user-wholesaler-sumaiya',
+        customerName: 'Sumaiya Islam (Islam Agro Wholesale Syndicate)',
+        phone: '01711209934',
+        sellerId: 'user-farmer-rafiq',
+        sellerName: 'Md. Rafiqul Islam',
+        sellerRole: 'farmer',
+        items: [
+          {
+            itemId: 'crop-tom-101',
+            itemName: 'Hybrid Tomato',
+            itemBangla: 'হাইব্রিড পাকা টমেটো',
+            unitPrice: 38,
+            unit: 'kg',
+            quantity: 500,
+            subtotal: 19000,
+          },
+        ],
+        totalBDT: 19000,
+        paymentMethod: 'Bank Transfer',
+        deliveryAddress: 'Mahasthangarh Mokam Bay #3, Shibganj',
+        district: 'Bogura',
+        upazila: 'Shibganj',
+        status: 'Delivered',
+        trackingCode: 'TRK-BOG-101001',
+        orderDate: '2026-10-25T10:00:00.000Z',
+      },
+      {
+        id: 'ORD-T3-334992',
+        orderType: 'consumer_retail',
+        customerId: 'user-consumer-tanveer',
+        customerName: 'Dr. Tanveer Mahmud',
+        phone: '01711889922',
+        sellerId: 'usr-retailer-jafor',
+        sellerName: 'Jafor (Jafor Agro Retail Store)',
+        sellerRole: 'retailer',
+        items: [
+          {
+            itemId: 'prod-ret-101',
+            itemName: 'Fresh Farm Table Tomatoes',
+            itemBangla: 'তাজা হাইব্রিড পাকা টমেটো',
+            unitPrice: 52,
+            unit: 'kg',
+            quantity: 5,
+            subtotal: 260,
+          },
+        ],
+        totalBDT: 260,
+        paymentMethod: 'Cash on Delivery',
+        deliveryAddress: 'House 14, Road 3, Jaleswaritola, Bogura Sadar',
+        district: 'Bogura',
+        upazila: 'Bogura Sadar',
+        status: 'Confirmed',
+        trackingCode: 'TRK-BOG-303003',
+        orderDate: '2026-10-28T09:00:00.000Z',
+      },
+    ],
+    reviews: [
+      {
+        id: 'rev-seed-1',
+        orderId: 'ORD-T3-334992',
+        productId: 'prod-ret-101',
+        userId: 'user-consumer-tanveer',
+        userName: 'Dr. Tanveer Mahmud',
+        rating: 5,
+        comment: 'অত্যন্ত তাজা ও সুস্বাদু ফরমালিনমুক্ত টমেটো। দ্রুত হোম ডেলিভারি পেয়েছি।',
+        createdAt: '2026-10-28T14:00:00.000Z',
+        verifiedPurchase: true,
+      },
+    ],
     auditLogs: [],
-    messages: [],
-    connections: [],
-    notifications: [],
+    messages: [
+      {
+        id: 'msg-seed-01',
+        senderId: 'user-wholesaler-sumaiya',
+        senderName: 'Sumaiya Islam',
+        senderRole: 'wholesaler',
+        recipientId: 'user-farmer-rafiq',
+        recipientName: 'Md. Rafiqul Islam',
+        recipientRole: 'farmer',
+        content: 'আসসালামু আলাইকুম রফিকুল সাহেব, আপনার শিবগঞ্জের ৩.৫ বিঘা জমির টমেটোর বর্তমান অবস্থা কেমন?',
+        createdAt: '2026-10-24T14:30:00.000Z',
+        read: true,
+        messageType: 'price_offer',
+      },
+      {
+        id: 'msg-seed-02',
+        senderId: 'user-farmer-rafiq',
+        senderName: 'Md. Rafiqul Islam',
+        senderRole: 'farmer',
+        recipientId: 'user-wholesaler-sumaiya',
+        recipientName: 'Sumaiya Islam',
+        recipientRole: 'wholesaler',
+        content: 'ওয়ালাইকুম আসসালাম। আলহামদুলিল্লাহ ফসল প্রস্তুত। কাল সকালের মধ্যে ৫০০ কেজি লোড দেওয়া সম্ভব।',
+        createdAt: '2026-10-24T14:45:00.000Z',
+        read: true,
+        messageType: 'text',
+      },
+    ],
+    connections: [
+      {
+        id: 'conn-seed-01',
+        requesterId: 'user-farmer-rafiq',
+        requesterName: 'Md. Rafiqul Islam',
+        requesterRole: 'farmer',
+        requesterPhone: '01712458920',
+        requesterDistrict: 'Bogura',
+        recipientId: 'user-wholesaler-sumaiya',
+        recipientName: 'Sumaiya Islam',
+        recipientRole: 'wholesaler',
+        recipientPhone: '01711209934',
+        recipientDistrict: 'Bogura',
+        status: 'accepted',
+        createdAt: '2026-10-20T10:00:00.000Z',
+      },
+    ],
+    notifications: [
+      {
+        id: 'notif-seed-01',
+        userId: 'user-farmer-rafiq',
+        title: 'নতুন পাইকার ক্রয়ের অনুরোধ',
+        message: 'ইসলাম অ্যাগ্রো সিন্ডিকেট ৫০০ কেজি হাইব্রিড টমেটো ক্রয়ের বুকিং দিয়েছে।',
+        type: 'success',
+        read: false,
+        createdAt: '2026-10-25T10:05:00.000Z',
+        actionUrl: '/orders',
+      },
+      {
+        id: 'notif-seed-02',
+        userId: 'user-wholesaler-sumaiya',
+        title: 'মহাস্থান মোকাম বাজার আপডেট',
+        message: 'আজ বগুড়ায় আলুর পাইকারি দর প্রতি কেজি ২৮-৩০ টাকায় স্থিতিশীল রয়েছে।',
+        type: 'info',
+        read: true,
+        createdAt: '2026-10-26T08:00:00.000Z',
+        actionUrl: '/market-rates',
+      },
+      {
+        id: 'notif-seed-03',
+        userId: 'admin-root',
+        title: 'সিস্টেম স্টার্টআপ সফল',
+        message: 'আমার হাট কেন্দ্রীয় ডেটাবেজ ও এআই টেলিমেট্রি সক্রিয় রয়েছে।',
+        type: 'success',
+        read: false,
+        createdAt: '2026-10-26T08:30:00.000Z',
+      },
+    ],
     callLogs: [],
     catalog: MASTER_AGRICULTURAL_CATALOG,
   };
@@ -413,9 +618,33 @@ class DatabaseManager {
           }
         }
 
-        // Ensure Rafiq has initial crops listed
-        if (this.cache!.crops.length === 0) {
+        // Ensure initial crops exist
+        if (this.cache!.crops.length === 0 && init.crops.length > 0) {
           this.cache!.crops = init.crops;
+          needsSave = true;
+        }
+
+        // Ensure initial orders exist
+        if (this.cache!.orders.length === 0 && init.orders.length > 0) {
+          this.cache!.orders = init.orders;
+          needsSave = true;
+        }
+
+        // Ensure initial notifications exist
+        if (this.cache!.notifications.length === 0 && init.notifications.length > 0) {
+          this.cache!.notifications = init.notifications;
+          needsSave = true;
+        }
+
+        // Ensure initial messages exist
+        if (this.cache!.messages.length === 0 && init.messages.length > 0) {
+          this.cache!.messages = init.messages;
+          needsSave = true;
+        }
+
+        // Ensure initial connections exist
+        if (this.cache!.connections.length === 0 && init.connections.length > 0) {
+          this.cache!.connections = init.connections;
           needsSave = true;
         }
 
@@ -435,7 +664,7 @@ class DatabaseManager {
     }
   }
 
-  private save(): void {
+  public save(): void {
     if (!this.cache) return;
     try {
       if (!fs.existsSync(DATA_DIR)) {
@@ -447,6 +676,47 @@ class DatabaseManager {
     } catch (err) {
       console.error('[DB] Failed to save database file:', err);
     }
+  }
+
+  public updateGenericRecord(collectionName: string, id: string, updates: Record<string, any>): any {
+    if (!this.cache) return undefined;
+    const coll = (this.cache as any)[collectionName];
+    if (!Array.isArray(coll)) return undefined;
+    const idx = coll.findIndex((item: any) => item.id === id);
+    if (idx === -1) return undefined;
+    coll[idx] = { ...coll[idx], ...updates, id };
+    this.save();
+    return coll[idx];
+  }
+
+  public insertGenericRecord(collectionName: string, record: any): any {
+    if (!this.cache) return undefined;
+    if (!Array.isArray((this.cache as any)[collectionName])) {
+      (this.cache as any)[collectionName] = [];
+    }
+    const coll = (this.cache as any)[collectionName];
+    coll.unshift(record);
+    this.save();
+    return record;
+  }
+
+  public getGenericCollection(collectionName: string): any[] {
+    if (!this.cache) return [];
+    const coll = (this.cache as any)[collectionName];
+    return Array.isArray(coll) ? [...coll] : [];
+  }
+
+  public deleteGenericRecord(collectionName: string, id: string): boolean {
+    if (!this.cache) return false;
+    const coll = (this.cache as any)[collectionName];
+    if (!Array.isArray(coll)) return false;
+    const initialLen = coll.length;
+    (this.cache as any)[collectionName] = coll.filter((item: any) => item.id !== id);
+    const changed = (this.cache as any)[collectionName].length !== initialLen;
+    if (changed) {
+      this.save();
+    }
+    return changed;
   }
 
   // ── USER METHODS ────────────────────────────────────────────────────────
