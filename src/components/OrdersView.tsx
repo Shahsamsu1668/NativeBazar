@@ -14,7 +14,6 @@ import {
   AlertCircle,
   Phone,
   MapPin,
-  ShieldCheck,
   Store,
   Sprout,
   Briefcase,
@@ -295,24 +294,6 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ currentUser, language })
         </div>
       </div>
 
-      {/* Role-Based Supply Chain Governance Notice */}
-      {(isConsumer || isRetailer) && (
-        <div className="bg-teal-50 border border-teal-200 rounded-2xl p-3.5 flex items-center gap-2.5 text-xs text-teal-900 shadow-2xs">
-          <ShieldCheck className="w-5 h-5 text-teal-700 shrink-0" />
-          <p className="font-medium">
-            <strong>{t('Trading Rule Compliance:', 'বাণিজ্য নীতি পরিপালন:')}</strong>{' '}
-            {isConsumer
-              ? t(
-                  'Consumers can ONLY purchase from Retailers. Direct purchases from Farmers or Wholesalers are strictly restricted and blocked by platform governance.',
-                  'ভোক্তারা শুধুমাত্র খুচরা বিক্রেতাদের থেকেই পণ্য ক্রয় করতে পারবেন। কৃষক বা পাইকারদের থেকে সরাসরি ক্রয় প্ল্যাটফর্ম নীতি অনুযায়ী কঠোরভাবে নিষিদ্ধ।'
-                )
-              : t(
-                  'Retailers can ONLY purchase from Wholesalers and sell to Consumers. Direct purchasing or selling transactions with Farmers are barred by system governance.',
-                  'খুচরা বিক্রেতারা শুধুমাত্র পাইকারদের থেকেই ক্রয় করতে পারবেন এবং সাধারণ ভোক্তাদের কাছে বিক্রয় করতে পারবেন। কৃষকদের সাথে সরাসরি ক্রয় বা বিক্রয় কঠোরভাবে নিষিদ্ধ।'
-                )}
-          </p>
-        </div>
-      )}
 
       {/* Toast Notification */}
       {toastMessage && (

@@ -150,6 +150,57 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
 
   const t = (en: string, bn: string) => (language === 'bn' ? bn : en);
 
+  // Role-Based Directory Visibility:
+  // - Farmer: Show ONLY Farmers and Wholesalers (hide Retailers and Consumers).
+  // - Wholesaler: Show ONLY Farmers, Wholesalers, and Retailers (hide Consumers).
+  // - Retailer: Show ONLY Wholesalers, Retailers, and Consumers (hide Farmers).
+  // - Consumer: Show ONLY Retailers and connected Consumers (hide Farmers and Wholesalers).
+  const isUserAuthorizedForViewer = useCallback((targetUser: User): boolean => {
+    if (!targetUser || !targetUser.id) return false;
+    if (targetUser.id === currentUser.id) return false;
+    if (targetUser.role === 'admin') return false;
+    if (isDemoAccount(targetUser)) return false;
+
+    const viewerRole = currentUser.role;
+    if (viewerRole === 'farmer') {
+      return targetUser.role === 'farmer' || targetUser.role === 'wholesaler';
+    }
+    if (viewerRole === 'wholesaler') {
+      return targetUser.role === 'farmer' || targetUser.role === 'wholesaler' || targetUser.role === 'retailer';
+    }
+    if (viewerRole === 'retailer') {
+      return targetUser.role === 'wholesaler' || targetUser.role === 'retailer' || targetUser.role === 'consumer';
+    }
+    if (viewerRole === 'consumer') {
+      if (targetUser.role === 'retailer') return true;
+      if (targetUser.role === 'consumer') {
+        const connStatus = ConnectionStore.getStatus(currentUser.id, targetUser.id);
+        return connStatus === 'accepted';
+      }
+      return false;
+    }
+    return true;
+  }, [currentUser.id, currentUser.role]);
+
+  const roleOptionsForCurrentUser = React.useMemo(() => {
+    const roleMap: Record<UserRole, UserRole[]> = {
+      farmer: ['farmer', 'wholesaler'],
+      wholesaler: ['farmer', 'wholesaler', 'retailer'],
+      retailer: ['wholesaler', 'retailer', 'consumer'],
+      consumer: ['retailer', 'consumer'],
+      admin: ['farmer', 'wholesaler', 'retailer', 'consumer'],
+    };
+    const allowed = roleMap[currentUser.role] || ['farmer', 'wholesaler', 'retailer', 'consumer'];
+    return (['all', ...allowed] as const);
+  }, [currentUser.role]);
+
+  // Ensure selected filter conforms to authorized roles
+  useEffect(() => {
+    if (selectedRoleFilter !== 'all' && !roleOptionsForCurrentUser.includes(selectedRoleFilter as any)) {
+      setSelectedRoleFilter('all');
+    }
+  }, [roleOptionsForCurrentUser, selectedRoleFilter]);
+
   // ── Load directory (ONLY real registered users, NO mock/dummy users) ──
   const fetchDirectory = useCallback(async (search?: string) => {
     setDirectoryLoading(true);
@@ -157,6 +208,7 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
     try {
       const result = await apiService.getUsers({
         excludeId: currentUser.id,
+        viewerRole: currentUser.role,
         role: selectedRoleFilter !== 'all' ? selectedRoleFilter : undefined,
         district: selectedDistrictFilter !== 'all' ? selectedDistrictFilter : undefined,
         search: search ?? appliedSearch,
@@ -173,10 +225,7 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
       // Strict filter: EXCLUDE ALL DEMO/MOCK/DUMMY USERS, ADMINS, AND CURRENT USER
       const query = (search ?? appliedSearch).trim().toLowerCase();
       const realUsers = Array.from(userMap.values()).filter((u) => {
-        if (!u || !u.id) return false;
-        if (u.id === currentUser.id) return false;
-        if (u.role === 'admin') return false;
-        if (isDemoAccount(u)) return false;
+        if (!isUserAuthorizedForViewer(u)) return false;
 
         // Role filter
         if (selectedRoleFilter !== 'all' && u.role !== selectedRoleFilter) return false;
@@ -203,14 +252,14 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
       setDirectoryTotal(realUsers.length);
     } catch {
       const realUsers = AuthStore.getUsers().filter(
-        (u) => u.id !== currentUser.id && u.role !== 'admin' && !isDemoAccount(u)
+        (u) => isUserAuthorizedForViewer(u) && (selectedRoleFilter === 'all' || u.role === selectedRoleFilter)
       );
       setDirectoryUsers(realUsers);
       setDirectoryTotal(realUsers.length);
     } finally {
       setDirectoryLoading(false);
     }
-  }, [currentUser.id, selectedRoleFilter, selectedDistrictFilter, appliedSearch]);
+  }, [currentUser.id, currentUser.role, selectedRoleFilter, selectedDistrictFilter, appliedSearch, isUserAuthorizedForViewer]);
 
   // Re-fetch on filter change
   useEffect(() => { fetchDirectory(appliedSearch); }, [selectedRoleFilter, selectedDistrictFilter]);
@@ -753,13 +802,13 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
               <span className="text-[11px] font-bold text-stone-400 uppercase tracking-wider shrink-0 mr-1">
                 {t('Role:', 'ভূমিকা:')}
               </span>
-              {(['all', 'farmer', 'wholesaler', 'retailer', 'consumer'] as const).map((r) => {
+              {roleOptionsForCurrentUser.map((r) => {
                 const isSelected = selectedRoleFilter === r;
                 return (
                   <button
                     key={r}
                     onClick={() => setSelectedRoleFilter(r)}
-                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
                       isSelected
                         ? 'bg-stone-900 text-white shadow-2xs'
                         : 'bg-stone-100 hover:bg-stone-200 text-stone-700 border border-stone-200'

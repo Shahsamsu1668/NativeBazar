@@ -340,8 +340,13 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
               <span>{t('Strict Supply Chain: Farmer → Wholesaler → Retailer', 'নিয়ন্ত্রিত সরবরাহ শৃঙ্খলা: কৃষক → পাইকার → খুচরা')}</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-              {currentUser.businessName || currentUser.name}
+              {currentUser.name || currentUser.businessName}
             </h1>
+            {currentUser.businessName && !/^\+?[\d\s-]{7,15}$/.test(currentUser.businessName.trim()) && currentUser.businessName !== currentUser.name && (
+              <p className="text-blue-300 font-semibold text-xs sm:text-sm">
+                {currentUser.businessName}
+              </p>
+            )}
             <p className="text-blue-100 text-xs sm:text-sm max-w-2xl">
               {t(
                 'Procure agricultural crops in bulk directly from verified farmers at wholesale rates. Sell wholesale lots to registered retailers with certified origin traceability.',
@@ -808,32 +813,41 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
         <div className="bg-white rounded-3xl border border-stone-200 p-6 sm:p-7 shadow-xs max-w-2xl mx-auto space-y-4">
           <div className="border-b border-stone-100 pb-3">
             <h3 className="font-extrabold text-stone-900 text-base">
-              {t('Post Crop Procurement Tender for Farmers', 'কৃষকদের জন্য শস্য ক্রয়ের উন্মুক্ত দরপত্র')}
+              {t('Post Crop Procurement Tender for Farmers', 'কৃষকদের জন্য শস্য ক্রয়ের উন্মুক্ত দরপত্র')}
             </h3>
             <p className="text-xs text-stone-500 mt-0.5">
-              This tender will appear directly on local farmers’ dashboards under Verified Wholesaler Bids.
+              {t(
+                'This tender will appear directly on local farmers’ dashboards under Verified Wholesaler Bids.',
+                'এই উন্মুক্ত দরপত্রটি স্থানীয় কৃষকদের ড্যাশবোর্ডে যাচাইকৃত পাইকারি চাহিদার তালিকায় সরাসরি প্রদর্শিত হবে।'
+              )}
             </p>
           </div>
 
           <form onSubmit={handlePostTender} className="space-y-4 text-xs">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block font-bold text-stone-700 mb-1">Crop Needed (English)</label>
+                <label className="block font-bold text-stone-700 mb-1">
+                  {t('Crop Needed (English)', 'প্রয়োজনীয় শস্য (ইংরেজি)')}
+                </label>
                 <input
                   type="text"
                   value={tenderForm.cropName}
                   onChange={(e) => setTenderForm((f) => ({ ...f, cropName: e.target.value }))}
-                  className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl font-medium"
+                  placeholder={t('e.g. Hybrid Tomatoes', 'যেমন: Hybrid Tomatoes')}
+                  className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl font-medium focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
                   required
                 />
               </div>
               <div>
-                <label className="block font-bold text-stone-700 mb-1">Crop Needed (Bangla)</label>
+                <label className="block font-bold text-stone-700 mb-1">
+                  {t('Crop Needed (Bangla)', 'প্রয়োজনীয় শস্য (বাংলা)')}
+                </label>
                 <input
                   type="text"
                   value={tenderForm.cropBangla}
                   onChange={(e) => setTenderForm((f) => ({ ...f, cropBangla: e.target.value }))}
-                  className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl font-medium"
+                  placeholder={t('e.g. হাইব্রিড টমেটো', 'যেমন: হাইব্রিড টমেটো')}
+                  className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl font-medium focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
                   required
                 />
               </div>
@@ -841,26 +855,32 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block font-bold text-stone-700 mb-1">Target Quantity Needed (kg)</label>
+                <label className="block font-bold text-stone-700 mb-1">
+                  {t('Target Quantity Needed (kg)', 'প্রয়োজনীয় মোট পরিমাণ (কেজি)')}
+                </label>
                 <input
                   type="number"
                   value={tenderForm.quantityKgNeeded}
                   onChange={(e) =>
                     setTenderForm((f) => ({ ...f, quantityKgNeeded: Number(e.target.value) }))
                   }
-                  className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl font-bold"
+                  placeholder={t('e.g. 3000', 'যেমন: ৩০০০')}
+                  className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl font-bold focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
                   required
                 />
               </div>
               <div>
-                <label className="block font-bold text-stone-700 mb-1">Offered Price to Farmer (৳/kg)</label>
+                <label className="block font-bold text-stone-700 mb-1">
+                  {t('Offered Price to Farmer (৳/kg)', 'কৃষকদের জন্য প্রস্তাবিত দর (৳/কেজি)')}
+                </label>
                 <input
                   type="number"
                   value={tenderForm.offeredPricePerKg}
                   onChange={(e) =>
                     setTenderForm((f) => ({ ...f, offeredPricePerKg: Number(e.target.value) }))
                   }
-                  className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl font-black text-emerald-700 text-sm"
+                  placeholder={t('e.g. 40', 'যেমন: ৪০')}
+                  className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl font-black text-emerald-700 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
                   required
                 />
               </div>
@@ -868,49 +888,63 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block font-bold text-stone-700 mb-1">Procurement District</label>
+                <label className="block font-bold text-stone-700 mb-1">
+                  {t('Procurement District', 'সংগ্রহের জেলা')}
+                </label>
                 <select
                   value={tenderForm.district}
                   onChange={(e) => setTenderForm((f) => ({ ...f, district: e.target.value }))}
-                  className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl font-semibold"
+                  className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl font-semibold focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
                 >
-                  <option value="Bogura">Bogura</option>
-                  <option value="Rajshahi">Rajshahi</option>
-                  <option value="Rangpur">Rangpur</option>
-                  <option value="Dinajpur">Dinajpur</option>
+                  <option value="Bogura">{t('Bogura', 'বগুড়া')}</option>
+                  <option value="Rajshahi">{t('Rajshahi', 'রাজশাহী')}</option>
+                  <option value="Rangpur">{t('Rangpur', 'রংপুর')}</option>
+                  <option value="Dinajpur">{t('Dinajpur', 'দিনাজপুর')}</option>
+                  <option value="Dhaka">{t('Dhaka', 'ঢাকা')}</option>
+                  <option value="Jashore">{t('Jashore', 'যশোর')}</option>
+                  <option value="Chattogram">{t('Chattogram', 'চট্টগ্রাম')}</option>
+                  <option value="Mymensingh">{t('Mymensingh', 'ময়মনসিংহ')}</option>
                 </select>
               </div>
               <div>
-                <label className="block font-bold text-stone-700 mb-1">Procurement Deadline</label>
+                <label className="block font-bold text-stone-700 mb-1">
+                  {t('Procurement Deadline', 'দরপত্রের সময়সীমা')}
+                </label>
                 <input
                   type="text"
                   value={tenderForm.deadline}
                   onChange={(e) => setTenderForm((f) => ({ ...f, deadline: e.target.value }))}
-                  placeholder="e.g. Within 7 days"
-                  className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl"
+                  placeholder={t('e.g. Within 7 days', 'যেমন: ৭ দিনের মধ্যে')}
+                  className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
                   required
                 />
               </div>
             </div>
 
             <div>
-              <label className="block font-bold text-stone-700 mb-1">Pick-up Location / Delivery Point</label>
+              <label className="block font-bold text-stone-700 mb-1">
+                {t('Pick-up Location / Delivery Point', 'পণ্য সংগ্রহের স্থান / ডেলিভারি পয়েন্ট')}
+              </label>
               <input
                 type="text"
                 value={tenderForm.location}
                 onChange={(e) => setTenderForm((f) => ({ ...f, location: e.target.value }))}
-                className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl"
+                placeholder={t('e.g. Shibganj Wholesale Arat, Bogura', 'যেমন: শিবগঞ্জ পাইকারি আড়ত, বগুড়া')}
+                className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
                 required
               />
             </div>
 
             <div>
-              <label className="block font-bold text-stone-700 mb-1">Notes / Terms</label>
+              <label className="block font-bold text-stone-700 mb-1">
+                {t('Notes / Terms', 'শর্তাবলী বা বিশেষ মন্তব্য')}
+              </label>
               <textarea
                 rows={2}
                 value={tenderForm.notes}
                 onChange={(e) => setTenderForm((f) => ({ ...f, notes: e.target.value }))}
-                className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl"
+                placeholder={t('e.g. Spot cash payment upon weighing and quality verification.', 'যেমন: ওজন ও মান যাচাই শেষে সাথে সাথে নগদ পরিশোধ।')}
+                className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
               />
             </div>
 
@@ -921,31 +955,31 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
                 onChange={(e) => setTenderForm((f) => ({ ...f, urgent: e.target.checked }))}
                 className="w-4 h-4 text-amber-600 rounded-sm"
               />
-              <span>Mark as Urgent Tender (জরুরি ক্রয় চাহিদা)</span>
+              <span>{t('Mark as Urgent Tender (Requires Fast Dispatch)', 'জরুরি উন্মুক্ত দরপত্র (দ্রুত সংগ্রহ প্রয়োজন)')}</span>
             </label>
 
             <div className="pt-2 flex justify-end gap-2 border-t border-stone-100">
               <button
                 type="button"
                 onClick={() => setActiveTab('procure_crops')}
-                className="px-4 py-2 font-bold text-stone-600 hover:bg-stone-100 rounded-xl"
+                className="px-4 py-2 font-bold text-stone-600 hover:bg-stone-100 rounded-xl transition-colors cursor-pointer"
               >
-                Cancel
+                {t('Cancel', 'বাতিল')}
               </button>
               <button
                 type="submit"
                 disabled={submittingTender}
-                className="bg-blue-600 hover:bg-blue-700 disabled:bg-stone-400 text-white font-extrabold px-6 py-2 rounded-xl shadow-md flex items-center gap-2"
+                className="bg-blue-600 hover:bg-blue-700 disabled:bg-stone-400 text-white font-extrabold px-6 py-2 rounded-xl shadow-md flex items-center gap-2 transition-all cursor-pointer"
               >
                 {submittingTender ? (
                   <>
                     <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>Publishing...</span>
+                    <span>{t('Publishing Tender...', 'দরপত্র প্রকাশ করা হচ্ছে...')}</span>
                   </>
                 ) : (
                   <>
                     <CheckCircle2 className="w-4 h-4" />
-                    <span>Publish Tender to Farmers</span>
+                    <span>{t('Publish Tender to Farmers', 'কৃষকদের জন্য উন্মুক্ত দরপত্র প্রকাশ করুন')}</span>
                   </>
                 )}
               </button>

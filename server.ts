@@ -1398,7 +1398,7 @@ app.put('/api/users/profile', (req, res) => {
 // Strips sensitive fields (passwordHash, sessionToken, securityPin) before sending.
 app.get('/api/users', (req, res) => {
   try {
-    const { excludeId, role, district, search } = req.query;
+    const { excludeId, viewerRole, role, district, search } = req.query;
 
     const sqliteRows = db.prepare('SELECT id, role, name, name_bn as nameBn, phone, email, district, upazila, verified, farm_size_acres as farmSizeAcres, primary_crops as primaryCrops, business_name as businessName, business_type as businessType, shop_name as shopName, license_number as licenseNumber FROM users').all() as any[];
     const sqliteUsers = sqliteRows.map((u: any) => ({
@@ -1455,6 +1455,18 @@ app.get('/api/users', (req, res) => {
       if (excludeId && u.id === String(excludeId)) return false;
       return true;
     });
+
+    // Enforce role-based directory visibility based on viewerRole
+    if (viewerRole === 'farmer') {
+      users = users.filter((u: any) => u.role === 'farmer' || u.role === 'wholesaler');
+    } else if (viewerRole === 'wholesaler') {
+      users = users.filter((u: any) => u.role === 'farmer' || u.role === 'wholesaler' || u.role === 'retailer');
+    } else if (viewerRole === 'retailer') {
+      users = users.filter((u: any) => u.role === 'wholesaler' || u.role === 'retailer' || u.role === 'consumer');
+    } else if (viewerRole === 'consumer') {
+      // Consumers only see retailers and consumers (farmers & wholesalers strictly hidden)
+      users = users.filter((u: any) => u.role === 'retailer' || u.role === 'consumer');
+    }
 
     // Role filter
     if (role && role !== 'all') {

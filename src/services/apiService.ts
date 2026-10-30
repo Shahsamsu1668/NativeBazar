@@ -95,6 +95,7 @@ export const apiService = {
   // ── User Directory ───────────────────────────────────────────────────
   async getUsers(filter?: {
     excludeId?: string;
+    viewerRole?: string;
     role?: string;
     district?: string;
     search?: string;
@@ -102,6 +103,7 @@ export const apiService = {
     try {
       const params = new URLSearchParams();
       if (filter?.excludeId) params.append('excludeId', filter.excludeId);
+      if (filter?.viewerRole) params.append('viewerRole', filter.viewerRole);
       if (filter?.role && filter.role !== 'all') params.append('role', filter.role);
       if (filter?.district && filter.district !== 'all') params.append('district', filter.district);
       if (filter?.search && filter.search.trim()) params.append('search', filter.search.trim());

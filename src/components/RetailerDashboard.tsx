@@ -697,18 +697,6 @@ export const RetailerDashboard: React.FC<RetailerDashboardProps> = ({
       {/* ─── TAB 1: WHOLESALER-RETAILER TRADE (পাইকার-খুচরা বিক্রেতার বাণিজ্য) ───── */}
       {activeTab === 'wholesaler_retailer_trade' && (
         <div className="space-y-4">
-          {/* Supply Chain Trading Restriction Notice */}
-          <div className="bg-teal-50 border border-teal-200 rounded-2xl p-3.5 flex items-center gap-2.5 text-xs text-teal-900 shadow-2xs">
-            <ShieldCheck className="w-5 h-5 text-teal-700 shrink-0" />
-            <p className="font-medium">
-              <strong>{t('Strict Role Rule:', 'কঠোর বাণিজ্য বিধি: ')}</strong>{' '}
-              {t(
-                'This section is dedicated solely to Retailers purchasing products from Wholesalers. Retailers cannot trade directly with Farmers under system regulations.',
-                'এই বিভাগটি শুধুমাত্র পাইকারদের কাছ থেকে খুচরা বিক্রেতাদের মাল ক্রয়ের জন্য নিবেদিত। নীতি অনুযায়ী খুচরা বিক্রেতা কৃষকদের সাথে সরাসরি লেনদেন করতে পারবেন না।'
-              )}
-            </p>
-          </div>
-
           <div className="bg-white p-4 rounded-2xl border border-stone-200 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-2xs">
             <div className="relative flex-1 w-full">
               <Search className="w-4 h-4 text-stone-400 absolute left-3.5 top-1/2 -translate-y-1/2" />

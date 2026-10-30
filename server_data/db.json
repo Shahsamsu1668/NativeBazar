@@ -2,21 +2,6 @@
   "version": "1.0.0",
   "users": [
     {
-      "id": "admin-root",
-      "role": "admin",
-      "name": "NativeBazar System Administrator",
-      "nameBn": "নেটিভবাজার সিস্টেম অ্যাডমিন",
-      "phone": "NativeBazarSJS",
-      "email": "admin@nativebazar.gov.bd",
-      "passwordHash": "sha256_02007e55_8",
-      "district": "Bogura",
-      "upazila": "Bogura Sadar",
-      "verified": true,
-      "twoFactorEnabled": false,
-      "securityPin": "883650",
-      "createdAt": "2026-10-18T07:04:38.551Z"
-    },
-    {
       "id": "user-farmer-rafiq",
       "role": "farmer",
       "name": "Md. Rafiqul Islam",
@@ -38,40 +23,6 @@
       "createdAt": "2026-10-18T07:10:00.000Z",
       "sessionToken": "nb_sec_1792736228728_tgn3ng",
       "lastLoginAt": "2026-10-23T06:17:08.729Z"
-    },
-    {
-      "id": "user-wholesaler-sumaiya",
-      "role": "wholesaler",
-      "name": "Sumaiya Islam",
-      "nameBn": "সুমাইয়া ইসলাম",
-      "phone": "01711209934",
-      "email": "i.sumayyaislam@gmail.com",
-      "passwordHash": "sha256_1d916122_19",
-      "district": "Bogura",
-      "upazila": "Bogura Sadar",
-      "businessName": "Islam Agro Wholesale Syndicate",
-      "businessType": "Wholesaler",
-      "verified": true,
-      "education": "BBA - Agricultural Marketing",
-      "twoFactorEnabled": false,
-      "createdAt": "2026-10-18T07:15:00.000Z"
-    },
-    {
-      "id": "user-supplier-meghna",
-      "role": "retailer",
-      "name": "Meghna Agro Depot Manager",
-      "nameBn": "মেঘনা সার ও বীজ বিতান",
-      "phone": "01715889900",
-      "email": "meghna.depot@nativebazar.com",
-      "passwordHash": "sha256_4a4f011d_21",
-      "district": "Bogura",
-      "upazila": "Shibganj",
-      "shopName": "যমুনা ও মেঘনা সার বিতান",
-      "licenseNumber": "BCIC-BGR-2026-889",
-      "isOrganicCertified": true,
-      "verified": true,
-      "twoFactorEnabled": false,
-      "createdAt": "2026-10-18T07:20:00.000Z"
     },
     {
       "id": "usr_1792730301926_i2pl",
@@ -117,20 +68,6 @@
       "lastLoginAt": "2026-10-23T16:10:09.354Z"
     },
     {
-      "id": "usr_1792731363361_eawr",
-      "role": "consumer",
-      "name": "Sakib",
-      "phone": "01999999999",
-      "email": "sakib@gmail.com",
-      "passwordHash": "sha256_034afd86_6",
-      "district": "Dhaka",
-      "upazila": "Savar",
-      "verified": true,
-      "createdAt": "2026-10-23T04:56:03.361Z",
-      "isOrganicCertified": false,
-      "sessionToken": "nb_sec_1792731363361_jov0ck"
-    },
-    {
       "id": "usr-retailer-jafor",
       "role": "retailer",
       "name": "Jafor",
@@ -144,51 +81,6 @@
       "createdAt": "2026-10-28T05:28:16.762Z",
       "lastLoginAt": "2026-10-28T05:28:16.762Z",
       "shopName": "Jafor Agro Retail Store"
-    },
-    {
-      "id": "w-bogura-arat",
-      "role": "wholesaler",
-      "name": "Bogura Arat Sourcing Consortium",
-      "nameBn": "বগুড়া আড়ত কনসোর্টিয়াম",
-      "phone": "01712001122",
-      "email": "bogura.arat@nativebazar.com",
-      "passwordHash": "sha256_aaf4f025c3e2102c326a2d1f0bce580e1d324d6834a9b0653c4fe9d0f78ce7ae",
-      "district": "Bogura",
-      "upazila": "Sherpur",
-      "verified": true,
-      "createdAt": "2026-10-28T05:28:16.762Z",
-      "lastLoginAt": "2026-10-28T05:28:16.762Z",
-      "businessName": "Bogura Arat Sourcing Consortium"
-    },
-    {
-      "id": "ret-bismillah-mart",
-      "role": "retailer",
-      "name": "Bismillah Krishi & Organic Corner",
-      "nameBn": "বিসমিল্লাহ কৃষি কর্নার",
-      "phone": "01719887766",
-      "email": "bismillah.retail@nativebazar.com",
-      "passwordHash": "sha256_2520978dfcaaf93c091777b06ed22e231298069d7065cba307ebd54e1df5d0c6",
-      "district": "Bogura",
-      "upazila": "Bogura Sadar",
-      "verified": true,
-      "createdAt": "2026-10-28T05:28:16.762Z",
-      "lastLoginAt": "2026-10-28T05:28:16.762Z",
-      "shopName": "Bismillah Krishi & Organic Corner"
-    },
-    {
-      "id": "ret-green-bazar",
-      "role": "retailer",
-      "name": "Suborno Farm Fresh Retailers",
-      "nameBn": "সুবর্ণ ফার্ম ফ্রেশ রিটেইলার্স",
-      "phone": "01723445566",
-      "email": "suborno.retail@nativebazar.com",
-      "passwordHash": "sha256_2520978dfcaaf93c091777b06ed22e231298069d7065cba307ebd54e1df5d0c6",
-      "district": "Bogura",
-      "upazila": "Sariakandi",
-      "verified": true,
-      "createdAt": "2026-10-28T05:28:16.762Z",
-      "lastLoginAt": "2026-10-28T05:28:16.762Z",
-      "shopName": "Suborno Farm Fresh Retailers"
     },
     {
       "id": "usr-consumer-sumayya",
@@ -205,85 +97,6 @@
       "lastLoginAt": "2026-10-28T05:28:16.762Z"
     },
     {
-      "id": "guest-consumer",
-      "role": "consumer",
-      "name": "Guest Consumer",
-      "nameBn": "অতিথি ক্রেতা",
-      "phone": "01700000001",
-      "email": "guest@nativebazar.com",
-      "passwordHash": "sha256_d88d629e7cce3a9da6bf8c71bfb8591816995f21cf7a536d09c000698d652e28",
-      "district": "Bogura",
-      "upazila": "Bogura Sadar",
-      "verified": true,
-      "createdAt": "2026-10-28T05:28:16.762Z",
-      "lastLoginAt": "2026-10-28T05:28:16.762Z"
-    },
-    {
-      "id": "usr-farmer-1793167770835",
-      "role": "farmer",
-      "name": "Shakib",
-      "phone": "01711111111",
-      "passwordHash": "sha256_6145ee87ba5997d41e909fce3f8d93c1390702c1f28bb8f742e9c2682d3991a5",
-      "district": "Dhaka",
-      "upazila": "Mirpur",
-      "verified": true,
-      "createdAt": "2026-10-28T06:09:30.836Z",
-      "lastLoginAt": "2026-10-28T07:09:58.411Z",
-      "farmSizeAcres": 3,
-      "primaryCrops": [
-        "Potato",
-        "Tomato",
-        "Onion",
-        "Chili"
-      ]
-    },
-    {
-      "id": "usr-farmer-1793171195763",
-      "role": "farmer",
-      "name": "shumona",
-      "phone": "01666666666",
-      "passwordHash": "sha256_6145ee87ba5997d41e909fce3f8d93c1390702c1f28bb8f742e9c2682d3991a5",
-      "district": "Bogura",
-      "upazila": "Shibganj",
-      "verified": true,
-      "createdAt": "2026-10-28T07:06:35.763Z",
-      "lastLoginAt": "2026-10-30T10:12:09.538Z",
-      "farmSizeAcres": 3,
-      "primaryCrops": [
-        "Potato",
-        "Tomato"
-      ],
-      "sessionToken": "nb_token_1793355129539_cct74lz"
-    },
-    {
-      "id": "user-consumer-tanveer",
-      "role": "consumer",
-      "name": "Dr. Tanveer Mahmud",
-      "nameBn": "ড. তানভীর মাহমুদ",
-      "phone": "01711889922",
-      "email": "tanveer.consumer@gmail.com",
-      "passwordHash": "sha256_5e923064_18",
-      "district": "Bogura",
-      "upazila": "Bogura Sadar",
-      "verified": true,
-      "twoFactorEnabled": false,
-      "createdAt": "2026-10-18T07:30:00.000Z"
-    },
-    {
-      "id": "far-sherpur-1",
-      "role": "farmer",
-      "name": "Farmer Abul Kashem Mondol",
-      "nameBn": "আবুল কাশেম মন্ডল",
-      "phone": "01823991204",
-      "email": "kashem.farmer@nativebazar.com",
-      "passwordHash": "sha256_ad070127d00795b4396c25b2bf0be9ca8cd552ff133bc098722c8fa6f264f055",
-      "district": "Bogura",
-      "upazila": "Sherpur",
-      "verified": true,
-      "createdAt": "2026-10-30T10:01:37.636Z",
-      "lastLoginAt": "2026-10-30T10:01:37.636Z"
-    },
-    {
       "id": "w-karwan-syndicate",
       "role": "wholesaler",
       "name": "Karwan Bazar Wholesale Arat Syndicate",
@@ -297,6 +110,52 @@
       "createdAt": "2026-10-30T10:01:37.636Z",
       "lastLoginAt": "2026-10-30T10:01:37.636Z",
       "businessName": "Karwan Bazar Wholesale Arat Syndicate"
+    },
+    {
+      "id": "usr-consumer-1793371225905",
+      "role": "consumer",
+      "name": "shiyuli",
+      "phone": "01712121212",
+      "passwordHash": "sha256_6145ee87ba5997d41e909fce3f8d93c1390702c1f28bb8f742e9c2682d3991a5",
+      "district": "Bogura",
+      "upazila": "Shibganj",
+      "verified": true,
+      "createdAt": "2026-10-30T14:40:25.906Z",
+      "sessionToken": "nb_token_1793375839872_pxg1ue3",
+      "lastLoginAt": "2026-10-30T15:57:19.872Z"
+    },
+    {
+      "id": "usr-wholesaler-1793375943061",
+      "role": "wholesaler",
+      "name": "Shahriar",
+      "phone": "01611111111",
+      "passwordHash": "sha256_6145ee87ba5997d41e909fce3f8d93c1390702c1f28bb8f742e9c2682d3991a5",
+      "district": "Bogura",
+      "upazila": "Shibganj",
+      "verified": true,
+      "createdAt": "2026-10-30T15:59:03.062Z",
+      "businessName": "01712121212",
+      "businessType": "Wholesaler",
+      "sessionToken": "nb_token_1793376658832_h16t379",
+      "lastLoginAt": "2026-10-30T16:10:58.831Z"
+    },
+    {
+      "id": "usr-farmer-1793376379782",
+      "role": "farmer",
+      "name": "Nasor",
+      "phone": "01222222222",
+      "passwordHash": "sha256_6145ee87ba5997d41e909fce3f8d93c1390702c1f28bb8f742e9c2682d3991a5",
+      "district": "Bogura",
+      "upazila": "Shibganj",
+      "verified": true,
+      "createdAt": "2026-10-30T16:06:19.783Z",
+      "farmSizeAcres": 3,
+      "primaryCrops": [
+        "Potato",
+        "Tomato"
+      ],
+      "sessionToken": "nb_token_1793376512835_yca3xs4",
+      "lastLoginAt": "2026-10-30T16:08:32.835Z"
     }
   ],
   "crops": [
@@ -439,6 +298,26 @@
       "qualityGrade": "A",
       "organicCertified": false,
       "createdAt": "2026-10-30T06:32:46.942Z"
+    },
+    {
+      "id": "prod-far-1792428431395",
+      "farmerId": "usr-farmer-1792427693522",
+      "farmerName": "MD.Rafikul",
+      "farmerPhone": "01719804567",
+      "district": "Dhaka",
+      "upazila": "Savar",
+      "cropName": "Paddy / BRRI Dhan",
+      "cropBangla": "ব্রি ধান-২৮",
+      "variety": "BRRI-28 Premium",
+      "quantityKg": 100,
+      "availableDate": "In Stock",
+      "expectedPricePerKg": 41,
+      "marketBenchmarkPrice": 47.15,
+      "status": "Ready to Harvest",
+      "imageUrl": "https://images.unsplash.com/photo-1586201375761-83865001e31c?w=800&auto=format&fit=crop&q=80",
+      "qualityGrade": "A",
+      "organicCertified": true,
+      "createdAt": "2026-10-19T16:47:11.395Z"
     }
   ],
   "supplierProducts": [
@@ -603,6 +482,93 @@
       "sellerId": "w-karwan-syndicate",
       "sellerName": "Karwan Bazar Wholesale Arat Syndicate",
       "sellerRole": "wholesaler"
+    },
+    {
+      "id": "ORD-472370-881",
+      "orderType": "farmer_to_wholesaler",
+      "customerId": "usr-wholesaler-1793117893463",
+      "customerName": "Karwan Bazar",
+      "phone": "01888888888",
+      "items": [
+        {
+          "itemId": "prod-far-1792428431395",
+          "itemName": "Paddy / BRRI Dhan",
+          "itemBangla": "ব্রি ধান-২৮",
+          "unitPrice": 41,
+          "unit": "kg",
+          "quantity": 100,
+          "subtotal": 4100
+        }
+      ],
+      "totalBDT": 4100,
+      "paymentMethod": "Bank Transfer / Arat Escrow",
+      "deliveryAddress": "Shibganj, Bogura Arat Hub",
+      "district": "Dhaka",
+      "upazila": "Bogura Sadar",
+      "status": "Confirmed",
+      "trackingCode": "TRK-DHA-449979",
+      "orderDate": "2026-10-27T16:27:52.382Z",
+      "sellerId": "usr-farmer-1792427693522",
+      "sellerName": "MD.Rafikul",
+      "sellerRole": "farmer"
+    },
+    {
+      "id": "ORD-486888-552",
+      "orderType": "retailer_to_consumer",
+      "customerId": "usr-consumer-1793119238364",
+      "customerName": "Ritu",
+      "phone": "01788888888",
+      "items": [
+        {
+          "itemId": "prod-ret-102",
+          "itemName": "Bogura Diamond Red Potatoes",
+          "itemBangla": "বগুড়ার ডায়মন্ড গোল আলু",
+          "unitPrice": 38,
+          "unit": "kg",
+          "quantity": 2,
+          "subtotal": 76
+        }
+      ],
+      "totalBDT": 76,
+      "paymentMethod": "Cash on Delivery",
+      "deliveryAddress": "Shibganj, Bogura",
+      "district": "Bogura",
+      "upazila": "Bogura Sadar",
+      "status": "Delivered",
+      "trackingCode": "TRK-BOG-846344",
+      "orderDate": "2026-10-27T16:44:46.901Z",
+      "sellerId": "ret-bismillah-mart",
+      "sellerName": "Bismillah Krishi & Organic Corner",
+      "sellerRole": "retailer"
+    },
+    {
+      "id": "ORD-950439-962",
+      "orderType": "retailer_to_consumer",
+      "customerId": "usr-consumer-1793264556724",
+      "customerName": "AbdurRahman",
+      "phone": "01766666666",
+      "items": [
+        {
+          "itemId": "prod-ret-1793261720613",
+          "itemName": "Fresh Table Tomatoes",
+          "itemBangla": "তাজা পাকা টমেটো",
+          "unitPrice": 52,
+          "unit": "kg",
+          "quantity": 1,
+          "subtotal": 52
+        }
+      ],
+      "totalBDT": 52,
+      "paymentMethod": "Cash on Delivery",
+      "deliveryAddress": "Jashore Sadar, Jashore",
+      "district": "Dinajpur",
+      "upazila": "Bogura Sadar",
+      "status": "Confirmed",
+      "trackingCode": "TRK-DIN-513491",
+      "orderDate": "2026-10-30T12:55:50.441Z",
+      "sellerId": "usr-retailer-1793258113266",
+      "sellerName": "Bismillah Krishi corner",
+      "sellerRole": "retailer"
     }
   ],
   "reviews": [],
@@ -888,9 +854,66 @@
       "content": "ইউরিয়া/ডিএপি সার কি বর্তমানে স্টকে আছে?",
       "createdAt": "2026-10-23T16:10:45.870Z",
       "read": false
+    },
+    {
+      "id": "msg-1793376441946-jot0",
+      "senderId": "usr-farmer-1793376379782",
+      "senderName": "Nasor",
+      "senderRole": "farmer",
+      "recipientId": "usr-wholesaler-1793375943061",
+      "recipientName": "Shahriar",
+      "recipientRole": "wholesaler",
+      "content": "Hello",
+      "createdAt": "2026-10-30T16:07:21.946Z",
+      "read": true
     }
   ],
   "connections": [
+    {
+      "id": "conn-1793362167488-3g2e",
+      "requesterId": "usr-consumer-1793264556724",
+      "requesterName": "AbdurRahman",
+      "requesterRole": "consumer",
+      "requesterPhone": "01766666666",
+      "requesterDistrict": "Jashore",
+      "recipientId": "usr-farmer-1793001576201",
+      "recipientName": "Md sharif",
+      "recipientRole": "farmer",
+      "recipientPhone": "01788992344",
+      "recipientDistrict": "Bogura",
+      "status": "pending",
+      "createdAt": "2026-10-30T12:09:27.488Z"
+    },
+    {
+      "id": "conn-1793362064800-pdzi",
+      "requesterId": "usr-wholesaler-1793257779260",
+      "requesterName": "NaderAli",
+      "requesterRole": "wholesaler",
+      "requesterPhone": "01744444444",
+      "requesterDistrict": "Bogura",
+      "recipientId": "usr_1792731363361_eawr",
+      "recipientName": "Sakib",
+      "recipientRole": "consumer",
+      "recipientPhone": "01999999999",
+      "recipientDistrict": "Dhaka",
+      "status": "pending",
+      "createdAt": "2026-10-30T12:07:44.800Z"
+    },
+    {
+      "id": "conn-1793361622612-7mja",
+      "requesterId": "usr-farmer-1793257381404",
+      "requesterName": "Rejaul haq",
+      "requesterRole": "farmer",
+      "requesterPhone": "01733333333",
+      "requesterDistrict": "Sylhet",
+      "recipientId": "usr-retailer-1793258113266",
+      "recipientName": "shomsherAli",
+      "recipientRole": "retailer",
+      "recipientPhone": "01755555555",
+      "recipientDistrict": "Dinajpur",
+      "status": "pending",
+      "createdAt": "2026-10-30T12:00:22.613Z"
+    },
     {
       "id": "conn-1792735087425-hs2i",
       "requesterId": "user-farmer-rafiq",
@@ -908,6 +931,46 @@
     }
   ],
   "notifications": [
+    {
+      "id": "notif-1793376441946-bar9",
+      "userId": "usr-wholesaler-1793375943061",
+      "title": "নতুন বার্তা: Nasor",
+      "message": "Hello",
+      "type": "info",
+      "actionUrl": "/contacts?tab=chat&userId=usr-farmer-1793376379782",
+      "read": false,
+      "createdAt": "2026-10-30T16:07:21.946Z"
+    },
+    {
+      "id": "notif-1793362167488-9mci",
+      "userId": "usr-farmer-1793001576201",
+      "title": "নতুন সংযোগের অনুরোধ / New Connection Request",
+      "message": "AbdurRahman (CONSUMER) আপনার সাথে যুক্ত হতে অনুরোধ পাঠিয়েছেন।",
+      "type": "info",
+      "actionUrl": "/contacts?tab=connections",
+      "read": false,
+      "createdAt": "2026-10-30T12:09:27.488Z"
+    },
+    {
+      "id": "notif-1793362064800-enfm",
+      "userId": "usr_1792731363361_eawr",
+      "title": "নতুন সংযোগের অনুরোধ / New Connection Request",
+      "message": "NaderAli (WHOLESALER) আপনার সাথে যুক্ত হতে অনুরোধ পাঠিয়েছেন।",
+      "type": "info",
+      "actionUrl": "/contacts?tab=connections",
+      "read": false,
+      "createdAt": "2026-10-30T12:07:44.801Z"
+    },
+    {
+      "id": "notif-1793361622613-4huq",
+      "userId": "usr-retailer-1793258113266",
+      "title": "নতুন সংযোগের অনুরোধ / New Connection Request",
+      "message": "Rejaul haq (FARMER) আপনার সাথে যুক্ত হতে অনুরোধ পাঠিয়েছেন।",
+      "type": "info",
+      "actionUrl": "/contacts?tab=connections",
+      "read": false,
+      "createdAt": "2026-10-30T12:00:22.613Z"
+    },
     {
       "id": "notif-test-1793343506045",
       "userId": "user-farmer-rafiq",
