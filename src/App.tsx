@@ -141,7 +141,11 @@ export default function App() {
 
     let es: EventSource | null = null;
     try {
-      es = new EventSource(`/api/realtime?userId=` + encodeURIComponent(currentUser.id));
+      const envUrl = (import.meta as any).env?.VITE_API_BASE_URL || (import.meta as any).env?.VITE_API_URL;
+      const isStaticHost = typeof window !== 'undefined' && (window.location.hostname.includes('github.io') || window.location.hostname.includes('netlify') || window.location.hostname.includes('vercel'));
+      const baseUrl = envUrl ? envUrl.replace(/\/api\/?$/, '') : (typeof window !== 'undefined' && !isStaticHost ? `${window.location.protocol}//${window.location.hostname}:3000` : '');
+      if (baseUrl) {
+        es = new EventSource(`${baseUrl}/api/realtime?userId=` + encodeURIComponent(currentUser.id));
       es.addEventListener('call_signal', (e: MessageEvent) => {
         try {
           const data = JSON.parse(e.data);
@@ -185,6 +189,7 @@ export default function App() {
           }
         } catch {}
       });
+      }
     } catch {}
 
     return () => {

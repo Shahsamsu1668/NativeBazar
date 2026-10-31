@@ -1,9 +1,12 @@
 node_modules/
 dist/
 .env
-.env.*
+.env.local
+.env.*.local
 !.env.example
+!.env.development
+!.env.production
 *.db
 *.db-journal
 *.db-wal
-*.db-shm
+*.db-shm

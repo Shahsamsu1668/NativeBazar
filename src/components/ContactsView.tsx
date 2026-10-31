@@ -329,7 +329,11 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
   useEffect(() => {
     if (!currentUser.id) return;
     if (sseRef.current) sseRef.current.close();
-    const es = new EventSource(`/api/realtime?userId=${encodeURIComponent(currentUser.id)}`);
+    const envUrl = (import.meta as any).env?.VITE_API_BASE_URL || (import.meta as any).env?.VITE_API_URL;
+    const isStaticHost = typeof window !== 'undefined' && (window.location.hostname.includes('github.io') || window.location.hostname.includes('netlify') || window.location.hostname.includes('vercel'));
+    const baseUrl = envUrl ? envUrl.replace(/\/api\/?$/, '') : (typeof window !== 'undefined' && !isStaticHost ? `${window.location.protocol}//${window.location.hostname}:3000` : '');
+    if (!baseUrl) return;
+    const es = new EventSource(`${baseUrl}/api/realtime?userId=${encodeURIComponent(currentUser.id)}`);
     sseRef.current = es;
 
     es.addEventListener('new_message', (e: MessageEvent) => {

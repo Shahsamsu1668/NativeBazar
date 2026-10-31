@@ -6,7 +6,34 @@
 import { User, CropListing, SupplierProduct, CustomerOrder, DirectMessage, UserConnection, Notification, CallLog } from '../types';
 import { CatalogProduct } from '../data/catalogData';
 
-const BASE_URL = '/api';
+const isStaticHost = (hostname: string): boolean => {
+  if (!hostname) return false;
+  const h = hostname.toLowerCase();
+  return (
+    h.includes('github.io') ||
+    h.includes('netlify.app') ||
+    h.includes('vercel.app') ||
+    h.includes('pages.dev') ||
+    h.includes('surge.sh')
+  );
+};
+
+const getBaseUrl = () => {
+  const envUrl = (import.meta as any).env?.VITE_API_BASE_URL || (import.meta as any).env?.VITE_API_URL;
+  if (envUrl && typeof envUrl === 'string' && envUrl.trim() !== '') {
+    const clean = envUrl.trim().replace(/\/api\/?$/, '').replace(/\/$/, '');
+    return `${clean}/api`;
+  }
+  if (typeof window !== 'undefined') {
+    const { hostname, protocol } = window.location;
+    if (isStaticHost(hostname)) {
+      return '';
+    }
+    return `${protocol}//${hostname}:3000/api`;
+  }
+  return '';
+};
+const BASE_URL = getBaseUrl();
 
 export interface RegisterPayload {
   name: string;

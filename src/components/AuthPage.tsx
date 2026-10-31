@@ -159,15 +159,18 @@ export const AuthPage: React.FC<AuthPageProps> = ({
           return;
         }
       } catch (backendErr: any) {
-        // Only block local fallback for explicit credential rejection (401/wrong password messages)
         const msg: string = (backendErr.message || '').toLowerCase();
-        const isCredentialError =
-          msg.includes('invalid') ||
-          msg.includes('incorrect') ||
-          msg.includes('wrong password') ||
-          msg.includes('unauthorized') ||
-          msg.includes('not found') === false && msg.includes('401');
-        if (isCredentialError && !msg.includes('fetch') && !msg.includes('network') && !msg.includes('failed to fetch')) {
+        // Ignore generic connection or request failures and fall through to AuthStore.login
+        if (
+          msg.includes('request failed') ||
+          msg.includes('failed to fetch') ||
+          msg.includes('network') ||
+          msg.includes('not found') ||
+          msg.includes('abort') ||
+          msg.includes('timeout')
+        ) {
+          // Fall through to local store verification
+        } else if (msg.includes('locked')) {
           setError(backendErr.message);
           setLoading(false);
           return;
@@ -218,18 +221,36 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     setLoading(true);
 
     try {
-      const res = await authApi.adminLogin({
-        username: adminUsername.trim(),
-        password: adminPassword,
-        securityPin: adminPin.trim(),
-      });
+      try {
+        const res = await authApi.adminLogin({
+          username: adminUsername.trim(),
+          password: adminPassword,
+          securityPin: adminPin.trim(),
+        });
+
+        if (res && res.success && res.user) {
+          AuthStore.setCurrentUser(res.user);
+          setLoading(false);
+          onAuthSuccess(res.user);
+          return;
+        }
+      } catch (backendErr: any) {
+        // Network or fallback error: fall through to client store verification
+      }
+
+      // Fallback to client-side store verification for offline/GitHub Pages demo
+      const localUser = AuthStore.adminLogin(
+        adminUsername.trim(),
+        adminPassword,
+        adminPin.trim()
+      );
 
       setLoading(false);
-      if (res && res.success && res.user) {
-        AuthStore.setCurrentUser(res.user);
-        onAuthSuccess(res.user);
+      if (localUser) {
+        AuthStore.setCurrentUser(localUser);
+        onAuthSuccess(localUser);
       } else {
-        setError(language === 'bn' ? 'অ্যাডমিন এক্সেস প্রত্যাখ্যাত।' : 'Admin Access Denied.');
+        setError(language === 'bn' ? 'অনুমোদিত অ্যাডমিন তথ্য সঠিক নয়।' : 'Invalid admin authorization credentials.');
       }
     } catch (err: any) {
       setLoading(false);
@@ -294,11 +315,18 @@ export const AuthPage: React.FC<AuthPageProps> = ({
           return;
         }
       } catch (backendErr: any) {
-        if (backendErr.message && !backendErr.message.includes('fetch')) {
-          setError(backendErr.message);
+        const msg = (backendErr.message || '').toLowerCase();
+        // Only block fallback for explicit duplicate phone conflict from backend database
+        if (msg.includes('already registered') || msg.includes('already exists') || msg.includes('phone taken')) {
+          setError(
+            language === 'bn'
+              ? 'এই মোবাইল নম্বর দিয়ে ইতিমধ্যে একটি অ্যাকাউন্ট তৈরি করা হয়েছে।'
+              : (backendErr.message || 'Mobile number already registered.')
+          );
           setLoading(false);
           return;
         }
+        // Network/server/404/"Request failed" errors: fall through to local registration!
       }
 
       // 2. Client store fallback
@@ -348,6 +376,85 @@ export const AuthPage: React.FC<AuthPageProps> = ({
               'কৃষক, পাইকার, খুচরা বিক্রেতা ও ভোক্তাদের সরাসরি নিরাপদ কৃষি বাজার।'
             )}
           </p>
+        </div>
+
+        {/* Quick Demo Fill Banner for Live Demo & GitHub Pages */}
+        <div className="bg-emerald-50/70 border-b border-emerald-100 px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs">
+          <div className="flex items-center gap-1.5 font-bold text-emerald-900">
+            <Sparkles className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+            <span>{t('Live Demo (1-Click Fill):', 'লাইভ ডেমো এক ক্লিকে পূরণ:')}</span>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            <button
+              type="button"
+              onClick={() => {
+                setIsAdminMode(false);
+                setMode('login');
+                setSelectedRole('farmer');
+                setLoginIdentifier('01712458920');
+                setLoginPassword('12345678');
+                setError('');
+              }}
+              className="px-2 py-0.5 rounded-lg bg-white border border-emerald-300 text-emerald-800 hover:bg-emerald-600 hover:text-white transition-colors text-[11px] font-semibold shadow-2xs"
+            >
+              🌾 {t('Farmer', 'কৃষক')}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setIsAdminMode(false);
+                setMode('login');
+                setSelectedRole('wholesaler');
+                setLoginIdentifier('01711209934');
+                setLoginPassword('12345678');
+                setError('');
+              }}
+              className="px-2 py-0.5 rounded-lg bg-white border border-blue-300 text-blue-800 hover:bg-blue-600 hover:text-white transition-colors text-[11px] font-semibold shadow-2xs"
+            >
+              🏢 {t('Wholesaler', 'পাইকার')}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setIsAdminMode(false);
+                setMode('login');
+                setSelectedRole('retailer');
+                setLoginIdentifier('01715889900');
+                setLoginPassword('12345678');
+                setError('');
+              }}
+              className="px-2 py-0.5 rounded-lg bg-white border border-amber-300 text-amber-800 hover:bg-amber-600 hover:text-white transition-colors text-[11px] font-semibold shadow-2xs"
+            >
+              🏪 {t('Retailer', 'খুচরা')}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setIsAdminMode(false);
+                setMode('login');
+                setSelectedRole('consumer');
+                setLoginIdentifier('01711889922');
+                setLoginPassword('12345678');
+                setError('');
+              }}
+              className="px-2 py-0.5 rounded-lg bg-white border border-purple-300 text-purple-800 hover:bg-purple-600 hover:text-white transition-colors text-[11px] font-semibold shadow-2xs"
+            >
+              🛒 {t('Consumer', 'ভোক্তা')}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setIsAdminMode(true);
+                setAdminUsername('admin');
+                setAdminPassword('12345678');
+                setAdminPin('883650');
+                setError('');
+              }}
+              className="px-2 py-0.5 rounded-lg bg-white border border-slate-400 text-slate-800 hover:bg-slate-800 hover:text-white transition-colors text-[11px] font-semibold shadow-2xs"
+            >
+              🛡️ {t('Admin', 'অ্যাডমিন')}
+            </button>
+          </div>
         </div>
 
         {/* Admin Portal Toggle View */}
