@@ -604,6 +604,125 @@ app.post('/api/auth/admin-login', (req, res) => {
 // Consumers ONLY see Retailer products
 // Retailers ONLY see Wholesaler products
 // Wholesalers ONLY see Farmer products
+
+// ─── DYNAMIC CROP IMAGE SEARCH API ───────────────────────────────────────────
+app.get('/api/images/crop-search', async (req, res) => {
+  try {
+    const rawQuery = String(req.query.q || req.query.query || '').trim();
+    const category = String(req.query.category || 'Vegetables').trim();
+
+    if (!rawQuery) {
+      return res.json({
+        success: true,
+        imageUrl: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=800&auto=format&fit=crop&q=80',
+        source: 'default_vegetables',
+      });
+    }
+
+    // Special check for pointed gourd / potol
+    if (/পটল|pointed gourd|potol|patal/i.test(rawQuery)) {
+      return res.json({
+        success: true,
+        imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/2d/Pointed_gourd.jpg/800px-Pointed_gourd.jpg',
+        source: 'verified_potol',
+      });
+    }
+
+    // Check predefined catalog in server_data/db.json
+    try {
+      const dbJsonPath = path.join(__dirname, 'server_data', 'db.json');
+      if (fs.existsSync(dbJsonPath)) {
+        const dbJson = JSON.parse(fs.readFileSync(dbJsonPath, 'utf8'));
+        if (Array.isArray(dbJson.catalog)) {
+          const qLower = rawQuery.toLowerCase();
+          const match = dbJson.catalog.find((item: any) => {
+            const nEn = (item.name || '').toLowerCase();
+            const nBn = (item.nameBn || '').toLowerCase();
+            const kw = Array.isArray(item.keywords) ? item.keywords.map((k: string) => k.toLowerCase()) : [];
+            return nEn === qLower || nBn === qLower || kw.includes(qLower) || nEn.includes(qLower) || nBn.includes(qLower);
+          });
+          if (match?.imageUrl && !match.imageUrl.includes('photo-1626074353765-517a681e40be')) {
+            return res.json({ success: true, imageUrl: match.imageUrl, source: 'predefined_catalog' });
+          }
+        }
+      }
+    } catch {}
+
+    // Check Unsplash API if key is available
+    const unsplashKey = process.env.UNSPLASH_ACCESS_KEY || process.env.VITE_UNSPLASH_ACCESS_KEY;
+    if (unsplashKey) {
+      try {
+        const uRes = await fetch(
+          `https://api.unsplash.com/search/photos?query=${encodeURIComponent(rawQuery + ' crop agriculture')}&per_page=1&client_id=${unsplashKey}`
+        );
+        if (uRes.ok) {
+          const uData: any = await uRes.json();
+          const photo = uData?.results?.[0];
+          if (photo?.urls?.regular) {
+            return res.json({ success: true, imageUrl: photo.urls.regular, source: 'unsplash_api' });
+          }
+        }
+      } catch {}
+    }
+
+    // Check Pexels API if key is available
+    const pexelsKey = process.env.PEXELS_API_KEY || process.env.VITE_PEXELS_API_KEY;
+    if (pexelsKey) {
+      try {
+        const pRes = await fetch(
+          `https://api.pexels.com/v1/search?query=${encodeURIComponent(rawQuery + ' crop')}&per_page=1`,
+          { headers: { Authorization: pexelsKey } }
+        );
+        if (pRes.ok) {
+          const pData: any = await pRes.json();
+          const photo = pData?.photos?.[0];
+          if (photo?.src?.large || photo?.src?.medium) {
+            return res.json({ success: true, imageUrl: photo.src.large || photo.src.medium, source: 'pexels_api' });
+          }
+        }
+      } catch {}
+    }
+
+    // Check Wikipedia / Wikimedia API
+    try {
+      const isBn = /[\u0980-\u09FF]/.test(rawQuery);
+      const wikiDomain = isBn ? 'bn.wikipedia.org' : 'en.wikipedia.org';
+      const wRes = await fetch(
+        `https://${wikiDomain}/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(
+          rawQuery
+        )}&gsrlimit=1&prop=pageimages&pithumbsize=800&format=json`
+      );
+      if (wRes.ok) {
+        const wData: any = await wRes.json();
+        const pages = wData?.query?.pages;
+        if (pages) {
+          const first = Object.values(pages)[0] as any;
+          if (first?.thumbnail?.source) {
+            return res.json({ success: true, imageUrl: first.thumbnail.source, source: 'wikipedia_api' });
+          }
+        }
+      }
+    } catch {}
+
+    // Fallback category images
+    const categoryFallbacks: Record<string, string> = {
+      Vegetables: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=800&auto=format&fit=crop&q=80',
+      Fruits: 'https://images.unsplash.com/photo-1619566636858-adf3ef46400b?w=800&auto=format&fit=crop&q=80',
+      Tubers: 'https://images.unsplash.com/photo-1518977676601-b53f82aba655?w=800&auto=format&fit=crop&q=80',
+      Grains: 'https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?w=800&auto=format&fit=crop&q=80',
+      Spices: 'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?w=800&auto=format&fit=crop&q=80',
+    };
+
+    return res.json({
+      success: true,
+      imageUrl: categoryFallbacks[category] || categoryFallbacks.Vegetables,
+      source: 'category_fallback',
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Crop image search failed' });
+  }
+});
+
 app.get('/api/products', (req, res) => {
   try {
     const { targetRole, sellerRole, sellerId, district, category, search, minAvailable = 0 } = req.query as any;

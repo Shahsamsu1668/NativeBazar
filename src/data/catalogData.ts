@@ -118,7 +118,7 @@ export const MASTER_AGRICULTURAL_CATALOG: CatalogProduct[] = [
     unit: 'kg',
     unitBn: 'কেজি',
     keywords: ['pointed gourd', 'patal', 'potol', 'পটল', 'কচি পটল'],
-    imageUrl: 'https://images.unsplash.com/photo-1626074353765-517a681e40be?w=600&auto=format&fit=crop&q=80',
+    imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/2d/Pointed_gourd.jpg/800px-Pointed_gourd.jpg',
     damBenchmarkPrice: 42,
     descriptionBn: 'সুস্বাদু ও আঁশযুক্ত কচি দেশি পটল।',
     descriptionEn: 'Fresh tender pointed gourds (patal).',

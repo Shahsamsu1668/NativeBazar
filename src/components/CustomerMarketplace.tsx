@@ -600,12 +600,15 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
                     </div>
 
                     {/* Price Tag Pill */}
-                    <div className="absolute bottom-3 right-3 bg-white/95 backdrop-blur-md rounded-2xl p-2 px-3 shadow-lg border border-stone-200/80 text-right">
+                    <div
+                      data-price-badge
+                      className="product-price-badge absolute bottom-3 right-3 bg-white/95 dark:bg-stone-900/90 backdrop-blur-md rounded-2xl p-2 px-3 shadow-lg border border-stone-200/80 dark:border-stone-700 text-right"
+                    >
                       <div className="flex items-baseline gap-1 justify-end">
-                        <span className="text-base sm:text-lg font-black text-stone-900">
+                        <span className="price-amount text-base sm:text-lg font-black text-stone-900 dark:text-white">
                           ৳{product.pricePerKg}
                         </span>
-                        <span className="text-[11px] font-semibold text-stone-500">/kg</span>
+                        <span className="price-unit text-[11px] font-semibold text-stone-500 dark:text-stone-300">/kg</span>
                       </div>
                       {product.marketPricePerKg && product.marketPricePerKg > product.pricePerKg && (
                         <span className="text-[10px] text-stone-400 line-through block">

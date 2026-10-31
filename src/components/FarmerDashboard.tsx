@@ -44,6 +44,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { requestMarketPrediction, MarketPredictionResult } from '../services/aiService';
+import { fetchCropImage } from '../services/imageService';
 import { toBanglaNumber, toBanglaDistrict } from './Header';
 
 interface FarmerDashboardProps {
@@ -119,7 +120,7 @@ const QUICK_CROPS = [
     category: 'Vegetables',
     variety: 'Bogra Deshi',
     suggestedPrice: 42,
-    img: 'https://images.unsplash.com/photo-1626074353765-517a681e40be?w=800&auto=format&fit=crop&q=80',
+    img: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/2d/Pointed_gourd.jpg/800px-Pointed_gourd.jpg',
   },
 ];
 
@@ -177,6 +178,8 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
   const [selectedCropIndex, setSelectedCropIndex] = useState(0);
   const [customCropName, setCustomCropName] = useState('');
   const [customCategory, setCustomCategory] = useState<'Vegetables' | 'Tubers' | 'Grains' | 'Spices' | 'Fruits'>('Vegetables');
+  const [customCropImage, setCustomCropImage] = useState<string>('');
+  const [isFetchingImage, setIsFetchingImage] = useState<boolean>(false);
   const [quantityKg, setQuantityKg] = useState(0);
   const [pricePerKg, setPricePerKg] = useState(0);
   const [qualityGrade, setQualityGrade] = useState<'A' | 'B' | 'C'>('A');
@@ -342,6 +345,49 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
     }
   };
 
+  // Dynamic Image Fetching for custom crop names
+  useEffect(() => {
+    const name = customCropName.trim();
+    if (name.length < 2) {
+      setCustomCropImage('');
+      setIsFetchingImage(false);
+      return;
+    }
+
+    let isCurrent = true;
+    setIsFetchingImage(true);
+
+    const timer = setTimeout(async () => {
+      try {
+        const img = await fetchCropImage(name, customCategory);
+        if (isCurrent) {
+          setCustomCropImage(img);
+          setIsFetchingImage(false);
+        }
+      } catch {
+        if (isCurrent) {
+          setIsFetchingImage(false);
+        }
+      }
+    }, 400);
+
+    return () => {
+      isCurrent = false;
+      clearTimeout(timer);
+    };
+  }, [customCropName, customCategory]);
+
+  const handleRefreshCropImage = async () => {
+    if (!customCropName.trim()) return;
+    setIsFetchingImage(true);
+    try {
+      const img = await fetchCropImage(customCropName.trim(), customCategory);
+      setCustomCropImage(img);
+    } finally {
+      setIsFetchingImage(false);
+    }
+  };
+
   // Publish Crop Batch (Farmer -> Wholesaler)
   const handlePublishCrop = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -369,7 +415,13 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
     const cropNameEn = isCustom ? customCropName.trim() : (selected?.nameEn || 'Agro Product');
     const cropNameBn = isCustom ? customCropName.trim() : (selected?.nameBn || 'কৃষিপণ্য');
     const category = isCustom ? customCategory : (selected?.category || 'Vegetables');
-    const cropImg = selected?.img || 'https://images.unsplash.com/photo-1595974482597-4b8da8879bc5?w=800&auto=format&fit=crop&q=80';
+    let cropImg = selected?.img;
+    if (!cropImg && isCustom) {
+      cropImg = customCropImage || (await fetchCropImage(customCropName, customCategory));
+    }
+    if (!cropImg) {
+      cropImg = await fetchCropImage(cropNameEn, category);
+    }
 
     try {
       await productApi.createProduct({
@@ -696,9 +748,12 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
                       Grade {prod.qualityGrade || 'A'}
                     </span>
                   </div>
-                  <div className="absolute bottom-2 right-2 bg-white/95 px-2.5 py-1 rounded-xl shadow-md border border-stone-200 text-right">
-                    <span className="text-sm font-black text-stone-900">৳{prod.pricePerKg}</span>
-                    <span className="text-[10px] text-stone-500">/kg wholesale</span>
+                  <div
+                    data-price-badge
+                    className="product-price-badge absolute bottom-2 right-2 bg-white/95 dark:bg-stone-900/90 backdrop-blur-md px-2.5 py-1 rounded-xl shadow-md border border-stone-200 dark:border-stone-700 text-right"
+                  >
+                    <span className="price-amount text-sm font-black text-stone-900 dark:text-white">৳{prod.pricePerKg}</span>
+                    <span className="price-unit text-[10px] text-stone-500 dark:text-stone-300 block">/kg wholesale</span>
                   </div>
                 </div>
 
@@ -972,7 +1027,7 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
                         <span className="font-extrabold text-xs leading-tight line-clamp-1">
                           {language === 'bn' ? crop.nameBn : crop.nameEn}
                         </span>
-                        <span className="text-[10px] text-emerald-700 font-bold bg-white/80 px-1.5 py-0.5 rounded-md border border-emerald-200/60">
+                        <span className="text-[10px] text-emerald-700 dark:text-emerald-300 font-bold bg-white/80 dark:bg-stone-800/80 px-1.5 py-0.5 rounded-md border border-emerald-200/60 dark:border-emerald-700/60">
                           ৳{language === 'bn' ? toBanglaNumber(crop.suggestedPrice) : crop.suggestedPrice}/কেজি
                         </span>
                       </button>
@@ -1029,6 +1084,63 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
                       </button>
                     )}
                   </div>
+
+                  {/* Dynamic Image Preview when Custom Crop Name is typed */}
+                  {customCropName.trim().length > 0 && (
+                    <div className="mt-3 p-3 bg-stone-50 rounded-2xl border border-stone-200 flex items-center justify-between gap-3 animate-slide-down">
+                      <div className="flex items-center gap-3">
+                        <div className="relative w-14 h-14 rounded-xl overflow-hidden bg-stone-200 shrink-0 border border-stone-300">
+                          {isFetchingImage ? (
+                            <div className="w-full h-full flex items-center justify-center bg-stone-100">
+                              <RefreshCw className="w-4 h-4 text-emerald-600 animate-spin" />
+                            </div>
+                          ) : customCropImage ? (
+                            <img
+                              src={customCropImage}
+                              alt={customCropName}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-stone-400">
+                              <Sparkles className="w-4 h-4" />
+                            </div>
+                          )}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-bold text-stone-800">
+                              {t('Product Image Preview', 'পণ্যের ছবি প্রিভিউ')}
+                            </span>
+                            {isFetchingImage ? (
+                              <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-full border border-emerald-200">
+                                {t('Searching image...', 'ছবি খোঁজা হচ্ছে...')}
+                              </span>
+                            ) : customCropImage ? (
+                              <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-full border border-emerald-200">
+                                ✓ {t('Auto Image Fetched', 'স্বয়ংক্রিয় ছবি যুক্ত')}
+                              </span>
+                            ) : null}
+                          </div>
+                          <p className="text-[11px] text-stone-500 mt-0.5">
+                            {isFetchingImage
+                              ? t('Searching free photo database for crop...', 'ফসল অনুযায়ী ছবি খোঁজা হচ্ছে...')
+                              : t('Auto-fetched based on crop name', 'ফসলের নামের ভিত্তিতে স্বয়ংক্রিয়ভাবে পাওয়া ছবি')}
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleRefreshCropImage}
+                        disabled={isFetchingImage}
+                        title={t('Search another image', 'পুনরায় ছবি খুঁজুন')}
+                        className="px-2.5 py-1.5 bg-white hover:bg-stone-100 border border-stone-300 rounded-xl text-stone-700 text-xs font-bold transition flex items-center gap-1 shrink-0 cursor-pointer disabled:opacity-50"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 text-stone-500 ${isFetchingImage ? 'animate-spin' : ''}`} />
+                        <span className="hidden sm:inline">{t('Refresh', 'রিফ্রেশ')}</span>
+                      </button>
+                    </div>
+                  )}
 
                   {/* Category Pills when Custom is typed */}
                   {customCropName.trim().length > 0 && (

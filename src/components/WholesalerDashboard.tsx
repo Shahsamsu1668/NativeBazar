@@ -565,9 +565,12 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
                       Grade {crop.qualityGrade || 'A'}
                     </span>
                   </div>
-                  <div className="absolute bottom-2 right-2 bg-white/95 px-3 py-1 rounded-xl shadow-md border border-stone-200 text-right">
-                    <span className="text-base font-black text-stone-900">৳{crop.pricePerKg}</span>
-                    <span className="text-[10px] text-stone-500">/kg wholesale</span>
+                  <div
+                    data-price-badge
+                    className="product-price-badge absolute bottom-2 right-2 bg-white/95 dark:bg-stone-900/90 backdrop-blur-md px-3 py-1 rounded-xl shadow-md border border-stone-200 dark:border-stone-700 text-right"
+                  >
+                    <span className="price-amount text-base font-black text-stone-900 dark:text-white">৳{crop.pricePerKg}</span>
+                    <span className="price-unit text-[10px] text-stone-500 dark:text-stone-300 block">/kg wholesale</span>
                   </div>
                 </div>
 
@@ -658,9 +661,12 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
                       Grade {batch.qualityGrade || 'A'}
                     </span>
                   </div>
-                  <div className="absolute bottom-2 right-2 bg-white/95 px-2.5 py-1 rounded-xl shadow-md border border-stone-200 text-right">
-                    <span className="text-base font-black text-stone-900">৳{batch.pricePerKg}</span>
-                    <span className="text-[10px] text-stone-500">/kg to Retailers</span>
+                  <div
+                    data-price-badge
+                    className="product-price-badge absolute bottom-2 right-2 bg-white/95 dark:bg-stone-900/90 backdrop-blur-md px-2.5 py-1 rounded-xl shadow-md border border-stone-200 dark:border-stone-700 text-right"
+                  >
+                    <span className="price-amount text-base font-black text-stone-900 dark:text-white">৳{batch.pricePerKg}</span>
+                    <span className="price-unit text-[10px] text-stone-500 dark:text-stone-300 block">/kg to Retailers</span>
                   </div>
                 </div>
 

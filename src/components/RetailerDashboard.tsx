@@ -751,9 +751,12 @@ export const RetailerDashboard: React.FC<RetailerDashboardProps> = ({
                       {t('Grade', 'গ্রেড')} {lot.qualityGrade || 'A'}
                     </span>
                   </div>
-                  <div className="absolute bottom-2 right-2 bg-white/95 px-2.5 py-1 rounded-xl shadow-md border border-stone-200 text-right backdrop-blur-xs">
-                    <span className="text-base font-black text-stone-900">৳{formatNum(lot.pricePerKg)}</span>
-                    <span className="text-[10px] text-stone-500">{t('/kg wholesale', '/কেজি পাইকারি')}</span>
+                  <div
+                    data-price-badge
+                    className="product-price-badge absolute bottom-2 right-2 bg-white/95 dark:bg-stone-900/90 backdrop-blur-md px-2.5 py-1 rounded-xl shadow-md border border-stone-200 dark:border-stone-700 text-right"
+                  >
+                    <span className="price-amount text-base font-black text-stone-900 dark:text-white">৳{formatNum(lot.pricePerKg)}</span>
+                    <span className="price-unit text-[10px] text-stone-500 dark:text-stone-300 block">{t('/kg wholesale', '/কেজি পাইকারি')}</span>
                   </div>
                 </div>
 
@@ -903,9 +906,12 @@ export const RetailerDashboard: React.FC<RetailerDashboardProps> = ({
                           </span>
                         )}
                       </div>
-                      <div className="absolute bottom-2 right-2 bg-white/95 px-3 py-1 rounded-xl shadow-md border border-stone-200 text-right backdrop-blur-xs">
-                        <span className="text-base font-black text-stone-900">৳{formatNum(prod.pricePerKg)}</span>
-                        <span className="text-[10px] text-stone-500">{t('/kg retail', '/কেজি খুচরা')}</span>
+                      <div
+                        data-price-badge
+                        className="product-price-badge absolute bottom-2 right-2 bg-white/95 dark:bg-stone-900/90 backdrop-blur-md px-3 py-1 rounded-xl shadow-md border border-stone-200 dark:border-stone-700 text-right"
+                      >
+                        <span className="price-amount text-base font-black text-stone-900 dark:text-white">৳{formatNum(prod.pricePerKg)}</span>
+                        <span className="price-unit text-[10px] text-stone-500 dark:text-stone-300 block">{t('/kg retail', '/কেজি খুচরা')}</span>
                       </div>
                     </div>
 

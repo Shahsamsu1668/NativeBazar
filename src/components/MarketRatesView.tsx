@@ -105,7 +105,7 @@ const MASTER_CROPS: BaseCrop[] = [
     baseWholesale: 48,
     baseDhaka: 62,
     baseRetail: 68,
-    imageUrl: 'https://images.unsplash.com/photo-1626074353765-517a681e40be?w=250&auto=format&fit=crop&q=80',
+    imageUrl: 'https://images.unsplash.com/photo-1601493700631-2b16ec4b4716?w=600&auto=format&fit=crop&q=80',
   },
   {
     id: 'veg-bottle-gourd',
@@ -129,7 +129,7 @@ const MASTER_CROPS: BaseCrop[] = [
     baseWholesale: 34,
     baseDhaka: 45,
     baseRetail: 50,
-    imageUrl: 'https://images.unsplash.com/photo-1598170845058-32b9d6a5da37?w=250&auto=format&fit=crop&q=80',
+    imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/2d/Pointed_gourd.jpg/800px-Pointed_gourd.jpg',
   },
   {
     id: 'veg-okra',

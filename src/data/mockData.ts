@@ -457,7 +457,7 @@ export const INITIAL_MARKET_RATES: MarketRate[] = [
     trend: 'down',
     source: 'Department of Agricultural Marketing (DAM), MoA Govt. of Bangladesh',
     lastUpdated: 'Today, 06:30 AM BST',
-    imageUrl: 'https://images.unsplash.com/photo-1626074353765-517a681e40be?w=600&auto=format&fit=crop&q=80',
+    imageUrl: 'https://images.unsplash.com/photo-1601493700631-2b16ec4b4716?w=600&auto=format&fit=crop&q=80',
   },
   {
     id: 'm-bog-6',
@@ -493,7 +493,7 @@ export const INITIAL_MARKET_RATES: MarketRate[] = [
     trend: 'stable',
     source: 'Department of Agricultural Marketing (DAM), MoA Govt. of Bangladesh',
     lastUpdated: 'Today, 06:30 AM BST',
-    imageUrl: 'https://images.unsplash.com/photo-1598170845058-32b9d6a5da37?w=600&auto=format&fit=crop&q=80',
+    imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/2d/Pointed_gourd.jpg/800px-Pointed_gourd.jpg',
   },
   {
     id: 'm-bog-8',
@@ -1016,7 +1016,7 @@ export const INITIAL_MARKET_RATES: MarketRate[] = [
     trend: 'up',
     source: 'Department of Agricultural Marketing (DAM), MoA Govt. of Bangladesh',
     lastUpdated: 'Today, 06:30 AM BST',
-    imageUrl: 'https://images.unsplash.com/photo-1626074353765-517a681e40be?w=600&auto=format&fit=crop&q=80',
+    imageUrl: 'https://images.unsplash.com/photo-1601493700631-2b16ec4b4716?w=600&auto=format&fit=crop&q=80',
   },
   {
     id: 'm-dha-6',
@@ -1052,7 +1052,7 @@ export const INITIAL_MARKET_RATES: MarketRate[] = [
     trend: 'down',
     source: 'Department of Agricultural Marketing (DAM), MoA Govt. of Bangladesh',
     lastUpdated: 'Today, 06:30 AM BST',
-    imageUrl: 'https://images.unsplash.com/photo-1598170845058-32b9d6a5da37?w=600&auto=format&fit=crop&q=80',
+    imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/2d/Pointed_gourd.jpg/800px-Pointed_gourd.jpg',
   },
   {
     id: 'm-dha-8',
@@ -1575,7 +1575,7 @@ export const INITIAL_MARKET_RATES: MarketRate[] = [
     trend: 'down',
     source: 'Department of Agricultural Marketing (DAM), MoA Govt. of Bangladesh',
     lastUpdated: 'Today, 06:30 AM BST',
-    imageUrl: 'https://images.unsplash.com/photo-1626074353765-517a681e40be?w=600&auto=format&fit=crop&q=80',
+    imageUrl: 'https://images.unsplash.com/photo-1601493700631-2b16ec4b4716?w=600&auto=format&fit=crop&q=80',
   },
   {
     id: 'm-raj-6',
@@ -1611,7 +1611,7 @@ export const INITIAL_MARKET_RATES: MarketRate[] = [
     trend: 'down',
     source: 'Department of Agricultural Marketing (DAM), MoA Govt. of Bangladesh',
     lastUpdated: 'Today, 06:30 AM BST',
-    imageUrl: 'https://images.unsplash.com/photo-1598170845058-32b9d6a5da37?w=600&auto=format&fit=crop&q=80',
+    imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/2d/Pointed_gourd.jpg/800px-Pointed_gourd.jpg',
   },
   {
     id: 'm-raj-8',
@@ -2134,7 +2134,7 @@ export const INITIAL_MARKET_RATES: MarketRate[] = [
     trend: 'down',
     source: 'Department of Agricultural Marketing (DAM), MoA Govt. of Bangladesh',
     lastUpdated: 'Today, 06:30 AM BST',
-    imageUrl: 'https://images.unsplash.com/photo-1626074353765-517a681e40be?w=600&auto=format&fit=crop&q=80',
+    imageUrl: 'https://images.unsplash.com/photo-1601493700631-2b16ec4b4716?w=600&auto=format&fit=crop&q=80',
   },
   {
     id: 'm-ran-6',
@@ -2170,7 +2170,7 @@ export const INITIAL_MARKET_RATES: MarketRate[] = [
     trend: 'down',
     source: 'Department of Agricultural Marketing (DAM), MoA Govt. of Bangladesh',
     lastUpdated: 'Today, 06:30 AM BST',
-    imageUrl: 'https://images.unsplash.com/photo-1598170845058-32b9d6a5da37?w=600&auto=format&fit=crop&q=80',
+    imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/2d/Pointed_gourd.jpg/800px-Pointed_gourd.jpg',
   },
   {
     id: 'm-ran-8',
@@ -2693,7 +2693,7 @@ export const INITIAL_MARKET_RATES: MarketRate[] = [
     trend: 'up',
     source: 'Department of Agricultural Marketing (DAM), MoA Govt. of Bangladesh',
     lastUpdated: 'Today, 06:30 AM BST',
-    imageUrl: 'https://images.unsplash.com/photo-1626074353765-517a681e40be?w=600&auto=format&fit=crop&q=80',
+    imageUrl: 'https://images.unsplash.com/photo-1601493700631-2b16ec4b4716?w=600&auto=format&fit=crop&q=80',
   },
   {
     id: 'm-jas-6',
@@ -2729,7 +2729,7 @@ export const INITIAL_MARKET_RATES: MarketRate[] = [
     trend: 'up',
     source: 'Department of Agricultural Marketing (DAM), MoA Govt. of Bangladesh',
     lastUpdated: 'Today, 06:30 AM BST',
-    imageUrl: 'https://images.unsplash.com/photo-1598170845058-32b9d6a5da37?w=600&auto=format&fit=crop&q=80',
+    imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/2d/Pointed_gourd.jpg/800px-Pointed_gourd.jpg',
   },
   {
     id: 'm-jas-8',
@@ -3252,7 +3252,7 @@ export const INITIAL_MARKET_RATES: MarketRate[] = [
     trend: 'up',
     source: 'Department of Agricultural Marketing (DAM), MoA Govt. of Bangladesh',
     lastUpdated: 'Today, 06:30 AM BST',
-    imageUrl: 'https://images.unsplash.com/photo-1626074353765-517a681e40be?w=600&auto=format&fit=crop&q=80',
+    imageUrl: 'https://images.unsplash.com/photo-1601493700631-2b16ec4b4716?w=600&auto=format&fit=crop&q=80',
   },
   {
     id: 'm-mym-6',
@@ -3288,7 +3288,7 @@ export const INITIAL_MARKET_RATES: MarketRate[] = [
     trend: 'up',
     source: 'Department of Agricultural Marketing (DAM), MoA Govt. of Bangladesh',
     lastUpdated: 'Today, 06:30 AM BST',
-    imageUrl: 'https://images.unsplash.com/photo-1598170845058-32b9d6a5da37?w=600&auto=format&fit=crop&q=80',
+    imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/2d/Pointed_gourd.jpg/800px-Pointed_gourd.jpg',
   },
   {
     id: 'm-mym-8',
@@ -3811,7 +3811,7 @@ export const INITIAL_MARKET_RATES: MarketRate[] = [
     trend: 'up',
     source: 'Department of Agricultural Marketing (DAM), MoA Govt. of Bangladesh',
     lastUpdated: 'Today, 06:30 AM BST',
-    imageUrl: 'https://images.unsplash.com/photo-1626074353765-517a681e40be?w=600&auto=format&fit=crop&q=80',
+    imageUrl: 'https://images.unsplash.com/photo-1601493700631-2b16ec4b4716?w=600&auto=format&fit=crop&q=80',
   },
   {
     id: 'm-chi-6',
@@ -3847,7 +3847,7 @@ export const INITIAL_MARKET_RATES: MarketRate[] = [
     trend: 'up',
     source: 'Department of Agricultural Marketing (DAM), MoA Govt. of Bangladesh',
     lastUpdated: 'Today, 06:30 AM BST',
-    imageUrl: 'https://images.unsplash.com/photo-1598170845058-32b9d6a5da37?w=600&auto=format&fit=crop&q=80',
+    imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/2d/Pointed_gourd.jpg/800px-Pointed_gourd.jpg',
   },
   {
     id: 'm-chi-8',
@@ -4370,7 +4370,7 @@ export const INITIAL_MARKET_RATES: MarketRate[] = [
     trend: 'stable',
     source: 'Department of Agricultural Marketing (DAM), MoA Govt. of Bangladesh',
     lastUpdated: 'Today, 06:30 AM BST',
-    imageUrl: 'https://images.unsplash.com/photo-1626074353765-517a681e40be?w=600&auto=format&fit=crop&q=80',
+    imageUrl: 'https://images.unsplash.com/photo-1601493700631-2b16ec4b4716?w=600&auto=format&fit=crop&q=80',
   },
   {
     id: 'm-syl-6',
@@ -4406,7 +4406,7 @@ export const INITIAL_MARKET_RATES: MarketRate[] = [
     trend: 'up',
     source: 'Department of Agricultural Marketing (DAM), MoA Govt. of Bangladesh',
     lastUpdated: 'Today, 06:30 AM BST',
-    imageUrl: 'https://images.unsplash.com/photo-1598170845058-32b9d6a5da37?w=600&auto=format&fit=crop&q=80',
+    imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/2d/Pointed_gourd.jpg/800px-Pointed_gourd.jpg',
   },
   {
     id: 'm-syl-8',
