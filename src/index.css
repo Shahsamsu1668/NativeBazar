@@ -1,6 +1,8 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Hind+Siliguri:wght@300;400;500;600;700&display=swap');
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* ─── DESIGN TOKENS ─────────────────────────────────────────────────── */
 :root {
   /* Brand Colors */
@@ -711,223 +713,355 @@ input:checked + .toggle-track::before { transform: translateX(18px); }
   .hero-banner { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
 
-/* ─── DARK THEME TOKENS & OVERRIDES ────────────────────────────────── */
+/* ─── DARK THEME TOKENS & ADAPTIVE STYLES ──────────────────────────── */
 .dark {
-  --bg-base:       #0d1117;
-  --bg-surface:    #161b22;
-  --bg-muted:      #21262d;
-  --border-soft:   #30363d;
-  --border-medium: #3d444d;
+  /* Surfaces */
+  --bg-base:       #0b0f17;
+  --bg-surface:    #161f2e;
+  --bg-surface-elevated: #1e293b;
+  --bg-muted:      #263345;
+  --border-soft:   #2a384c;
+  --border-medium: #3b4c63;
 
-  --text-primary:  #e6edf3;
-  --text-secondary:#8b949e;
-  --text-muted:    #6e7681;
+  /* Text Tokens - High contrast WCAG AAA compliant */
+  --text-primary:  #f8fafc; /* high contrast white / gray-100 */
+  --text-secondary:#cbd5e1; /* high contrast gray-300 / slate-300 */
+  --text-muted:    #94a3b8; /* high contrast gray-400 / slate-400 */
+  --text-dim:      #64748b;
 
   color-scheme: dark;
 }
 
-/* ── Global body ─────────────────────────────────────────────────────── */
+/* Global body & html in Dark Mode */
+.dark,
 .dark body {
   background-color: var(--bg-base);
   color: var(--text-primary);
 }
 
-/* ── Header & top bar ────────────────────────────────────────────────── */
-.dark header {
-  background-color: #161b22 !important;
-  border-bottom-color: #30363d !important;
-}
-
-/* Top attribution bar */
-.dark header > div:first-child {
-  background-color: #0d1117 !important;
-  border-color: #21262d !important;
-}
-
-/* Main header row */
-.dark header .bg-white {
-  background-color: #161b22 !important;
-}
-
-/* ── Navigation bar (below header) ──────────────────────────────────── */
-.dark nav[aria-label="Main Navigation"] {
-  background-color: #161b22 !important;
-  border-top-color: #30363d !important;
-}
-
-.dark nav[aria-label="Main Navigation"] button {
-  color: #8b949e !important;
-}
-
-.dark nav[aria-label="Main Navigation"] button:hover {
-  background-color: #21262d !important;
-  color: #e6edf3 !important;
-}
-
-.dark nav[aria-label="Main Navigation"] button[aria-current="page"] {
-  background-color: #238636 !important;
-  color: #ffffff !important;
-}
-
-/* ── Role switcher bar ───────────────────────────────────────────────── */
-.dark .bg-white.border-b {
-  background-color: #161b22 !important;
-  border-color: #30363d !important;
-}
-
-/* Role switcher buttons */
-.dark .bg-stone-100 {
-  background-color: #21262d !important;
-  border-color: #30363d !important;
-  color: #8b949e !important;
-}
-
-.dark .bg-stone-100:hover {
-  background-color: #2d333b !important;
-}
-
-/* Active role button */
-.dark .bg-stone-900.text-white {
-  background-color: #238636 !important;
-  color: #ffffff !important;
-}
-
-/* ── All bg-white surface cards ─────────────────────────────────────── */
-.dark .bg-white {
-  background-color: #161b22 !important;
-  color: #e6edf3 !important;
-}
-
-.dark .bg-stone-50 {
-  background-color: #21262d !important;
-}
-
-.dark .bg-stone-100\/70,
-.dark .bg-stone-100 {
-  background-color: #21262d !important;
-}
-
-.dark .bg-stone-50\/70 {
-  background-color: #1c2128 !important;
-}
-
-/* ── Borders ─────────────────────────────────────────────────────────── */
-.dark .border-stone-100,
-.dark .border-stone-200,
-.dark .border-stone-300 {
-  border-color: #30363d !important;
-}
-
-/* ── Text ────────────────────────────────────────────────────────────── */
+/* ── 1. PRIMARY TEXT: text-*-900 & text-*-800 switch to high-contrast white / gray-100 ── */
+.dark .text-gray-950,
+.dark .text-stone-950,
+.dark .text-slate-950,
+.dark .text-zinc-950,
+.dark .text-neutral-950,
+.dark .text-gray-900,
 .dark .text-stone-900,
-.dark .text-stone-800 {
-  color: #e6edf3 !important;
+.dark .text-slate-900,
+.dark .text-zinc-900,
+.dark .text-neutral-900,
+.dark .text-gray-800,
+.dark .text-stone-800,
+.dark .text-slate-800,
+.dark .text-zinc-800,
+.dark .text-neutral-800 {
+  color: #f8fafc !important;
 }
 
+/* ── 2. SECONDARY TEXT: text-*-700 & text-*-600 switch to high-contrast gray-300 ── */
+.dark .text-gray-700,
 .dark .text-stone-700,
-.dark .text-stone-600 {
-  color: #8b949e !important;
+.dark .text-slate-700,
+.dark .text-zinc-700,
+.dark .text-neutral-700,
+.dark .text-gray-600,
+.dark .text-stone-600,
+.dark .text-slate-600,
+.dark .text-zinc-600,
+.dark .text-neutral-600 {
+  color: #cbd5e1 !important;
 }
 
-.dark .text-stone-500 {
-  color: #6e7681 !important;
+/* ── 3. MUTED TEXT: text-*-500 & text-*-400 switch to clear readable gray-400 ── */
+.dark .text-gray-500,
+.dark .text-stone-500,
+.dark .text-slate-500,
+.dark .text-zinc-500,
+.dark .text-neutral-500,
+.dark .text-gray-400,
+.dark .text-stone-400,
+.dark .text-slate-400,
+.dark .text-zinc-400,
+.dark .text-neutral-400 {
+  color: #94a3b8 !important;
 }
 
-.dark .text-stone-400 {
-  color: #4d5566 !important;
+/* ── 4. SEMANTIC COLORED TEXT: High contrast on dark backgrounds ── */
+.dark .text-emerald-950,
+.dark .text-emerald-900,
+.dark .text-emerald-800,
+.dark .text-emerald-700 {
+  color: #6ee7b7 !important;
+}
+.dark .text-emerald-600 {
+  color: #34d399 !important;
 }
 
-/* ── Header brand text & icon ────────────────────────────────────────── */
-.dark header .text-stone-900 {
-  color: #e6edf3 !important;
+.dark .text-amber-950,
+.dark .text-amber-900,
+.dark .text-amber-800,
+.dark .text-amber-700 {
+  color: #fde68a !important;
+}
+.dark .text-amber-600 {
+  color: #fbbf24 !important;
 }
 
-.dark header .text-stone-500 {
-  color: #8b949e !important;
+.dark .text-blue-950,
+.dark .text-blue-900,
+.dark .text-blue-800,
+.dark .text-blue-700,
+.dark .text-sky-950,
+.dark .text-sky-900,
+.dark .text-sky-800 {
+  color: #93c5fd !important;
+}
+.dark .text-blue-600,
+.dark .text-sky-600 {
+  color: #60a5fa !important;
 }
 
-/* ── Header action buttons (language, theme, district) ──────────────── */
-.dark header .bg-stone-100.border-stone-200,
-.dark header .bg-stone-100 {
-  background-color: #21262d !important;
-  border-color: #30363d !important;
-  color: #c9d1d9 !important;
+.dark .text-purple-950,
+.dark .text-purple-900,
+.dark .text-purple-800,
+.dark .text-purple-700,
+.dark .text-indigo-800,
+.dark .text-indigo-700 {
+  color: #d8b4fe !important;
 }
 
-.dark header .bg-stone-100:hover {
-  background-color: #2d333b !important;
+.dark .text-red-950,
+.dark .text-red-900,
+.dark .text-red-800,
+.dark .text-red-700,
+.dark .text-rose-950,
+.dark .text-rose-800 {
+  color: #fca5a5 !important;
 }
 
-/* ── Header select (district) ────────────────────────────────────────── */
-.dark header select {
-  background-color: transparent !important;
-  color: #c9d1d9 !important;
+/* ── 5. SURFACES & CARDS: Ensure dark surfaces never trap dark text ── */
+.dark .bg-white {
+  background-color: #161f2e !important;
+  color: #f8fafc !important;
 }
 
-/* ── Notification & user menu dropdowns ─────────────────────────────── */
-.dark .absolute.bg-white.rounded-xl.shadow-xl {
-  background-color: #21262d !important;
-  border-color: #30363d !important;
+.dark .bg-stone-50,
+.dark .bg-gray-50,
+.dark .bg-slate-50 {
+  background-color: #0b0f17 !important;
 }
 
-.dark .absolute.bg-white.rounded-xl .bg-stone-50 {
-  background-color: #161b22 !important;
+.dark .bg-stone-100,
+.dark .bg-gray-100,
+.dark .bg-slate-100,
+.dark .bg-stone-100\/70,
+.dark .bg-stone-50\/70 {
+  background-color: #1e293b !important;
+  border-color: #2a384c !important;
 }
 
-.dark .absolute.bg-white.rounded-xl .border-stone-200 {
-  border-color: #30363d !important;
+.dark .bg-stone-200,
+.dark .bg-gray-200,
+.dark .bg-slate-200 {
+  background-color: #334155 !important;
 }
 
-.dark .absolute.bg-white.rounded-xl button:hover,
-.dark .absolute.bg-white.rounded-xl div.cursor-pointer:hover {
-  background-color: #2d333b !important;
+/* ── 6. BORDERS ── */
+.dark .border-stone-100,
+.dark .border-gray-100,
+.dark .border-slate-100,
+.dark .border-stone-200,
+.dark .border-gray-200,
+.dark .border-slate-200,
+.dark .border-stone-300,
+.dark .border-gray-300,
+.dark .border-slate-300 {
+  border-color: #2a384c !important;
 }
 
-/* ── Cards and stat cards ────────────────────────────────────────────── */
-.dark .card,
-.dark .stat-card {
-  background: var(--bg-surface);
-  border-color: var(--border-soft);
+/* ── 7. SEMANTIC BADGES & TINTED BOXES ── */
+.dark .bg-emerald-50,
+.dark .bg-emerald-100,
+.dark .bg-emerald-50\/70,
+.dark .bg-emerald-50\/80 {
+  background-color: rgba(6, 78, 59, 0.45) !important;
+  border-color: rgba(52, 211, 153, 0.35) !important;
+  color: #a7f3d0 !important;
 }
 
-/* ── Inputs, selects, textareas ─────────────────────────────────────── */
+.dark .bg-amber-50,
+.dark .bg-amber-100 {
+  background-color: rgba(120, 53, 15, 0.45) !important;
+  border-color: rgba(251, 191, 36, 0.35) !important;
+  color: #fde68a !important;
+}
+
+.dark .bg-blue-50,
+.dark .bg-blue-100,
+.dark .bg-sky-50 {
+  background-color: rgba(30, 58, 138, 0.45) !important;
+  border-color: rgba(96, 165, 250, 0.35) !important;
+  color: #bfdbfe !important;
+}
+
+.dark .bg-purple-50,
+.dark .bg-purple-100 {
+  background-color: rgba(88, 28, 135, 0.45) !important;
+  border-color: rgba(192, 132, 252, 0.35) !important;
+  color: #e9d5ff !important;
+}
+
+.dark .bg-red-50,
+.dark .bg-red-100,
+.dark .bg-rose-50 {
+  background-color: rgba(127, 29, 29, 0.45) !important;
+  border-color: rgba(248, 113, 113, 0.35) !important;
+  color: #fecaca !important;
+}
+
+/* ── 8. BUTTONS: Ensure white text on dark buttons stays white ── */
+.dark .bg-stone-900.text-white,
+.dark .bg-slate-900.text-white,
+.dark .bg-gray-900.text-white {
+  background-color: #047857 !important;
+  color: #ffffff !important;
+}
+.dark .bg-stone-900:hover,
+.dark .bg-slate-900:hover,
+.dark .bg-gray-900:hover {
+  background-color: #059669 !important;
+}
+.dark .bg-emerald-700,
+.dark .bg-emerald-800 {
+  background-color: #059669 !important;
+  color: #ffffff !important;
+}
+.dark .bg-emerald-700:hover,
+.dark .bg-emerald-800:hover {
+  background-color: #10b981 !important;
+}
+
+/* ── 9. FORM INPUTS & DROPDOWNS ── */
 .dark input,
 .dark select,
 .dark textarea {
-  background-color: #21262d !important;
-  color: #e6edf3 !important;
-  border-color: #30363d !important;
+  background-color: #1e293b !important;
+  color: #f8fafc !important;
+  border-color: #3b4c63 !important;
 }
-
+.dark select option {
+  background-color: #1e293b !important;
+  color: #f8fafc !important;
+}
 .dark input::placeholder,
 .dark textarea::placeholder {
-  color: #4d5566 !important;
+  color: #94a3b8 !important;
+}
+.dark input:focus,
+.dark select:focus,
+.dark textarea:focus {
+  border-color: #10b981 !important;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.25) !important;
 }
 
-/* ── Footer ──────────────────────────────────────────────────────────── */
-.dark footer {
-  background-color: #161b22 !important;
-  border-color: #30363d !important;
+/* ── 10. CARDS, STAT CARDS & DASHBOARD TILES ── */
+.dark .card,
+.dark .stat-card,
+.dark .rounded-2xl.border,
+.dark .rounded-3xl.border {
+  background-color: #161f2e !important;
+  border-color: #2a384c !important;
 }
 
-/* ── Mobile drawer ───────────────────────────────────────────────────── */
-.dark header .md\:hidden.bg-white {
-  background-color: #161b22 !important;
-  border-color: #30363d !important;
+/* ── 11. HEADER & TOP NAVIGATION ── */
+.dark header {
+  background-color: #161f2e !important;
+  border-bottom-color: #2a384c !important;
+}
+.dark header > div:first-child {
+  background-color: #0b0f17 !important;
+  border-color: #263345 !important;
+}
+.dark header .bg-white {
+  background-color: #161f2e !important;
+}
+.dark nav[aria-label="Main Navigation"] {
+  background-color: #161f2e !important;
+  border-top-color: #2a384c !important;
+}
+.dark nav[aria-label="Main Navigation"] button {
+  color: #cbd5e1 !important;
+}
+.dark nav[aria-label="Main Navigation"] button:hover {
+  background-color: #263345 !important;
+  color: #ffffff !important;
+}
+.dark nav[aria-label="Main Navigation"] button[aria-current="page"] {
+  background-color: #059669 !important;
+  color: #ffffff !important;
 }
 
-/* ── Toast ───────────────────────────────────────────────────────────── */
-.dark .bg-stone-900.text-white {
-  background-color: #238636 !important;
-  border-color: #2ea043 !important;
+/* ── 12. ROLE SWITCHER ── */
+.dark .bg-white.border-b {
+  background-color: #161f2e !important;
+  border-color: #2a384c !important;
+}
+.dark .bg-stone-100 {
+  background-color: #1e293b !important;
+  border-color: #2a384c !important;
+  color: #cbd5e1 !important;
+}
+.dark .bg-stone-100:hover {
+  background-color: #263345 !important;
+  color: #ffffff !important;
 }
 
-/* ── Page background ─────────────────────────────────────────────────── */
+/* ── 13. PAGE BACKGROUND ── */
 .dark .min-h-screen {
-  background-color: #0d1117 !important;
+  background-color: #0b0f17 !important;
 }
 
-.dark .bg-stone-100\/70 {
-  background-color: #0d1117 !important;
+/* ── 14. TABLES IN DASHBOARDS ── */
+.dark table th {
+  background-color: #0b0f17 !important;
+  color: #cbd5e1 !important;
+  border-color: #2a384c !important;
+}
+.dark table td {
+  color: #f8fafc !important;
+  border-color: #2a384c !important;
+}
+.dark table tr:hover td {
+  background-color: #1e293b !important;
 }
 
+/* ── 15. DROPDOWNS & MODALS ── */
+.dark .shadow-xl,
+.dark .shadow-2xl {
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.6) !important;
+}
+
+.dark .z-50.bg-white,
+.dark .absolute.bg-white,
+.dark .fixed.inset-0 .bg-white {
+  background-color: #161f2e !important;
+  border-color: #2a384c !important;
+  color: #f8fafc !important;
+}
+
+.dark .z-50.bg-white .bg-stone-50,
+.dark .absolute.bg-white .bg-stone-50,
+.dark .fixed.inset-0 .bg-stone-50 {
+  background-color: #0b0f17 !important;
+}
+
+.dark .z-50.bg-white button:hover,
+.dark .absolute.bg-white button:hover,
+.dark .fixed.inset-0 .bg-white button:hover {
+  background-color: #1e293b !important;
+}
+
+.dark footer {
+  background-color: #0b0f17 !important;
+  border-color: #263345 !important;
+}

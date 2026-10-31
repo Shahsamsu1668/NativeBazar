@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Language, UserRole, User } from '../types';
-import { AuthStore, LoginResult } from '../data/store';
+import { AuthStore, LoginResult, ThemeStore } from '../data/store';
 import { BANGLADESH_LOCATIONS } from '../data/mockData';
 import { authApi } from '../services/api';
 import {
@@ -21,6 +21,8 @@ import {
   Building,
   KeyRound,
   Sparkles,
+  Moon,
+  Sun,
 } from 'lucide-react';
 
 interface AuthPageProps {
@@ -105,8 +107,26 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [currentTheme, setCurrentTheme] = useState(() => ThemeStore.get());
+  const toggleTheme = () => {
+    const next = ThemeStore.toggle();
+    setCurrentTheme(next);
+  };
 
   const t = (en: string, bn: string) => (language === 'bn' ? bn : en);
+
+  // Upazilas based on chosen district
+  const selectedLocation = BANGLADESH_LOCATIONS.find(
+    (l) => l.district.toLowerCase() === regDistrict.toLowerCase()
+  );
+  const upazilaList = selectedLocation ? selectedLocation.upazilas : ['Sadar', 'Shibganj', 'Sherpur'];
+
+  // Ensure upazila is always valid for the selected district
+  useEffect(() => {
+    if (upazilaList.length > 0 && !upazilaList.includes(regUpazila)) {
+      setRegUpazila(upazilaList[0]);
+    }
+  }, [regDistrict, upazilaList, regUpazila]);
 
   // Countdown timer for lockout
   useEffect(() => {
@@ -123,12 +143,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       return () => clearInterval(lockTimer);
     }
   }, [lockoutSeconds]);
-
-  // Upazilas based on chosen district
-  const selectedLocation = BANGLADESH_LOCATIONS.find(
-    (l) => l.district.toLowerCase() === regDistrict.toLowerCase()
-  );
-  const upazilaList = selectedLocation ? selectedLocation.upazilas : ['Sadar', 'Shibganj', 'Sherpur'];
 
   const toggleCrop = (cropId: string) => {
     if (selectedCrops.includes(cropId)) {
@@ -353,12 +367,23 @@ export const AuthPage: React.FC<AuthPageProps> = ({
           </button>
         ) : <div />}
 
-        <button
-          onClick={onLanguageToggle}
-          className="text-xs font-bold text-stone-700 bg-white px-3 py-1.5 rounded-xl border border-stone-200 hover:bg-stone-50 transition-colors shadow-2xs"
-        >
-          {language === 'bn' ? 'English' : 'বাংলা'}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={toggleTheme}
+            className="p-2 text-stone-600 dark:text-stone-300 bg-white dark:bg-stone-800 rounded-xl border border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-700 transition-colors shadow-2xs"
+            title={currentTheme === 'dark' ? t('Switch to Light Mode', 'লাইট মোডে পরিবর্তন') : t('Switch to Dark Mode', 'ডার্ক মোডে পরিবর্তন')}
+            aria-label="Toggle theme"
+          >
+            {currentTheme === 'dark' ? <Sun className="w-3.5 h-3.5 text-amber-400" /> : <Moon className="w-3.5 h-3.5 text-stone-600" />}
+          </button>
+          <button
+            onClick={onLanguageToggle}
+            className="text-xs font-bold text-stone-700 dark:text-stone-200 bg-white dark:bg-stone-800 px-3 py-1.5 rounded-xl border border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-700 transition-colors shadow-2xs"
+          >
+            {language === 'bn' ? 'English' : 'বাংলা'}
+          </button>
+        </div>
       </div>
 
       <div className="max-w-xl w-full mx-auto bg-white rounded-3xl shadow-xl border border-stone-200 overflow-hidden">
@@ -440,19 +465,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({
               className="px-2 py-0.5 rounded-lg bg-white border border-purple-300 text-purple-800 hover:bg-purple-600 hover:text-white transition-colors text-[11px] font-semibold shadow-2xs"
             >
               🛒 {t('Consumer', 'ভোক্তা')}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setIsAdminMode(true);
-                setAdminUsername('admin');
-                setAdminPassword('12345678');
-                setAdminPin('883650');
-                setError('');
-              }}
-              className="px-2 py-0.5 rounded-lg bg-white border border-slate-400 text-slate-800 hover:bg-slate-800 hover:text-white transition-colors text-[11px] font-semibold shadow-2xs"
-            >
-              🛡️ {t('Admin', 'অ্যাডমিন')}
             </button>
           </div>
         </div>
@@ -729,34 +741,37 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                 {/* District and Upazila */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-bold text-stone-700 mb-1">
-                      {t('District', 'জেলা')} *
+                    <label className="block text-xs font-bold text-stone-700 dark:text-stone-300 mb-1">
+                      {t('District (64 Zilas)', 'জেলা (৬৪টি জেলা)')} *
                     </label>
                     <select
                       value={regDistrict}
                       onChange={(e) => {
-                        setRegDistrict(e.target.value);
-                        const loc = BANGLADESH_LOCATIONS.find((l) => l.district === e.target.value);
-                        if (loc && loc.upazilas.length > 0) setRegUpazila(loc.upazilas[0]);
+                        const newDist = e.target.value;
+                        setRegDistrict(newDist);
+                        const loc = BANGLADESH_LOCATIONS.find((l) => l.district.toLowerCase() === newDist.toLowerCase());
+                        if (loc && loc.upazilas.length > 0) {
+                          setRegUpazila(loc.upazilas[0]);
+                        }
                       }}
-                      className="w-full px-3 py-2.5 text-xs font-bold rounded-xl border border-stone-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                      className="w-full px-3 py-2.5 text-xs font-bold rounded-xl border border-stone-300 dark:border-stone-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100"
                     >
                       {BANGLADESH_LOCATIONS.map((loc) => (
                         <option key={loc.district} value={loc.district}>
-                          {language === 'bn' ? loc.districtBn : loc.district}
+                          {language === 'bn' ? `${loc.districtBn} (${loc.district})` : `${loc.district} (${loc.districtBn})`}
                         </option>
                       ))}
                     </select>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-stone-700 mb-1">
+                    <label className="block text-xs font-bold text-stone-700 dark:text-stone-300 mb-1">
                       {t('Upazila / Area', 'উপজেলা')} *
                     </label>
                     <select
                       value={regUpazila}
                       onChange={(e) => setRegUpazila(e.target.value)}
-                      className="w-full px-3 py-2.5 text-xs font-bold rounded-xl border border-stone-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                      className="w-full px-3 py-2.5 text-xs font-bold rounded-xl border border-stone-300 dark:border-stone-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100"
                     >
                       {upazilaList.map((u) => (
                         <option key={u} value={u}>

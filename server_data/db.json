@@ -298,6 +298,51 @@
       "verified": true,
       "createdAt": "2026-10-30T10:01:37.636Z",
       "lastLoginAt": "2026-10-30T10:01:37.636Z"
+    },
+    {
+      "id": "usr-retailer-jafor",
+      "role": "retailer",
+      "name": "Jafor",
+      "nameBn": "জাফর",
+      "phone": "01911334200",
+      "email": "jafor.retailer@nativebazar.com",
+      "passwordHash": "sha256_c89a77b28658db72712d8530dd4324529336c483ec5928c0f38d079342bb232a",
+      "district": "Bogura",
+      "upazila": "Bogura Sadar",
+      "verified": true,
+      "createdAt": "2026-10-31T05:40:03.686Z",
+      "lastLoginAt": "2026-10-31T05:40:03.686Z",
+      "shopName": "Jafor Agro Retail Store"
+    },
+    {
+      "id": "w-bogura-arat",
+      "role": "wholesaler",
+      "name": "Bogura Arat Sourcing Consortium",
+      "nameBn": "বগুড়া আড়ত কনসোর্টিয়াম",
+      "phone": "01712001122",
+      "email": "bogura.arat@nativebazar.com",
+      "passwordHash": "sha256_aaf4f025c3e2102c326a2d1f0bce580e1d324d6834a9b0653c4fe9d0f78ce7ae",
+      "district": "Bogura",
+      "upazila": "Sherpur",
+      "verified": true,
+      "createdAt": "2026-10-31T05:40:03.686Z",
+      "lastLoginAt": "2026-10-31T05:40:03.686Z",
+      "businessName": "Bogura Arat Sourcing Consortium"
+    },
+    {
+      "id": "ret-bismillah-mart",
+      "role": "retailer",
+      "name": "Bismillah Krishi & Organic Corner",
+      "nameBn": "বিসমিল্লাহ কৃষি কর্নার",
+      "phone": "01719887766",
+      "email": "bismillah.retail@nativebazar.com",
+      "passwordHash": "sha256_2520978dfcaaf93c091777b06ed22e231298069d7065cba307ebd54e1df5d0c6",
+      "district": "Bogura",
+      "upazila": "Bogura Sadar",
+      "verified": true,
+      "createdAt": "2026-10-31T05:40:03.686Z",
+      "lastLoginAt": "2026-10-31T05:40:03.686Z",
+      "shopName": "Bismillah Krishi & Organic Corner"
     }
   ],
   "crops": [

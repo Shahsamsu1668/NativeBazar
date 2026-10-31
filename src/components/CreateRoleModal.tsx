@@ -179,7 +179,14 @@ export const CreateRoleModal: React.FC<CreateRoleModalProps> = ({
               </label>
               <select
                 value={district}
-                onChange={(e) => setDistrict(e.target.value)}
+                onChange={(e) => {
+                  const newD = e.target.value;
+                  setDistrict(newD);
+                  const loc = BANGLADESH_LOCATIONS.find((l) => l.district.toLowerCase() === newD.toLowerCase());
+                  if (loc && loc.upazilas.length > 0) {
+                    setUpazila(loc.upazilas[0]);
+                  }
+                }}
                 className="w-full px-3 py-2 text-xs border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500 font-medium text-stone-800 bg-white"
               >
                 {BANGLADESH_LOCATIONS.map((loc) => (
