@@ -31,6 +31,7 @@ export interface User {
   address?: string;
   deliveryAddress?: string;
   education?: string;
+  registeredDistrict?: string;
 
   profileImageUrl?: string;
   verified: boolean;
@@ -97,6 +98,8 @@ export interface BusinessDemand {
   cropNeeded: string;
   cropBangla: string;
   quantityKgNeeded: number;
+  quantityDozenNeeded?: number;
+  unit?: 'kg' | 'dozen';
   fulfilledKg: number;
   targetPricePerKg: number;
   deliveryDeadline: string;
@@ -145,6 +148,8 @@ export interface MarketRate {
   source: string;         // 'Department of Agricultural Marketing (DAM)'
   lastUpdated: string;
   imageUrl?: string;
+  isTcbSynced?: boolean;
+  tcbReportDate?: string;
 }
 
 // ─── UNIFIED MARKETPLACE PRODUCT ──────────────────────────────────────────
@@ -161,6 +166,7 @@ export interface MarketplaceProduct {
   variety?: string;
   quantityKg: number;
   availableKg: number;
+  quantityDozen?: number;
   minOrderKg?: number;
   pricePerKg: number;
   marketPricePerKg?: number;
@@ -192,6 +198,8 @@ export interface WholesalerOffer {
   cropName: string;
   cropBangla: string;
   quantityKgNeeded: number;
+  quantityDozenNeeded?: number;
+  unit?: 'kg' | 'dozen';
   fulfilledKg: number;
   offeredPricePerKg: number;
   district: string;
@@ -221,7 +229,9 @@ export interface SupplyChainOrder {
     productId: string;
     cropName: string;
     banglaName: string;
-    quantityKg: number;
+    quantityKg?: number;
+    quantityDozen?: number;
+    unit?: string;
     unitPrice: number;
     subtotal: number;
   }>;
@@ -249,6 +259,7 @@ export interface CustomerProduct {
   pricePerKg: number;
   marketPricePerKg: number;
   availableKg: number;
+  quantityDozen?: number;
   harvestStatus: 'Harvested Today' | 'Pre-Order: Harvests in 3 Days' | 'Farm Fresh' | string;
   imageUrl: string;
   organicCertified: boolean;
@@ -332,20 +343,31 @@ export interface TradeOrder {
 }
 
 // ─── CROP DIAGNOSIS ──────────────────────────────────────────────────────
+export type CropDiagnosisStatus = 'invalid_image' | 'healthy_plant' | 'diseased';
+
 export interface CropDiagnosisResult {
-  diseaseName: string;
-  diseaseBanglaName: string;
+  status?: CropDiagnosisStatus;
+  isValidPlant?: boolean;
+  isDiseased?: boolean;
+  errorFlag?: 'INVALID_IMAGE' | 'HEALTHY_PLANT' | 'DISEASED' | string;
+  message?: string;
+  messageEn?: string;
+  explanation?: string;
+  healthAssessment?: string;
+  cropIdentified?: string;
+  diseaseName?: string;
+  diseaseBanglaName?: string;
   confidence?: number;
-  severity: 'Low' | 'Moderate' | 'High' | 'Critical';
-  symptomsSummary: string;
-  immediateActions: string[];
-  chemicalTreatment: {
+  severity?: 'Low' | 'Moderate' | 'High' | 'Critical';
+  symptomsSummary?: string;
+  immediateActions?: string[];
+  chemicalTreatment?: {
     medicine: string;
     dose: string;
     schedule: string;
   };
-  organicTreatment: string;
-  preventionTips: string;
+  organicTreatment?: string;
+  preventionTips?: string;
   aiDisclaimer?: string;
   pesticideSafetyWarning?: string;
   isAiEstimate?: boolean;

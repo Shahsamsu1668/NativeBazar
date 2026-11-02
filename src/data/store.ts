@@ -27,6 +27,7 @@ import {
   UserConnection,
   DirectMessage,
   CallLog,
+  WholesalerOffer,
 } from '../types';
 
 import {
@@ -59,6 +60,7 @@ const KEYS = {
   AI_MATCHES:      'nb_ai_matches',
   EXPENSE_LEDGER:  'nb_expense_ledger',
   NEGOTIATIONS:    'nb_negotiations',
+  WHOLESALER_OFFERS:'nb_wholesaler_offers_v2',
   NOTIFICATIONS:   'nb_notifications',
   CONNECTIONS:     'nb_connections_v1',
   MESSAGES:        'nb_messages_v1',
@@ -523,6 +525,7 @@ export const AuthStore = {
 
     const safeUser: User = {
       ...user,
+      registeredDistrict: user.registeredDistrict || user.district,
       password: '***',
       passwordHash: user.passwordHash || computedHash,
       sessionToken,
@@ -557,6 +560,7 @@ export const AuthStore = {
     const cleanEmail = (data.email || '').trim().toLowerCase();
     const newUser: User = {
       ...data,
+      registeredDistrict: data.registeredDistrict || data.district,
       phone: cleanPhone,
       email: cleanEmail,
       id: `user-${Date.now()}`,
@@ -829,7 +833,13 @@ export const PrefStore = {
       localStorage.setItem(KEYS.LANGUAGE, lang);
     } catch { }
   },
-  getDistrict: (): string => localStorage.getItem(KEYS.DISTRICT) || 'Bogura',
+  getDistrict: (): string => {
+    const stored = localStorage.getItem(KEYS.DISTRICT);
+    if (stored) return stored;
+    const user = AuthStore.getCurrentUser();
+    if (user?.district) return user.district;
+    return BANGLADESH_LOCATIONS[0]?.district || 'Bogura';
+  },
   setDistrict: (district: string): void => {
     try {
       localStorage.setItem(KEYS.DISTRICT, district);
@@ -1351,6 +1361,143 @@ export const NegotiationStore = {
 
   getByListing(listingId: string): NegotiationOffer[] {
     return this.getAll().filter(n => n.listingId === listingId);
+  },
+};
+
+const INITIAL_WHOLESALER_OFFERS: WholesalerOffer[] = [
+  {
+    id: 'bid-101',
+    wholesalerId: 'w-karwan-syndicate',
+    wholesalerName: 'Karwan Bazar Wholesale Arat Syndicate',
+    wholesalerPhone: '01711209934',
+    businessName: 'Karwan Bazar Agro Procurement Hub',
+    cropName: 'Hybrid Tomato',
+    cropBangla: 'হাইব্রিড পাকা টমেটো',
+    quantityKgNeeded: 3000,
+    quantityDozenNeeded: 0,
+    unit: 'kg',
+    fulfilledKg: 800,
+    offeredPricePerKg: 42,
+    district: 'Bogura',
+    upazila: 'Shibganj',
+    location: 'Mahasthangarh Mokam Delivery Hub',
+    deadline: 'Within 7 days',
+    urgent: true,
+    verified: true,
+    notes: 'Immediate cash on crate inspection or verified escrow guarantee.',
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'bid-102',
+    wholesalerId: 'w-bogura-arat',
+    wholesalerName: 'Bogura Arat Sourcing Consortium',
+    wholesalerPhone: '01712001122',
+    businessName: 'North Bengal Cold Storage & Arat',
+    cropName: 'Diamond Potato',
+    cropBangla: 'ডায়মন্ড খাবার আলু',
+    quantityKgNeeded: 10000,
+    quantityDozenNeeded: 0,
+    unit: 'kg',
+    fulfilledKg: 3500,
+    offeredPricePerKg: 29,
+    district: 'Bogura',
+    upazila: 'Sherpur',
+    location: 'Sherpur Highway Depot',
+    deadline: 'Within 14 days',
+    urgent: false,
+    verified: true,
+    notes: 'Grade A table potato. Sacks provided by buyer upon booking.',
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'bid-103',
+    wholesalerId: 'w-rajshahi-traders',
+    wholesalerName: 'Padma Agro Supply Traders',
+    wholesalerPhone: '01822334455',
+    businessName: 'Rajshahi Division Wholesale Arat',
+    cropName: 'Green Chili',
+    cropBangla: 'তাজা কাঁচা মরিচ',
+    quantityKgNeeded: 1500,
+    quantityDozenNeeded: 0,
+    unit: 'kg',
+    fulfilledKg: 200,
+    offeredPricePerKg: 88,
+    district: 'Bogura',
+    upazila: 'Sariakandi',
+    location: 'Char Jamuna Ghat Mokam',
+    deadline: 'Within 5 days',
+    urgent: true,
+    verified: true,
+    notes: 'Freshly harvested dry chili; weight verified at digital weighbridge.',
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'bid-104',
+    wholesalerId: 'w-dhaka-fruit-hub',
+    wholesalerName: 'Badamtoli Fruit Wholesale Syndicate',
+    wholesalerPhone: '01911445566',
+    businessName: 'Badamtoli Central Fruit Arat',
+    cropName: 'Banana (Sagor / Sabri)',
+    cropBangla: 'সাগর / সবরি কলা',
+    quantityKgNeeded: 0,
+    quantityDozenNeeded: 500,
+    fulfilledKg: 100,
+    offeredPricePerKg: 120,
+    unit: 'dozen',
+    district: 'Bogura',
+    upazila: 'Shibganj',
+    location: 'Shibganj Agro Collection Depot',
+    deadline: 'Within 3 days',
+    urgent: true,
+    verified: true,
+    notes: 'Fresh green banana bunches; immediate digital payment.',
+    createdAt: new Date().toISOString(),
+  },
+];
+
+// ─── WHOLESALER DEMAND POSTS (FARMER-ONLY INTELLIGENCE) ───────────────────
+export const WholesalerOfferStore = {
+  getAll: (): WholesalerOffer[] => {
+    const list = getItem<WholesalerOffer[]>(KEYS.WHOLESALER_OFFERS, []);
+    if (!list || list.length === 0) {
+      setItem(KEYS.WHOLESALER_OFFERS, INITIAL_WHOLESALER_OFFERS);
+      return INITIAL_WHOLESALER_OFFERS;
+    }
+    return list;
+  },
+
+  add(offer: WholesalerOffer): void {
+    const list = this.getAll();
+    const updated = [offer, ...list.filter(o => o.id !== offer.id)];
+    setItem(KEYS.WHOLESALER_OFFERS, updated);
+  },
+
+  update(id: string, updates: Partial<WholesalerOffer>): void {
+    const list = this.getAll().map(o => (o.id === id ? { ...o, ...updates } : o));
+    setItem(KEYS.WHOLESALER_OFFERS, list);
+  },
+
+  getByWholesaler(wholesalerId: string): WholesalerOffer[] {
+    return this.getAll().filter(o => o.wholesalerId === wholesalerId);
+  },
+
+  getByDistrict(district?: string): WholesalerOffer[] {
+    const list = this.getAll();
+    if (!district || district === 'All') return list;
+    return list.filter(o => (o.district || '').toLowerCase() === district.toLowerCase());
+  },
+
+  fulfill(id: string, quantitySupplied: number): void {
+    const list = this.getAll().map(o => {
+      if (o.id === id) {
+        return {
+          ...o,
+          fulfilledKg: (o.fulfilledKg || 0) + quantitySupplied,
+        };
+      }
+      return o;
+    });
+    setItem(KEYS.WHOLESALER_OFFERS, list);
   },
 };
 

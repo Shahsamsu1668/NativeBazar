@@ -12,6 +12,10 @@ db.pragma('foreign_keys = ON');
 
 // ─── INITIALIZE DATABASE TABLES ─────────────────────────────────────────────
 export function initDatabase() {
+  try { db.exec('ALTER TABLE users ADD COLUMN delivery_address TEXT'); } catch {}
+  try { db.exec('ALTER TABLE users ADD COLUMN registered_district TEXT'); } catch {}
+  try { db.exec('ALTER TABLE wholesaler_offers ADD COLUMN quantity_dozen_needed REAL DEFAULT 0'); } catch {}
+  try { db.exec("ALTER TABLE wholesaler_offers ADD COLUMN unit TEXT DEFAULT 'kg'"); } catch {}
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
@@ -32,6 +36,8 @@ export function initDatabase() {
       license_number TEXT,
       trade_address TEXT,
       created_at TEXT NOT NULL,
+      quantity_dozen_needed REAL DEFAULT 0,
+      unit TEXT DEFAULT 'kg',
       last_login_at TEXT
     );
 
@@ -64,7 +70,9 @@ export function initDatabase() {
       wholesaler_arat TEXT,
       procurement_date TEXT,
       safety_note TEXT,
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      quantity_dozen_needed REAL DEFAULT 0,
+      unit TEXT DEFAULT 'kg'
     );
 
     CREATE TABLE IF NOT EXISTS orders (
@@ -88,6 +96,8 @@ export function initDatabase() {
       tracking_code TEXT NOT NULL,
       notes TEXT,
       created_at TEXT NOT NULL,
+      quantity_dozen_needed REAL DEFAULT 0,
+      unit TEXT DEFAULT 'kg',
       updated_at TEXT NOT NULL
     );
 
@@ -121,7 +131,9 @@ export function initDatabase() {
       urgent INTEGER DEFAULT 0,
       verified INTEGER DEFAULT 1,
       notes TEXT,
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      quantity_dozen_needed REAL DEFAULT 0,
+      unit TEXT DEFAULT 'kg'
     );
 
     CREATE TABLE IF NOT EXISTS market_prices (
@@ -151,7 +163,9 @@ export function initDatabase() {
       actor_role TEXT,
       actor_name TEXT,
       description TEXT,
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      quantity_dozen_needed REAL DEFAULT 0,
+      unit TEXT DEFAULT 'kg'
     );
 
     CREATE INDEX IF NOT EXISTS idx_products_target_role ON products(target_role);

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Language, UserRole, User } from '../types';
 import { AuthStore, LoginResult, ThemeStore } from '../data/store';
-import { BANGLADESH_LOCATIONS } from '../data/mockData';
+import { BANGLADESH_LOCATIONS, getSortedDistricts } from '../data/mockData';
 import { authApi } from '../services/api';
 import {
   Sprout,
@@ -33,20 +33,6 @@ interface AuthPageProps {
   initialMode?: 'login' | 'register';
   initialRole?: 'farmer' | 'wholesaler' | 'retailer' | 'consumer';
 }
-
-// Popular crops in Bangladesh for interactive one-click farmer selection
-const POPULAR_CROPS = [
-  { id: 'Potato', en: 'Potato', bn: 'আলু', icon: '🥔' },
-  { id: 'Tomato', en: 'Tomato', bn: 'টমেটো', icon: '🍅' },
-  { id: 'Chili', en: 'Green Chili', bn: 'কাঁচা মরিচ', icon: '🌶️' },
-  { id: 'Rice', en: 'Paddy / Rice', bn: 'ধান / চাল', icon: '🌾' },
-  { id: 'Eggplant', en: 'Brinjal', bn: 'বেগুন', icon: '🍆' },
-  { id: 'Cauliflower', en: 'Cauliflower', bn: 'ফুলকপি', icon: '🥦' },
-  { id: 'Onion', en: 'Onion', bn: 'পেঁয়াজ', icon: '🧅' },
-  { id: 'Cabbage', en: 'Cabbage', bn: 'বাঁধাকপি', icon: '🥬' },
-  { id: 'Mustard', en: 'Mustard', bn: 'সরিষা', icon: '🌼' },
-  { id: 'Maize', en: 'Maize', bn: 'ভুট্টা', icon: '🌽' },
-];
 
 export const AuthPage: React.FC<AuthPageProps> = ({
   language,
@@ -85,13 +71,13 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   const [regName, setRegName] = useState('');
   const [regPhone, setRegPhone] = useState('');
   const [regEmail, setRegEmail] = useState('');
-  const [regDistrict, setRegDistrict] = useState('Bogura');
-  const [regUpazila, setRegUpazila] = useState('Shibganj');
+  const [regDistrict, setRegDistrict] = useState(BANGLADESH_LOCATIONS[0]?.district || 'Bagerhat');
+  const [regUpazila, setRegUpazila] = useState(BANGLADESH_LOCATIONS[0]?.upazilas[0] || 'Bagerhat Sadar');
   const [regPassword, setRegPassword] = useState('');
-  const [regConfirmPassword, setRegConfirmPassword] = useState('');
+  const [showRegPassword, setShowRegPassword] = useState(false);
 
-  // Farmer specific: one-click crop selection
-  const [selectedCrops, setSelectedCrops] = useState<string[]>(['Potato', 'Tomato']);
+  // Farmer specific: optional text input for crop names
+  const [farmerCropsText, setFarmerCropsText] = useState('');
   const [farmSize, setFarmSize] = useState('3');
 
   // Wholesaler specific
@@ -111,6 +97,20 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   const toggleTheme = () => {
     const next = ThemeStore.toggle();
     setCurrentTheme(next);
+  };
+
+  const getNameLabel = () => {
+    if (selectedRole === 'farmer') return t('Farmer Full Name', 'কৃষকের পূর্ণ নাম');
+    if (selectedRole === 'wholesaler') return t('Trader / Aratdar Full Name', 'ব্যবসায়ী / আড়তদারের পূর্ণ নাম');
+    if (selectedRole === 'retailer') return t('Shopkeeper Full Name', 'দোকানদারের পূর্ণ নাম');
+    return t('Customer Full Name', 'ভোক্তার পূর্ণ নাম');
+  };
+
+  const getNamePlaceholder = () => {
+    if (selectedRole === 'farmer') return t('Md. Rafiqul Islam', 'মো. রফিকুল ইসলাম');
+    if (selectedRole === 'wholesaler') return t('Haji Abdul Karim', 'হাজী আব্দুল করিম');
+    if (selectedRole === 'retailer') return t('Md. Alamin Hossain', 'মো. আলামিন হোসেন');
+    return t('Tanveer Ahmed', 'তানভীর আহমেদ');
   };
 
   const t = (en: string, bn: string) => (language === 'bn' ? bn : en);
@@ -144,15 +144,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     }
   }, [lockoutSeconds]);
 
-  const toggleCrop = (cropId: string) => {
-    if (selectedCrops.includes(cropId)) {
-      setSelectedCrops(selectedCrops.filter((c) => c !== cropId));
-    } else {
-      setSelectedCrops([...selectedCrops, cropId]);
-    }
-  };
-
-  // Handle Standard Login
+// Handle Standard Login
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -285,19 +277,26 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       setError(language === 'bn' ? 'সঠিক ১১ সংখ্যার মোবাইল নম্বর দিন।' : 'Please enter a valid mobile number.');
       return;
     }
+    if (!regDistrict.trim()) {
+      setError(language === 'bn' ? 'অনুগ্রহ করে জেলা নির্বাচন করুন।' : 'Please select your district.');
+      return;
+    }
+    if (!regUpazila.trim()) {
+      setError(language === 'bn' ? 'অনুগ্রহ করে উপজেলা নির্বাচন করুন।' : 'Please select your upazila.');
+      return;
+    }
     if (regPassword.length < 6) {
       setError(language === 'bn' ? 'পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে।' : 'Password must be at least 6 characters.');
       return;
     }
-    if (regPassword !== regConfirmPassword) {
-      setError(language === 'bn' ? 'উভয় পাসওয়ার্ড একই হতে হবে।' : 'Passwords do not match.');
-      return;
-    }
 
-    if (selectedRole === 'farmer' && selectedCrops.length === 0) {
-      setError(language === 'bn' ? 'কমপক্ষে একটি প্রধান ফসল নির্বাচন করুন।' : 'Please select at least one primary crop.');
-      return;
-    }
+    // Parse optional comma-separated crop names
+    const parsedCrops = farmerCropsText
+      ? farmerCropsText
+          .split(/[,،]+/)
+          .map((c) => c.trim())
+          .filter((c) => c.length > 0)
+      : [];
 
     setLoading(true);
 
@@ -310,7 +309,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       upazila: regUpazila,
       password: regPassword,
       farmSizeAcres: selectedRole === 'farmer' ? Number(farmSize) : undefined,
-      primaryCrops: selectedRole === 'farmer' ? selectedCrops : undefined,
+      primaryCrops: selectedRole === 'farmer' ? (parsedCrops.length > 0 ? parsedCrops : undefined) : undefined,
+      registeredDistrict: regDistrict,
       businessName: selectedRole === 'wholesaler' ? (businessName.trim() || `${regName}'s Wholesale Arat`) : undefined,
       businessType: selectedRole === 'wholesaler' ? businessType : undefined,
       shopName: selectedRole === 'retailer' ? (shopName.trim() || `${regName}'s Agro Shop`) : undefined,
@@ -704,8 +704,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
                 {/* Full Name */}
                 <div>
-                  <label className="block text-xs font-bold text-stone-700 mb-1">
-                    {t('Full Name', 'পূর্ণ নাম')} *
+                  <label className="block text-xs font-bold text-stone-700 dark:text-stone-300 mb-1">
+                    {getNameLabel()} *
                   </label>
                   <div className="relative">
                     <UserIcon className="w-4 h-4 text-stone-400 absolute left-3.5 top-3" />
@@ -714,8 +714,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                       required
                       value={regName}
                       onChange={(e) => setRegName(e.target.value)}
-                      placeholder={selectedRole === 'farmer' ? 'Md. Rafiqul Islam' : 'Your Name'}
-                      className="w-full pl-10 pr-3.5 py-2.5 text-sm rounded-xl border border-stone-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+                      placeholder={getNamePlaceholder()}
+                      className="w-full pl-10 pr-3.5 py-2.5 text-sm rounded-xl border border-stone-300 dark:border-stone-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100"
                     />
                   </div>
                 </div>
@@ -756,7 +756,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                       }}
                       className="w-full px-3 py-2.5 text-xs font-bold rounded-xl border border-stone-300 dark:border-stone-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100"
                     >
-                      {BANGLADESH_LOCATIONS.map((loc) => (
+                      {getSortedDistricts(language).map((loc) => (
                         <option key={loc.district} value={loc.district}>
                           {language === 'bn' ? `${loc.districtBn} (${loc.district})` : `${loc.district} (${loc.districtBn})`}
                         </option>
@@ -784,39 +784,34 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
                 {/* ROLE SPECIFIC INPUTS */}
 
-                {/* 1. FARMER: Clickable Crop Selector & Farm Size */}
+                {/* 1. FARMER: Optional Crop Name Input & Farm Size */}
                 {selectedRole === 'farmer' && (
-                  <div className="space-y-3 p-3.5 bg-stone-50 rounded-2xl border border-stone-200">
+                  <div className="space-y-3 p-3.5 bg-stone-50 dark:bg-stone-800/50 rounded-2xl border border-stone-200 dark:border-stone-700">
                     <div>
-                      <label className="block text-xs font-bold text-stone-800 mb-1.5">
-                        {t('Select Your Primary Crops (Click to choose):', 'আপনার চাষাবাদকৃত ফসল নির্বাচন করুন:')}
+                      <label className="block text-xs font-bold text-stone-800 dark:text-stone-200 mb-1">
+                        {t('Your Crops (Optional)', 'আপনার ফসলের নাম (ঐচ্ছিক)')}
                       </label>
-                      <div className="flex flex-wrap gap-1.5">
-                        {POPULAR_CROPS.map((crop) => {
-                          const isPicked = selectedCrops.includes(crop.id);
-                          return (
-                            <button
-                              key={crop.id}
-                              type="button"
-                              onClick={() => toggleCrop(crop.id)}
-                              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                                isPicked
-                                  ? 'bg-emerald-700 text-white shadow-2xs scale-102'
-                                  : 'bg-white text-stone-700 border border-stone-300 hover:border-emerald-500'
-                              }`}
-                            >
-                              <span>{crop.icon}</span>
-                              <span>{language === 'bn' ? crop.bn : crop.en}</span>
-                              {isPicked && <CheckCircle2 className="w-3 h-3 text-emerald-200" />}
-                            </button>
-                          );
-                        })}
-                      </div>
+                      <input
+                        type="text"
+                        value={farmerCropsText}
+                        onChange={(e) => setFarmerCropsText(e.target.value)}
+                        placeholder={t(
+                          'e.g.: Rice, Potato, Tomato, Eggplant, Onion...',
+                          'যেমন: ধান, আলু, টমেটো, বেগুন, পেঁয়াজ...'
+                        )}
+                        className="w-full px-3.5 py-2.5 text-xs rounded-xl border border-stone-300 dark:border-stone-600 bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                      <p className="text-[11px] text-stone-500 dark:text-stone-400 mt-1">
+                        {t(
+                          'Enter crop names separated by commas (Bengali or English)',
+                          'কমা দিয়ে একাধিক ফসলের নাম লিখতে পারেন (বাংলা বা ইংরেজি)'
+                        )}
+                      </p>
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-stone-700 mb-1">
-                        {t('Farm Size (Bigha / Acres)', 'জমির পরিমাণ (বিঘা / একর)')}
+                      <label className="block text-xs font-bold text-stone-700 dark:text-stone-300 mb-1">
+                        {t('Farm Size (Bigha / Acres - Optional)', 'জমির পরিমাণ (বিঘা / একর - ঐচ্ছিক)')}
                       </label>
                       <input
                         type="number"
@@ -824,7 +819,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                         value={farmSize}
                         onChange={(e) => setFarmSize(e.target.value)}
                         placeholder="3"
-                        className="w-full px-3.5 py-2 text-xs rounded-xl border border-stone-300 bg-white font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        className="w-full px-3.5 py-2 text-xs rounded-xl border border-stone-300 dark:border-stone-600 bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
                       />
                     </div>
                   </div>
@@ -835,11 +830,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   <div className="space-y-3 p-3.5 bg-blue-50/50 rounded-2xl border border-blue-100">
                     <div>
                       <label className="block text-xs font-bold text-stone-700 mb-1">
-                        {t('Wholesale Business / Arat Name', 'পাইকারি প্রতিষ্ঠান / আড়তের নাম')} *
+                        {t('Wholesale Business / Arat Name (Optional)', 'পাইকারি প্রতিষ্ঠান / আড়তের নাম (ঐচ্ছিক)')}
                       </label>
                       <input
                         type="text"
-                        required
                         value={businessName}
                         onChange={(e) => setBusinessName(e.target.value)}
                         placeholder="Karwan Bazar Agro Arat"
@@ -868,11 +862,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   <div className="space-y-3 p-3.5 bg-amber-50/50 rounded-2xl border border-amber-100">
                     <div>
                       <label className="block text-xs font-bold text-stone-700 mb-1">
-                        {t('Retail Shop / Outlet Name', 'খুচরা দোকান / আউটলেটের নাম')} *
+                        {t('Retail Shop / Outlet Name (Optional)', 'খুচরা দোকান / আউটলেটের নাম (ঐচ্ছিক)')}
                       </label>
                       <input
                         type="text"
-                        required
                         value={shopName}
                         onChange={(e) => setShopName(e.target.value)}
                         placeholder="Bismillah Krishi Corner"
@@ -910,34 +903,28 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   </div>
                 )}
 
-                {/* Passwords */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-bold text-stone-700 mb-1">
-                      {t('Password', 'পাসওয়ার্ড')} *
-                    </label>
+                {/* Password (Single mandatory field) */}
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 dark:text-stone-300 mb-1">
+                    {t('Password', 'পাসওয়ার্ড')} *
+                  </label>
+                  <div className="relative">
+                    <Lock className="w-4 h-4 text-stone-400 absolute left-3.5 top-3" />
                     <input
-                      type="password"
+                      type={showRegPassword ? 'text' : 'password'}
                       required
                       value={regPassword}
                       onChange={(e) => setRegPassword(e.target.value)}
-                      placeholder="Min 6 chars"
-                      className="w-full px-3.5 py-2.5 text-xs rounded-xl border border-stone-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+                      placeholder={t('Enter password (min 6 characters)', 'পাসওয়ার্ড দিন (কমপক্ষে ৬ অক্ষর)')}
+                      className="w-full pl-10 pr-10 py-2.5 text-sm rounded-xl border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
                     />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-stone-700 mb-1">
-                      {t('Confirm Password', 'পুনরায় পাসওয়ার্ড')} *
-                    </label>
-                    <input
-                      type="password"
-                      required
-                      value={regConfirmPassword}
-                      onChange={(e) => setRegConfirmPassword(e.target.value)}
-                      placeholder="Confirm"
-                      className="w-full px-3.5 py-2.5 text-xs rounded-xl border border-stone-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
-                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowRegPassword((v) => !v)}
+                      className="absolute right-3.5 top-2.5 text-stone-400 hover:text-stone-600 dark:hover:text-stone-200"
+                    >
+                      {showRegPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
                   </div>
                 </div>
 

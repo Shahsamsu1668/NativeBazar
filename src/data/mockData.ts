@@ -11,7 +11,15 @@ import {
 } from '../types';
 
 // ─── BANGLADESH REGIONAL LOCATIONS (ALL 64 DISTRICTS & UPAZILAS) ────────
-export { BANGLADESH_LOCATIONS, getDistrictNames, getDistrictByName, getUpazilasByDistrict } from './bangladeshLocations';
+export {
+  BANGLADESH_LOCATIONS,
+  getDistrictNames,
+  getDistrictByName,
+  getUpazilasByDistrict,
+  getSortedDistricts,
+  getBanglaDistrictName,
+  DISTRICT_BN_MAP,
+} from './bangladeshLocations';
 export type { DistrictLocation } from './bangladeshLocations';
 
 // ─── INITIAL USERS (Zero demo accounts: real registration required) ─────────

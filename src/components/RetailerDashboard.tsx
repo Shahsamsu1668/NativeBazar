@@ -8,6 +8,7 @@ import {
 import { productApi, orderApi } from '../services/api';
 import { toBanglaNumber } from './Header';
 import { NotificationStore } from '../data/store';
+import { handleImageError } from '../services/imageService';
 import { MASTER_AGRICULTURAL_CATALOG } from '../data/catalogData';
 import {
   Store,
@@ -33,6 +34,8 @@ import {
 interface RetailerDashboardProps {
   currentUser: User;
   language: Language;
+  selectedDistrict?: string;
+  onDistrictChange?: (district: string) => void;
 }
 
 type RetailerTabId = 'wholesaler_retailer_trade' | 'retailer_consumer_trade';
@@ -259,11 +262,11 @@ export const RetailerDashboard: React.FC<RetailerDashboardProps> = ({
     marketPricePerKg: 56,
     qualityGrade: 'A' as 'A' | 'B' | 'C',
     organicCertified: true,
-    farmerOrigin: 'Shibganj Farmer Cooperatives, Bogura',
+    farmerOrigin: `${currentUser.upazila ? currentUser.upazila + ', ' : ''}${currentUser.district || 'Local'} Cooperatives`,
     farmerOriginBn: 'শিবগঞ্জ কৃষক সমবায়, বগুড়া',
     wholesalerArat: 'Mahasthangarh Wholesale Arat Hub',
     wholesalerAratBn: 'মহাস্থানগড় পাইকারি আড়ত হাব',
-    locationDetails: currentUser.address || `${currentUser.upazila || 'Bogura Sadar'} Retail Store`,
+    locationDetails: currentUser.address || `${currentUser.upazila ? currentUser.upazila + ', ' : ''}${currentUser.district || 'Local'} Retail Store`,
     imageUrl: 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=800&auto=format&fit=crop&q=80',
     description: 'Crisp, hand-picked table tomatoes directly sourced from Shibganj fields. Certified formalin-free and ready for home delivery.',
     descriptionBn: 'শিবগঞ্জের মাঠ থেকে সরাসরি সংগৃহীত তাজা পাকা টমেটো। ১০০% ফরমালিনমুক্ত এবং দ্রুত হোম ডেলিভারির জন্য প্রস্তুত।',
@@ -742,7 +745,7 @@ export const RetailerDashboard: React.FC<RetailerDashboardProps> = ({
                 className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-2xs flex flex-col justify-between hover:shadow-md transition-shadow"
               >
                 <div className="relative aspect-16/10 bg-stone-100">
-                  <img src={lot.imageUrl} alt={getCropName(lot, language)} className="w-full h-full object-cover" />
+                  <img src={lot.imageUrl} alt={getCropName(lot, language)} onError={handleImageError} className="w-full h-full object-cover" />
                   <div className="absolute top-2 left-2 flex gap-1">
                     <span className="bg-blue-900 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-2xs">
                       {t('Wholesale Arat Lot', 'পাইকারি আড়ত লট')}
@@ -894,6 +897,7 @@ export const RetailerDashboard: React.FC<RetailerDashboardProps> = ({
                       <img
                         src={prod.imageUrl}
                         alt={getCropName(prod, language)}
+                        onError={handleImageError}
                         className="w-full h-full object-cover"
                       />
                       <div className="absolute top-2 left-2 flex gap-1">

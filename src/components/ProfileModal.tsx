@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { User, Language, UserRole } from '../types';
-import { BANGLADESH_LOCATIONS } from '../data/mockData';
+import { BANGLADESH_LOCATIONS, getSortedDistricts } from '../data/mockData';
 import { AuthStore, CropStore, DemandStore, SupplierStore, OrderStore, TradeOrderStore } from '../data/store';
 import {
   X,
@@ -424,9 +424,9 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                     }}
                     className="w-full p-2.5 bg-stone-50 border border-stone-300 rounded-xl font-medium focus:outline-emerald-600"
                   >
-                    {BANGLADESH_LOCATIONS.map((loc) => (
+                    {getSortedDistricts(language).map((loc) => (
                       <option key={loc.district} value={loc.district}>
-                        {loc.district} ({loc.districtBn})
+                        {language === 'bn' ? `${loc.districtBn} (${loc.district})` : `${loc.district} (${loc.districtBn})`}
                       </option>
                     ))}
                   </select>

@@ -3,7 +3,7 @@ import { User, Language, UserRole, UserConnection, DirectMessage, CallLog } from
 import { ConnectionStore, MessageStore, CallStore, AuthStore, NotificationStore, isDemoAccount } from '../data/store';
 import { toBanglaNumber } from './Header';
 import { apiService } from '../services/apiService';
-import { BANGLADESH_LOCATIONS } from '../data/mockData';
+import { BANGLADESH_LOCATIONS, getSortedDistricts } from '../data/mockData';
 import {
   Users,
   MessageSquare,
@@ -792,9 +792,9 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
                   className="bg-transparent font-semibold text-stone-700 focus:outline-none cursor-pointer"
                 >
                   <option value="all">{t('All Districts (সকল জেলা)', 'সকল জেলা')}</option>
-                  {BANGLADESH_LOCATIONS.map((loc) => (
+                  {getSortedDistricts(language).map((loc) => (
                     <option key={loc.district} value={loc.district}>
-                      {loc.district} ({loc.districtBn})
+                      {language === 'bn' ? `${loc.districtBn} (${loc.district})` : `${loc.district} (${loc.districtBn})`}
                     </option>
                   ))}
                 </select>

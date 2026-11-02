@@ -30,6 +30,8 @@ export interface UserRecord {
   passwordHash: string;
   district: string;
   upazila?: string;
+  deliveryAddress?: string;
+  registeredDistrict?: string;
   education?: string;
   verified: boolean;
   createdAt: string;

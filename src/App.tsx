@@ -28,6 +28,7 @@ import {
 import { apiService } from './services/apiService';
 
 import { Header, toBanglaDistrict, toBanglaNumber } from './components/Header';
+import { BANGLADESH_LOCATIONS } from './data/bangladeshLocations';
 import { AuthPage } from './components/AuthPage';
 import { AdminVerificationModal } from './components/AdminVerificationModal';
 import { FarmerDashboard } from './components/FarmerDashboard';
@@ -68,7 +69,7 @@ export default function App() {
   const [viewDistrict, setViewDistrict] = useState<string>(() => {
     initializeStore();
     const user = AuthStore.getCurrentUser();
-    return user?.district || 'Bogura';
+    return user?.district || BANGLADESH_LOCATIONS[0].district;
   });
 
   // When currentUser changes (e.g. login, switch role), sync the filter to their profile district
@@ -470,6 +471,8 @@ export default function App() {
                   <CustomerMarketplace
                     language={language}
                     currentUser={currentUser}
+                    selectedDistrict={viewDistrict}
+                    onDistrictChange={setViewDistrict}
                     onOpenAuth={() => handleOpenAuth('login')}
                   />
                 )}
@@ -480,6 +483,8 @@ export default function App() {
                     currentUser={currentUser}
                     suppliers={supplierProducts}
                     language={language}
+                    selectedDistrict={viewDistrict}
+                    onDistrictChange={setViewDistrict}
                     onOpenCropDoctor={() => setIsCropDoctorOpen(true)}
                     onOpenVoiceAssistant={() => setIsVoiceAssistantOpen(true)}
                   />
@@ -487,12 +492,22 @@ export default function App() {
 
                 {/* 3. Wholesaler Role -> Wholesaler Procurement & Wholesale Hub */}
                 {currentUser && canonicalRole === 'wholesaler' && (
-                  <WholesalerDashboard currentUser={currentUser} language={language} />
+                  <WholesalerDashboard
+                    currentUser={currentUser}
+                    language={language}
+                    selectedDistrict={viewDistrict}
+                    onDistrictChange={setViewDistrict}
+                  />
                 )}
 
                 {/* 4. Retailer Role -> Retailer Store & Consumer Fulfillment */}
                 {currentUser && canonicalRole === 'retailer' && (
-                  <RetailerDashboard currentUser={currentUser} language={language} />
+                  <RetailerDashboard
+                    currentUser={currentUser}
+                    language={language}
+                    selectedDistrict={viewDistrict}
+                    onDistrictChange={setViewDistrict}
+                  />
                 )}
 
                 {/* 5. Restricted Administrator Access */}

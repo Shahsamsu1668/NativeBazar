@@ -343,6 +343,20 @@
       "createdAt": "2026-10-31T05:40:03.686Z",
       "lastLoginAt": "2026-10-31T05:40:03.686Z",
       "shopName": "Bismillah Krishi & Organic Corner"
+    },
+    {
+      "id": "usr-farmer-1793541348810",
+      "role": "farmer",
+      "name": "Akash",
+      "phone": "01727272727",
+      "passwordHash": "sha256_6145ee87ba5997d41e909fce3f8d93c1390702c1f28bb8f742e9c2682d3991a5",
+      "district": "Brahmanbaria",
+      "upazila": "Akhaura",
+      "verified": true,
+      "createdAt": "2026-11-01T13:55:48.827Z",
+      "farmSizeAcres": 3,
+      "sessionToken": "nb_token_1793550834655_cmmrps6",
+      "lastLoginAt": "2026-11-01T16:33:54.652Z"
     }
   ],
   "crops": [
@@ -525,6 +539,46 @@
       "qualityGrade": "A",
       "organicCertified": false,
       "createdAt": "2026-10-31T06:35:02.129Z"
+    },
+    {
+      "id": "prod-far-1793429891427",
+      "farmerId": "user-farmer-rafiq",
+      "farmerName": "Md. Rafiqul Islam",
+      "farmerPhone": "01712458920",
+      "district": "Bogura",
+      "upazila": "Shibganj",
+      "cropName": "banana",
+      "cropBangla": "banana",
+      "variety": "Bogra Deshi",
+      "quantityKg": 100,
+      "availableDate": "In Stock",
+      "expectedPricePerKg": 42,
+      "marketBenchmarkPrice": 48.3,
+      "status": "Ready to Harvest",
+      "imageUrl": "https://images.unsplash.com/photo-1571771894821-ce9b6c11b08e?w=600&auto=format&fit=crop&q=80",
+      "qualityGrade": "A",
+      "organicCertified": true,
+      "createdAt": "2026-10-31T06:58:11.427Z"
+    },
+    {
+      "id": "prod-far-1793541419767",
+      "farmerId": "usr-farmer-1793541348810",
+      "farmerName": "Akash",
+      "farmerPhone": "01727272727",
+      "district": "Brahmanbaria",
+      "upazila": "Akhaura",
+      "cropName": "Guava",
+      "cropBangla": "Guava",
+      "variety": "Diamond Grade A",
+      "quantityKg": 100,
+      "availableDate": "In Stock",
+      "expectedPricePerKg": 42,
+      "marketBenchmarkPrice": 48.3,
+      "status": "Ready to Harvest",
+      "imageUrl": "https://images.unsplash.com/photo-1536511135899-73600f7b1580?w=600&auto=format&fit=crop&q=80",
+      "qualityGrade": "A",
+      "organicCertified": true,
+      "createdAt": "2026-11-01T13:56:59.767Z"
     }
   ],
   "supplierProducts": [
@@ -776,6 +830,35 @@
       "sellerId": "usr-retailer-1793258113266",
       "sellerName": "Bismillah Krishi corner",
       "sellerRole": "retailer"
+    },
+    {
+      "id": "ORD-192609-705",
+      "orderType": "farmer_to_wholesaler",
+      "customerId": "user-wholesaler-sumaiya",
+      "customerName": "Islam Agro Wholesale Syndicate",
+      "phone": "01711209934",
+      "items": [
+        {
+          "itemId": "prod-far-1793429891427",
+          "itemName": "banana",
+          "itemBangla": "banana",
+          "unitPrice": 42,
+          "unit": "kg",
+          "quantity": 50,
+          "subtotal": 2100
+        }
+      ],
+      "totalBDT": 2100,
+      "paymentMethod": "Bank Transfer / Arat Escrow",
+      "deliveryAddress": "Bogura Sadar, Bogura Arat Hub",
+      "district": "Bogura",
+      "upazila": "Bogura Sadar",
+      "status": "Confirmed",
+      "trackingCode": "TRK-BOG-457632",
+      "orderDate": "2026-11-02T04:03:12.610Z",
+      "sellerId": "far-shibganj-1",
+      "sellerName": "Md. Rafiqul Islam",
+      "sellerRole": "farmer"
     }
   ],
   "reviews": [],

@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { MarketplaceProduct, Language, User } from '../types';
 import { productApi, orderApi } from '../services/api';
-import { toBanglaNumber } from './Header';
+import { toBanglaNumber, toBanglaDistrict } from './Header';
+import { BANGLADESH_LOCATIONS, getSortedDistricts } from '../data/bangladeshLocations';
+import { handleImageError } from '../services/imageService';
 import { getCropName, getCropDescription, translateMetadata } from './RetailerDashboard';
 import {
   ShoppingCart,
@@ -35,15 +37,19 @@ interface CartItem {
 interface CustomerMarketplaceProps {
   language: Language;
   currentUser?: User | null;
+  selectedDistrict?: string;
+  onDistrictChange?: (district: string) => void;
   onOpenAuth?: () => void;
 }
 
 const CATEGORIES = ['All', 'Vegetables', 'Tubers', 'Spices', 'Grains', 'Fruits'];
-const DISTRICTS = ['All', 'Bogura', 'Dhaka', 'Rajshahi', 'Rangpur', 'Dinajpur'];
+const DISTRICTS = ['All', ...BANGLADESH_LOCATIONS.map((l) => l.district)];
 
 export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
   language,
   currentUser,
+  selectedDistrict: propDistrict,
+  onDistrictChange,
   onOpenAuth,
 }) => {
   const [products, setProducts] = useState<MarketplaceProduct[]>([]);
@@ -52,7 +58,13 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
 
   // Filters & Search
   const [selectedCategory, setSelectedCategory] = useState('All');
-  const [selectedDistrict, setSelectedDistrict] = useState('All');
+  const [selectedDistrict, setSelectedDistrict] = useState(propDistrict || 'All');
+
+  useEffect(() => {
+    if (propDistrict) {
+      setSelectedDistrict(propDistrict);
+    }
+  }, [propDistrict]);
   const [searchQuery, setSearchQuery] = useState('');
 
   // Cart & Drawer
@@ -412,12 +424,18 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
             </span>
             <select
               value={selectedDistrict}
-              onChange={(e) => setSelectedDistrict(e.target.value)}
-              className="bg-stone-50 border border-stone-200 text-xs font-semibold text-stone-800 rounded-xl px-3 py-2 focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
+              onChange={(e) => {
+                setSelectedDistrict(e.target.value);
+                if (onDistrictChange && e.target.value !== 'All') {
+                  onDistrictChange(e.target.value);
+                }
+              }}
+              className="bg-stone-50 border border-stone-200 text-xs font-semibold text-stone-800 rounded-xl px-3 py-2 focus:outline-hidden focus:ring-2 focus:ring-emerald-500 cursor-pointer"
             >
-              {DISTRICTS.map((d) => (
-                <option key={d} value={d}>
-                  {d === 'All' ? (language === 'bn' ? 'সকল জেলা' : 'All Districts') : d}
+              <option value="All">{language === 'bn' ? 'সকল জেলা' : 'All Districts'}</option>
+              {getSortedDistricts(language).map((loc) => (
+                <option key={loc.district} value={loc.district}>
+                  {language === 'bn' ? `${loc.districtBn} (${loc.district})` : `${loc.district} (${loc.districtBn})`}
                 </option>
               ))}
             </select>
@@ -577,6 +595,7 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
                         'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=800&auto=format&fit=crop&q=80'
                       }
                       alt={product.cropName}
+                      onError={handleImageError}
                       className="w-full h-full object-cover transition-transform duration-500 hover:scale-103"
                     />
 

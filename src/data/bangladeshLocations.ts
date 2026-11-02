@@ -977,3 +977,49 @@ export const getUpazilasByDistrict = (districtName: string): string[] => {
   return match ? match.upazilas : [];
 };
 
+/**
+ * Fast lookup mapping of English / Bengali / alternate district names to their authentic Bengali name.
+ */
+export const DISTRICT_BN_MAP: Record<string, string> = {
+  bogra: 'বগুড়া',
+  Bogra: 'বগুড়া',
+  chittagong: 'চট্টগ্রাম',
+  Chittagong: 'চট্টগ্রাম',
+  comilla: 'কুমিল্লা',
+  Comilla: 'কুমিল্লা',
+  jessore: 'যশোর',
+  Jessore: 'যশোর',
+  ...BANGLADESH_LOCATIONS.reduce((acc, loc) => {
+    acc[loc.district] = loc.districtBn;
+    acc[loc.district.toLowerCase()] = loc.districtBn;
+    return acc;
+  }, {} as Record<string, string>),
+};
+
+/**
+ * Returns the authentic Bengali district name for any of the 64 districts.
+ * Falls back to the provided string if not matched.
+ */
+export const getBanglaDistrictName = (district: string): string => {
+  if (!district) return '';
+  const trimmed = district.trim();
+  if (DISTRICT_BN_MAP[trimmed]) return DISTRICT_BN_MAP[trimmed];
+  if (DISTRICT_BN_MAP[trimmed.toLowerCase()]) return DISTRICT_BN_MAP[trimmed.toLowerCase()];
+  const found = getDistrictByName(trimmed);
+  return found ? found.districtBn : trimmed;
+};
+
+/**
+ * Returns all 64 districts sorted alphabetically:
+ * - When language === 'bn', sorted according to Bengali collation ('bn') by districtBn.
+ * - When language === 'en', sorted according to English collation ('en') by district.
+ */
+export const getSortedDistricts = (language: 'bn' | 'en' = 'en'): DistrictLocation[] => {
+  return [...BANGLADESH_LOCATIONS].sort((a, b) => {
+    if (language === 'bn') {
+      return a.districtBn.localeCompare(b.districtBn, 'bn');
+    }
+    return a.district.localeCompare(b.district, 'en');
+  });
+};
+

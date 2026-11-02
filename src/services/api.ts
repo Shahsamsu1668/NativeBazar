@@ -7,8 +7,9 @@
  */
 
 import { MarketplaceProduct, SupplyChainOrder, WholesalerOffer, User, MarketRate } from '../types';
-import { AuthStore, CropStore, OrderStore, MarketRateStore } from '../data/store';
+import { AuthStore, CropStore, OrderStore, MarketRateStore, WholesalerOfferStore } from '../data/store';
 import { INITIAL_CROP_LISTINGS, INITIAL_MARKET_RATES } from '../data/mockData';
+import { getTcbCropPrice } from './tcbService';
 
 // Helper to detect static frontend hosting environments (GitHub Pages, Netlify, etc.)
 export const isStaticHost = (hostname: string): boolean => {
@@ -251,23 +252,82 @@ function handleMockApiFallback<T>(url: string, options?: RequestInit): T {
 
   // 9. Intelligence / Market Rates
   if (url.startsWith('/api/market-prices') || url.startsWith('/api/farmer/intelligence')) {
-    const rates = MarketRateStore.getAll().length > 0 ? MarketRateStore.getAll() : INITIAL_MARKET_RATES;
+    const districtMatch = url.match(/district=([^&]+)/);
+    const targetDistrict = districtMatch ? decodeURIComponent(districtMatch[1]) : 'Bogura';
+    const baseRates = MarketRateStore.getAll().length > 0 ? MarketRateStore.getAll() : INITIAL_MARKET_RATES;
+    const rates = baseRates.map((r) => {
+      const tcb = getTcbCropPrice(r.cropName || r.banglaName, targetDistrict);
+      if (tcb) {
+        return {
+          ...r,
+          wholesalePrice: tcb.wholesalePrice,
+          wholesaleDhaka: tcb.wholesaleDhaka,
+          retailPrice: tcb.retailPrice,
+          source: 'TCB (Trading Corporation of Bangladesh) & DAM',
+          lastUpdated: `TCB (${tcb.reportDate || 'Today'})`,
+          isTcbSynced: true,
+        };
+      }
+      return r;
+    });
+
     if (url.startsWith('/api/farmer/intelligence')) {
+      const offers = WholesalerOfferStore.getByDistrict(targetDistrict);
       return {
-        district: 'Bogura',
+        district: targetDistrict,
         marketRates: rates,
-        wholesalerOffers: [],
+        wholesalerOffers: offers,
         highDemandCrops: [
           { name: 'Tomato', demandIndex: 94, trend: 'up', reason: 'High retail & wholesale demand' },
           { name: 'Potato', demandIndex: 88, trend: 'stable', reason: 'Continuous supply chain movement' },
           { name: 'Green Chili', demandIndex: 92, trend: 'up', reason: 'Seasonal spice shortage' },
         ],
-        officialSource: 'DAM (Department of Agricultural Marketing - Demo)',
+        officialSource: 'TCB (Trading Corporation of Bangladesh) & DAM Govt. Feed',
         lastRefreshed: new Date().toISOString(),
         verified: true,
       } as T;
     }
-    return { rates, source: 'DAM Official Govt. Live API' } as T;
+    return { rates, source: 'TCB & DAM Official Govt. Live API' } as T;
+  }
+
+  // Wholesaler Offers (Demand Posts)
+  if (url.startsWith('/api/wholesaler-offers')) {
+    if (options?.method === 'POST' && options.body) {
+      try {
+        const payload = JSON.parse(String(options.body));
+        const newOffer: WholesalerOffer = {
+          id: payload.id || `bid-${Date.now()}`,
+          wholesalerId: payload.wholesalerId || 'usr-wholesaler',
+          wholesalerName: payload.wholesalerName || 'Wholesaler',
+          wholesalerPhone: payload.wholesalerPhone || '',
+          businessName: payload.businessName || payload.wholesalerName || 'Wholesale Arat',
+          cropName: payload.cropName || '',
+          cropBangla: payload.cropBangla || payload.cropName || '',
+          quantityKgNeeded: Number(payload.quantityKgNeeded) || 0,
+          quantityDozenNeeded: Number(payload.quantityDozenNeeded) || 0,
+          unit: payload.unit || (Number(payload.quantityDozenNeeded) > 0 ? 'dozen' : 'kg'),
+          fulfilledKg: 0,
+          offeredPricePerKg: Number(payload.offeredPricePerKg) || 0,
+          district: payload.district || 'Bogura',
+          upazila: payload.upazila,
+          location: payload.location || '',
+          deadline: payload.deadline || 'Within 7 days',
+          urgent: Boolean(payload.urgent),
+          verified: true,
+          notes: payload.notes,
+          createdAt: new Date().toISOString(),
+        };
+        WholesalerOfferStore.add(newOffer);
+        return { success: true, offerId: newOffer.id, message: 'Demand post published successfully' } as T;
+      } catch (e: any) {
+        throw new Error(e.message || 'Failed to publish demand post');
+      }
+    }
+
+    const districtMatch = url.match(/district=([^&]+)/);
+    const targetDistrict = districtMatch ? decodeURIComponent(districtMatch[1]) : undefined;
+    const offers = WholesalerOfferStore.getByDistrict(targetDistrict);
+    return { offers } as T;
   }
 
   // 10. Admin Metrics
@@ -398,7 +458,17 @@ export const orderApi = {
     sellerName: string;
     sellerPhone?: string;
     sellerRole: 'farmer' | 'wholesaler' | 'retailer';
-    items: Array<{ productId: string; quantityKg: number }>;
+    items: Array<{
+      productId: string;
+      quantityKg: number;
+      cropName?: string;
+      banglaName?: string;
+      quantityDozen?: number;
+      unit?: string;
+      unitPrice?: number;
+      subtotal?: number;
+    }>;
+    totalBDT?: number;
     paymentMethod: string;
     deliveryAddress: string;
     district: string;
@@ -478,6 +548,29 @@ export const intelligenceApi = {
   },
 
   async createWholesalerOffer(offerData: Partial<WholesalerOffer>): Promise<{ success: boolean; offerId: string }> {
+    const newOffer: WholesalerOffer = {
+      id: offerData.id || `bid-${Date.now()}`,
+      wholesalerId: offerData.wholesalerId || 'usr-wholesaler',
+      wholesalerName: offerData.wholesalerName || 'Wholesaler',
+      wholesalerPhone: offerData.wholesalerPhone || '',
+      businessName: offerData.businessName || offerData.wholesalerName || 'Wholesale Arat',
+      cropName: offerData.cropName || '',
+      cropBangla: offerData.cropBangla || offerData.cropName || '',
+      quantityKgNeeded: Number(offerData.quantityKgNeeded) || 0,
+      quantityDozenNeeded: Number(offerData.quantityDozenNeeded) || 0,
+      unit: offerData.unit || (Number(offerData.quantityDozenNeeded) > 0 ? 'dozen' : 'kg'),
+      fulfilledKg: 0,
+      offeredPricePerKg: Number(offerData.offeredPricePerKg) || 0,
+      district: offerData.district || 'Bogura',
+      upazila: offerData.upazila,
+      location: offerData.location || '',
+      deadline: offerData.deadline || 'Within 7 days',
+      urgent: Boolean(offerData.urgent),
+      verified: true,
+      notes: offerData.notes,
+      createdAt: new Date().toISOString(),
+    };
+    WholesalerOfferStore.add(newOffer);
     return fetchJson('/api/wholesaler-offers', {
       method: 'POST',
       body: JSON.stringify(offerData),

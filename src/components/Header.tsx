@@ -1,3 +1,4 @@
+import { BANGLADESH_LOCATIONS, getSortedDistricts, getBanglaDistrictName } from '../data/bangladeshLocations';
 import React, { useState, useRef, useEffect } from 'react';
 import { UserRole, Language, User, ActiveView, Theme, Notification } from '../types';
 import {
@@ -5,7 +6,7 @@ import {
   Mic, Stethoscope, Globe, MapPin, TrendingUp,
   Bell, LogOut, ChevronDown, Menu, X,
   Package, CheckCircle2, Sun, Moon, User as UserIcon,
-  Users, MessageSquare,
+  Users, MessageSquare, RotateCcw,
 } from 'lucide-react';
 import { NotificationStore, MessageStore, AuthStore } from '../data/store';
 
@@ -16,22 +17,7 @@ export const toBanglaNumber = (val: string | number | null | undefined): string 
 };
 
 export const toBanglaDistrict = (d: string): string => {
-  const map: Record<string, string> = {
-    Bogura: 'বগুড়া',
-    Bogra: 'বগুড়া',
-    Rajshahi: 'রাজশাহী',
-    Rangpur: 'রংপুর',
-    Jashore: 'যশোর',
-    Dhaka: 'ঢাকা',
-    Mymensingh: 'ময়মনসিংহ',
-    Dinajpur: 'দিনাজপুর',
-    Chattogram: 'চট্টগ্রাম',
-    Sylhet: 'সিলেট',
-    Khulna: 'খুলনা',
-    Barishal: 'বরিশাল',
-    Cumilla: 'কুমিল্লা',
-  };
-  return map[d] || d;
+  return getBanglaDistrictName(d);
 };
 
 interface HeaderProps {
@@ -130,7 +116,7 @@ export const Header: React.FC<HeaderProps> = ({
   const config = ROLE_CONFIG[role] || ROLE_CONFIG.consumer;
 
   // Use the logged-in user's profile district for the header logo subtitle; fallback to view filter
-  const profileDistrict = currentUser?.district || selectedDistrict || 'Bogura';
+  const profileDistrict = currentUser?.district || selectedDistrict || BANGLADESH_LOCATIONS[0].district;
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -277,20 +263,19 @@ export const Header: React.FC<HeaderProps> = ({
 
             {/* District Selector (Only for authenticated users) */}
             {currentUser && (
-            <div className="flex items-center gap-1 bg-stone-100 border border-stone-200 rounded-lg px-2 py-1.5 text-xs">
+            <div className="flex items-center gap-1 bg-stone-100 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-lg px-2 py-1.5 text-xs">
               <MapPin className="w-3.5 h-3.5 text-stone-500 shrink-0" />
               <select
                 value={selectedDistrict}
                 onChange={e => onDistrictChange(e.target.value)}
-                className="bg-transparent text-xs font-semibold text-stone-700 focus:outline-hidden cursor-pointer"
+                className="bg-transparent text-xs font-semibold text-stone-700 dark:text-stone-200 focus:outline-hidden cursor-pointer max-w-[170px]"
                 aria-label={t('Select district', 'জেলা নির্বাচন')}
               >
-                <option value="Bogura">{language === 'bn' ? 'বগুড়া' : 'Bogura (বগুড়া)'}</option>
-                <option value="Rajshahi">{language === 'bn' ? 'রাজশাহী' : 'Rajshahi (রাজশাহী)'}</option>
-                <option value="Rangpur">{language === 'bn' ? 'রংপুর' : 'Rangpur (রংপুর)'}</option>
-                <option value="Jashore">{language === 'bn' ? 'যশোর' : 'Jashore (যশোর)'}</option>
-                <option value="Dhaka">{language === 'bn' ? 'ঢাকা' : 'Dhaka (ঢাকা)'}</option>
-                <option value="Mymensingh">{language === 'bn' ? 'ময়মনসিংহ' : 'Mymensingh (ময়মনসিংহ)'}</option>
+                {getSortedDistricts(language).map((loc) => (
+                  <option key={loc.district} value={loc.district} className="bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100">
+                    {language === 'bn' ? `${loc.districtBn} (${loc.district})` : `${loc.district} (${loc.districtBn})`}
+                  </option>
+                ))}
               </select>
             </div>
             )}
@@ -597,19 +582,18 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           )}
           <div className="grid grid-cols-3 gap-2">
-            <div className="col-span-2 flex items-center gap-1 bg-stone-100 rounded-lg px-2 py-1.5 text-xs">
+            <div className="col-span-2 flex items-center gap-1 bg-stone-100 dark:bg-stone-800 rounded-lg px-2 py-1.5 text-xs border border-stone-200 dark:border-stone-700">
               <MapPin className="w-3.5 h-3.5 text-stone-500" />
               <select
                 value={selectedDistrict}
                 onChange={e => onDistrictChange(e.target.value)}
-                className="bg-transparent text-xs font-semibold text-stone-700 focus:outline-hidden flex-1 cursor-pointer"
+                className="bg-transparent text-xs font-semibold text-stone-700 dark:text-stone-200 focus:outline-hidden flex-1 cursor-pointer"
               >
-                <option value="Bogura">{language === 'bn' ? 'বগুড়া' : 'Bogura'}</option>
-                <option value="Rajshahi">{language === 'bn' ? 'রাজশাহী' : 'Rajshahi'}</option>
-                <option value="Rangpur">{language === 'bn' ? 'রংপুর' : 'Rangpur'}</option>
-                <option value="Jashore">{language === 'bn' ? 'যশোর' : 'Jashore'}</option>
-                <option value="Dhaka">{language === 'bn' ? 'ঢাকা' : 'Dhaka'}</option>
-                <option value="Mymensingh">{language === 'bn' ? 'ময়মনসিংহ' : 'Mymensingh'}</option>
+                {getSortedDistricts(language).map((loc) => (
+                  <option key={loc.district} value={loc.district} className="bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100">
+                    {language === 'bn' ? `${loc.districtBn} (${loc.district})` : `${loc.district} (${loc.districtBn})`}
+                  </option>
+                ))}
               </select>
             </div>
             <button

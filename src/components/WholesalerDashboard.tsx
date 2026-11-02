@@ -1,3 +1,5 @@
+import { BANGLADESH_LOCATIONS, getSortedDistricts } from '../data/bangladeshLocations';
+import { handleImageError } from '../services/imageService';
 import React, { useState, useEffect } from 'react';
 import {
   Language,
@@ -7,7 +9,7 @@ import {
   WholesalerOffer,
 } from '../types';
 import { productApi, orderApi, intelligenceApi } from '../services/api';
-import { NotificationStore } from '../data/store';
+import { NotificationStore, WholesalerOfferStore } from '../data/store';
 import { toBanglaNumber } from './Header';
 import {
   Building2,
@@ -33,6 +35,8 @@ import {
 interface WholesalerDashboardProps {
   currentUser: User;
   language: Language;
+  selectedDistrict?: string;
+  onDistrictChange?: (district: string) => void;
 }
 
 type WholesalerTabId = 'procure_crops' | 'my_inventory' | 'retailer_orders' | 'post_tender';
@@ -40,6 +44,8 @@ type WholesalerTabId = 'procure_crops' | 'my_inventory' | 'retailer_orders' | 'p
 export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
   currentUser,
   language,
+  selectedDistrict: propDistrict,
+  onDistrictChange,
 }) => {
   const [activeTab, setActiveTab] = useState<WholesalerTabId>('procure_crops');
 
@@ -47,11 +53,19 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
   const [farmerCrops, setFarmerCrops] = useState<MarketplaceProduct[]>([]);
   const [cropsLoading, setCropsLoading] = useState(false);
   const [cropSearch, setCropSearch] = useState('');
-  const [selectedDistrict, setSelectedDistrict] = useState('All');
+  const [selectedDistrict, setSelectedDistrict] = useState(propDistrict || 'All');
+
+  useEffect(() => {
+    if (propDistrict && propDistrict !== 'All') {
+      setSelectedDistrict(propDistrict);
+    }
+  }, [propDistrict]);
 
   // Purchase Modal (Wholesaler buys from Farmer)
   const [selectedCropToBuy, setSelectedCropToBuy] = useState<MarketplaceProduct | null>(null);
-  const [purchaseQtyKg, setPurchaseQtyKg] = useState(100);
+  const [purchaseQtyKg, setPurchaseQtyKg] = useState<number | ''>(100);
+  const [purchaseQtyDozen, setPurchaseQtyDozen] = useState<number | ''>('');
+  const [purchaseUnit, setPurchaseUnit] = useState<'kg' | 'dozen'>('kg');
   const [deliveryHub, setDeliveryHub] = useState(
     currentUser.upazila ? `${currentUser.upazila}, ${currentUser.district} Arat Hub` : 'Mahasthangarh Mokam Hub'
   );
@@ -70,9 +84,9 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
     minOrderKg: 100,
     pricePerKg: 32,
     qualityGrade: 'A' as 'A' | 'B' | 'C',
-    farmerOrigin: 'Shibganj Farmer Cooperatives, Bogura',
+    farmerOrigin: `${currentUser?.upazila ? currentUser.upazila + ', ' : ''}${currentUser?.district || 'Local'} Cooperatives`,
     imageUrl: 'https://images.unsplash.com/photo-1518977676601-b53f82aba655?w=800&auto=format&fit=crop&q=80',
-    description: 'Bulk wholesale lot procured directly from verified Bogura farm gates.',
+    description: `Bulk wholesale lot procured directly from verified ${currentUser?.district || 'local'} farm gates.`,
   });
 
   // Tab 3: Orders received from Retailers
@@ -80,18 +94,29 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
   const [ordersLoading, setOrdersLoading] = useState(false);
 
   const [tenderForm, setTenderForm] = useState({
-    cropName: 'Hybrid Tomatoes',
-    cropBangla: 'হাইব্রিড পাকা টমেটো',
-    quantityKgNeeded: 3000,
-    offeredPricePerKg: 39,
-    district: currentUser?.district || 'Bogura',
-    upazila: currentUser?.upazila || 'Shibganj',
-    location: 'Mahasthangarh Highway Delivery Point',
+    productName: '',
+    quantityKg: '' as number | '',
+    quantityDozen: '' as number | '',
+    unit: 'kg' as 'kg' | 'dozen',
+    offeredPrice: 40,
+    district: currentUser?.district || BANGLADESH_LOCATIONS[0].district,
+    upazila: currentUser?.upazila || '',
+    location: currentUser?.upazila ? `${currentUser.upazila}, ${currentUser.district || 'Bogura'} Arat Hub` : 'Central Wholesale Arat Delivery Point',
     deadline: 'Within 7 days',
     urgent: true,
-    notes: 'Grade A firm table tomatoes. Immediate payment upon crate weighing.',
+    notes: 'Immediate payment upon quality and crate weighing.',
   });
   const [submittingTender, setSubmittingTender] = useState(false);
+  const [myPostedDemands, setMyPostedDemands] = useState<WholesalerOffer[]>([]);
+
+  const loadMyDemands = () => {
+    const list = WholesalerOfferStore.getByWholesaler(currentUser.id);
+    setMyPostedDemands(list);
+  };
+
+  useEffect(() => {
+    loadMyDemands();
+  }, [currentUser.id]);
   const [isPublishingBatch, setIsPublishingBatch] = useState(false);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null);
@@ -171,10 +196,21 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
     e.preventDefault();
     if (!selectedCropToBuy) return;
 
-    if (purchaseQtyKg > selectedCropToBuy.availableKg) {
+    const numKg = Number(purchaseQtyKg) || 0;
+    const numDozen = Number(purchaseQtyDozen) || 0;
+    const effectiveQty = purchaseUnit === 'dozen' ? numDozen : numKg;
+
+    if (effectiveQty <= 0) {
+      showToast(t('Please enter quantity in kg or dozen.', 'অনুগ্রহ করে কেজি বা ডজন হিসেবে পরিমাণ লিখুন।'), 'error');
+      return;
+    }
+
+    if (effectiveQty > (selectedCropToBuy.availableKg || 0)) {
       showToast(t('Quantity exceeds available farm stock.', 'চাহিদার পরিমাণ মজুদ ফসলের চেয়ে বেশি।'), 'error');
       return;
     }
+
+    const totalAmount = effectiveQty * (selectedCropToBuy.pricePerKg || 0);
 
     setSubmittingPurchase(true);
     try {
@@ -191,13 +227,20 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
         items: [
           {
             productId: selectedCropToBuy.id,
-            quantityKg: purchaseQtyKg,
+            cropName: selectedCropToBuy.cropName,
+            banglaName: selectedCropToBuy.banglaName,
+            quantityKg: purchaseUnit === 'kg' ? numKg : (numDozen * 12),
+            quantityDozen: purchaseUnit === 'dozen' ? numDozen : undefined,
+            unit: purchaseUnit,
+            unitPrice: selectedCropToBuy.pricePerKg,
+            subtotal: totalAmount,
           },
         ],
+        totalBDT: totalAmount,
         paymentMethod: 'Bank Transfer / Arat Escrow',
         deliveryAddress: deliveryHub,
         district: selectedCropToBuy.district,
-        notes: `Wholesale procurement contract by ${currentUser?.businessName || currentUser?.name || 'Wholesaler'}. Pick-up at farm gate.`,
+        notes: `Wholesale procurement contract by ${currentUser?.businessName || currentUser?.name || 'Wholesaler'}. Quantity: ${effectiveQty} ${purchaseUnit === 'dozen' ? 'dozen' : 'kg'}. Pick-up at farm gate.`,
       });
 
       if (res.success) {
@@ -276,40 +319,65 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
     }
   };
 
-  // Post Procurement Tender for Farmers (Farmer Intelligence)
+  // Post Demand Post for Farmers (Farmer-Only Intelligence)
   const handlePostTender = async (e: React.FormEvent) => {
     e.preventDefault();
+    const prodName = tenderForm.productName.trim();
+    if (!prodName) {
+      showToast(t('Please enter product name', 'অনুগ্রহ করে পণ্যের নাম লিখুন'), 'error');
+      return;
+    }
+    const qtyKg = Number(tenderForm.quantityKg) || 0;
+    const qtyDozen = Number(tenderForm.quantityDozen) || 0;
+    if (qtyKg <= 0 && qtyDozen <= 0) {
+      showToast(t('Please enter quantity in kg or dozen', 'অনুগ্রহ করে কেজি বা ডজন হিসেবে পরিমাণ লিখুন'), 'error');
+      return;
+    }
+
     setSubmittingTender(true);
     try {
-      await intelligenceApi.createWholesalerOffer({
+      const offerData: Partial<WholesalerOffer> = {
+        id: `demand-${Date.now()}`,
         wholesalerId: currentUser?.id || 'usr-wholesaler',
         wholesalerName: currentUser?.name || 'Wholesaler',
         wholesalerPhone: currentUser?.phone || '01711000000',
-        businessName: currentUser?.businessName || currentUser?.name || 'Wholesaler Arat',
-        cropName: tenderForm.cropName,
-        cropBangla: tenderForm.cropBangla,
-        quantityKgNeeded: tenderForm.quantityKgNeeded,
+        businessName: currentUser?.businessName || currentUser?.name || 'Wholesale Arat',
+        cropName: prodName,
+        cropBangla: prodName,
+        quantityKgNeeded: qtyKg,
+        quantityDozenNeeded: qtyDozen,
+        unit: qtyDozen > 0 && qtyKg <= 0 ? 'dozen' : 'kg',
         fulfilledKg: 0,
-        offeredPricePerKg: tenderForm.offeredPricePerKg,
+        offeredPricePerKg: Number(tenderForm.offeredPrice),
         district: tenderForm.district,
         upazila: tenderForm.upazila,
         location: tenderForm.location,
         deadline: tenderForm.deadline,
         urgent: tenderForm.urgent,
+        verified: true,
         notes: tenderForm.notes,
-      });
+        createdAt: new Date().toISOString(),
+      };
+
+      await intelligenceApi.createWholesalerOffer(offerData);
+      loadMyDemands();
 
       showToast(
         t(
-          'Procurement Tender published to Farmers successfully! It will now appear on all Farmers’ Intelligence screens.',
-          'কৃষকদের জন্য শস্য ক্রয়ের দরপত্র সফলভাবে প্রকাশিত হয়েছে! এটি কৃষকদের ড্যাশবোর্ডে প্রদর্শিত হবে।'
+          'Demand Post published to Farmers successfully! It is visible ONLY to Farmers so they can directly fulfill your order.',
+          'চাহিদা পোস্ট সফলভাবে প্রকাশিত হয়েছে! এটি শুধুমাত্র কৃষকদের ড্যাশবোর্ডে প্রদর্শিত হবে যাতে কৃষকরা সরাসরি আপনার কাছে ফসল বিক্রি ও সরবরাহ করতে পারেন।'
         ),
         'success'
       );
 
-      setActiveTab('procure_crops');
+      setTenderForm((f) => ({
+        ...f,
+        productName: '',
+        quantityKg: '',
+        quantityDozen: '',
+      }));
     } catch (err: any) {
-      showToast(err.message || 'Failed to publish tender', 'error');
+      showToast(err.message || 'Failed to publish demand post', 'error');
     } finally {
       setSubmittingTender(false);
     }
@@ -361,7 +429,7 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
               className="bg-amber-500 hover:bg-amber-400 text-stone-950 font-extrabold px-4 py-2.5 rounded-xl text-xs shadow-md flex items-center gap-1.5 transition-all"
             >
               <PlusCircle className="w-4 h-4" />
-              <span>{t('Post Procurement Tender', 'কৃষকদের জন্য শস্য চাহিদা পোস্ট')}</span>
+              <span>{t('Demand Post (Post to buy new crops)', 'চাহিদা পোস্ট (নতুন ফসল কেনার জন্য পোস্ট করুন)')}</span>
             </button>
             <button
               onClick={() => setShowAddBatchModal(true)}
@@ -485,7 +553,7 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
           }`}
         >
           <TrendingUp className="w-4 h-4" />
-          <span>{t('Post Procurement Tender for Farmers', 'কৃষকদের জন্য শস্য ক্রয়ের দরপত্র')}</span>
+          <span>{t('Demand Post (Post to buy new crops)', 'চাহিদা পোস্ট (নতুন ফসল কেনার জন্য পোস্ট করুন)')}</span>
         </button>
       </div>
 
@@ -494,36 +562,52 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
         <div className="space-y-4">
           {/* Filter Bar */}
           <div className="bg-white p-4 rounded-2xl border border-stone-200 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-2xs">
-            <div className="relative flex-1 w-full">
-              <Search className="w-4 h-4 text-stone-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={cropSearch}
-                onChange={(e) => setCropSearch(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && loadFarmerCrops()}
-                placeholder={t('Search potato, tomato, green chili from farmers...', 'কৃষকের আলু, টমেটো, মরিচ ইত্যাদি খুঁজুন...')}
-                className="w-full pl-9 pr-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs focus:outline-hidden focus:ring-2 focus:ring-blue-500 font-medium"
-              />
+            <div className="flex items-center gap-2 flex-1 w-full">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 text-stone-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={cropSearch}
+                  onChange={(e) => setCropSearch(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && loadFarmerCrops()}
+                  placeholder={t('Search potato, tomato, green chili from farmers...', 'কৃষকের আলু, টমেটো, মরিচ ইত্যাদি খুঁজুন...')}
+                  className="w-full pl-9 pr-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs focus:outline-hidden focus:ring-2 focus:ring-blue-500 font-medium"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={loadFarmerCrops}
+                className="bg-blue-600 hover:bg-blue-700 active:scale-95 text-white px-4 py-2 rounded-xl text-xs font-bold shrink-0 transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+              >
+                <Search className="w-3.5 h-3.5" />
+                <span>{t('Search / খুঁজুন', 'খুঁজুন')}</span>
+              </button>
             </div>
 
             <div className="flex items-center gap-2 w-full sm:w-auto">
-              <span className="text-xs font-bold text-stone-600 shrink-0">District:</span>
+              <span className="text-xs font-bold text-stone-600 shrink-0">{t('District:', 'জেলা:')}</span>
               <select
                 value={selectedDistrict}
-                onChange={(e) => setSelectedDistrict(e.target.value)}
-                className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs font-semibold text-stone-800"
+                onChange={(e) => {
+                  setSelectedDistrict(e.target.value);
+                  if (onDistrictChange && e.target.value !== 'All') {
+                    onDistrictChange(e.target.value);
+                  }
+                }}
+                className="bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs font-semibold text-stone-800 cursor-pointer"
               >
-                <option value="All">All Districts</option>
-                <option value="Bogura">Bogura</option>
-                <option value="Dhaka">Dhaka</option>
-                <option value="Rajshahi">Rajshahi</option>
-                <option value="Rangpur">Rangpur</option>
+                <option value="All">{t('All Districts', 'সকল জেলা')}</option>
+                {getSortedDistricts(language).map((loc) => (
+                  <option key={loc.district} value={loc.district}>
+                    {language === 'bn' ? `${loc.districtBn} (${loc.district})` : `${loc.district} (${loc.districtBn})`}
+                  </option>
+                ))}
               </select>
               <button
                 onClick={loadFarmerCrops}
-                className="bg-stone-900 text-white px-3 py-2 rounded-xl text-xs font-bold shrink-0 hover:bg-stone-800"
+                className="bg-stone-900 text-white px-3 py-2 rounded-xl text-xs font-bold shrink-0 hover:bg-stone-800 cursor-pointer"
               >
-                Filter
+                {t('Filter', 'ফিল্টার')}
               </button>
             </div>
           </div>
@@ -555,6 +639,7 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
                   <img
                     src={crop.imageUrl}
                     alt={crop.cropName}
+                    onError={handleImageError}
                     className="w-full h-full object-cover"
                   />
                   <div className="absolute top-2 left-2 flex gap-1">
@@ -651,6 +736,7 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
                   <img
                     src={batch.imageUrl}
                     alt={batch.cropName}
+                    onError={handleImageError}
                     className="w-full h-full object-cover"
                   />
                   <div className="absolute top-2 left-2 flex gap-1">
@@ -814,183 +900,248 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
         </div>
       )}
 
-      {/* ─── TAB 4: POST PROCUREMENT TENDER FOR FARMERS ─────────────────────────── */}
+      {/* ─── TAB 4: DEMAND POST FOR FARMERS ─────────────────────────────────────── */}
       {activeTab === 'post_tender' && (
-        <div className="bg-white rounded-3xl border border-stone-200 p-6 sm:p-7 shadow-xs max-w-2xl mx-auto space-y-4">
-          <div className="border-b border-stone-100 pb-3">
-            <h3 className="font-extrabold text-stone-900 text-base">
-              {t('Post Crop Procurement Tender for Farmers', 'কৃষকদের জন্য শস্য ক্রয়ের উন্মুক্ত দরপত্র')}
-            </h3>
-            <p className="text-xs text-stone-500 mt-0.5">
-              {t(
-                'This tender will appear directly on local farmers’ dashboards under Verified Wholesaler Bids.',
-                'এই উন্মুক্ত দরপত্রটি স্থানীয় কৃষকদের ড্যাশবোর্ডে যাচাইকৃত পাইকারি চাহিদার তালিকায় সরাসরি প্রদর্শিত হবে।'
-              )}
-            </p>
-          </div>
-
-          <form onSubmit={handlePostTender} className="space-y-4 text-xs">
-            <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-6 max-w-3xl mx-auto">
+          <div className="bg-white rounded-3xl border border-stone-200 p-6 sm:p-7 shadow-xs space-y-4">
+            <div className="border-b border-stone-100 pb-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
               <div>
-                <label className="block font-bold text-stone-700 mb-1">
-                  {t('Crop Needed (English)', 'প্রয়োজনীয় শস্য (ইংরেজি)')}
-                </label>
-                <input
-                  type="text"
-                  value={tenderForm.cropName}
-                  onChange={(e) => setTenderForm((f) => ({ ...f, cropName: e.target.value }))}
-                  placeholder={t('e.g. Hybrid Tomatoes', 'যেমন: Hybrid Tomatoes')}
-                  className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl font-medium focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
-                  required
-                />
+                <h3 className="font-extrabold text-stone-900 text-base">
+                  {t('Demand Post (Post to buy new crops)', 'চাহিদা পোস্ট (নতুন ফসল কেনার জন্য পোস্ট করুন)')}
+                </h3>
+                <p className="text-xs text-stone-500 mt-0.5">
+                  {t(
+                    'This demand post is visible ONLY to Farmers so they can directly sell/fulfill your order.',
+                    'এই চাহিদা পোস্টটি শুধুমাত্র কৃষকদের ড্যাশবোর্ডে প্রদর্শিত হবে যাতে কৃষকরা সরাসরি আপনার কাছে ফসল বিক্রি ও সরবরাহ করতে পারেন।'
+                  )}
+                </p>
               </div>
-              <div>
-                <label className="block font-bold text-stone-700 mb-1">
-                  {t('Crop Needed (Bangla)', 'প্রয়োজনীয় শস্য (বাংলা)')}
-                </label>
-                <input
-                  type="text"
-                  value={tenderForm.cropBangla}
-                  onChange={(e) => setTenderForm((f) => ({ ...f, cropBangla: e.target.value }))}
-                  placeholder={t('e.g. হাইব্রিড টমেটো', 'যেমন: হাইব্রিড টমেটো')}
-                  className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl font-medium focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
-                  required
-                />
-              </div>
+              <span className="bg-amber-100 text-amber-900 border border-amber-300 px-2.5 py-1 rounded-full text-[11px] font-extrabold shrink-0">
+                🔒 {t('Farmer-Exclusive Visibility', 'শুধুমাত্র কৃষকদের জন্য দৃশ্যমান')}
+              </span>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <form onSubmit={handlePostTender} className="space-y-4 text-xs">
+              {/* Product Name (পণ্যের নাম) */}
               <div>
                 <label className="block font-bold text-stone-700 mb-1">
-                  {t('Target Quantity Needed (kg)', 'প্রয়োজনীয় মোট পরিমাণ (কেজি)')}
+                  {t('Product Name / পণ্যের নাম *', 'পণ্যের নাম *')}
                 </label>
                 <input
-                  type="number"
-                  value={tenderForm.quantityKgNeeded}
-                  onChange={(e) =>
-                    setTenderForm((f) => ({ ...f, quantityKgNeeded: Number(e.target.value) }))
-                  }
-                  placeholder={t('e.g. 3000', 'যেমন: ৩০০০')}
-                  className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl font-bold focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                  type="text"
+                  value={tenderForm.productName}
+                  onChange={(e) => setTenderForm((f) => ({ ...f, productName: e.target.value }))}
+                  placeholder={t('e.g. Tomato, Potato, Banana, Green Chili / যেমন: টমেটো, আলু, কলা, মরিচ...', 'যেমন: টমেটো, আলু, কলা, মরিচ...')}
+                  className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-300 rounded-xl font-medium focus:ring-2 focus:ring-blue-500 focus:outline-hidden text-sm"
                   required
                 />
               </div>
+
+              {/* Two non-mandatory side-by-side quantity inputs */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-stone-700 mb-1">
+                    {t('Quantity (kg) / পরিমাণ (কেজি)', 'পরিমাণ (কেজি)')}
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={tenderForm.quantityKg}
+                    onChange={(e) => {
+                      const val = e.target.value === '' ? '' : Math.max(0, Number(e.target.value));
+                      setTenderForm((f) => ({
+                        ...f,
+                        quantityKg: val,
+                        unit: val !== '' ? 'kg' : (f.quantityDozen !== '' ? 'dozen' : 'kg'),
+                      }));
+                    }}
+                    placeholder={t('e.g. 1000', 'যেমন: ১০০০')}
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl font-bold focus:ring-2 focus:ring-blue-500 focus:outline-hidden text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-stone-700 mb-1">
+                    {t('Quantity (Dozen) / পরিমাণ (ডজন)', 'পরিমাণ (ডজন)')}
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={tenderForm.quantityDozen}
+                    onChange={(e) => {
+                      const val = e.target.value === '' ? '' : Math.max(0, Number(e.target.value));
+                      setTenderForm((f) => ({
+                        ...f,
+                        quantityDozen: val,
+                        unit: val !== '' ? 'dozen' : (f.quantityKg !== '' ? 'kg' : 'dozen'),
+                      }));
+                    }}
+                    placeholder={t('e.g. 200', 'যেমন: ২০০')}
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl font-bold focus:ring-2 focus:ring-blue-500 focus:outline-hidden text-sm"
+                  />
+                </div>
+              </div>
+
               <div>
                 <label className="block font-bold text-stone-700 mb-1">
-                  {t('Offered Price to Farmer (৳/kg)', 'কৃষকদের জন্য প্রস্তাবিত দর (৳/কেজি)')}
+                  {t(
+                    `Offered Price to Farmer (৳/${tenderForm.unit === 'dozen' ? 'dozen' : 'kg'}) *`,
+                    `কৃষকদের জন্য প্রস্তাবিত দর (৳/${tenderForm.unit === 'dozen' ? 'ডজন' : 'কেজি'}) *`
+                  )}
                 </label>
                 <input
                   type="number"
-                  value={tenderForm.offeredPricePerKg}
+                  min="1"
+                  value={tenderForm.offeredPrice}
                   onChange={(e) =>
-                    setTenderForm((f) => ({ ...f, offeredPricePerKg: Number(e.target.value) }))
+                    setTenderForm((f) => ({ ...f, offeredPrice: Number(e.target.value) }))
                   }
-                  placeholder={t('e.g. 40', 'যেমন: ৪০')}
+                  placeholder="৪০"
                   className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl font-black text-emerald-700 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
                   required
                 />
               </div>
-            </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block font-bold text-stone-700 mb-1">
-                  {t('Procurement District', 'সংগ্রহের জেলা')}
-                </label>
-                <select
-                  value={tenderForm.district}
-                  onChange={(e) => setTenderForm((f) => ({ ...f, district: e.target.value }))}
-                  className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl font-semibold focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
-                >
-                  <option value="Bogura">{t('Bogura', 'বগুড়া')}</option>
-                  <option value="Rajshahi">{t('Rajshahi', 'রাজশাহী')}</option>
-                  <option value="Rangpur">{t('Rangpur', 'রংপুর')}</option>
-                  <option value="Dinajpur">{t('Dinajpur', 'দিনাজপুর')}</option>
-                  <option value="Dhaka">{t('Dhaka', 'ঢাকা')}</option>
-                  <option value="Jashore">{t('Jashore', 'যশোর')}</option>
-                  <option value="Chattogram">{t('Chattogram', 'চট্টগ্রাম')}</option>
-                  <option value="Mymensingh">{t('Mymensingh', 'ময়মনসিংহ')}</option>
-                </select>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-stone-700 mb-1">
+                    {t('Procurement District', 'সংগ্রহের জেলা')}
+                  </label>
+                  <select
+                    value={tenderForm.district}
+                    onChange={(e) => setTenderForm((f) => ({ ...f, district: e.target.value }))}
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl font-semibold focus:ring-2 focus:ring-blue-500 focus:outline-hidden cursor-pointer"
+                  >
+                    {getSortedDistricts(language).map((loc) => (
+                      <option key={loc.district} value={loc.district}>
+                        {language === 'bn' ? `${loc.districtBn} (${loc.district})` : `${loc.district} (${loc.districtBn})`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-stone-700 mb-1">
+                    {t('Procurement Deadline', 'দরপত্রের সময়সীমা')}
+                  </label>
+                  <input
+                    type="text"
+                    value={tenderForm.deadline}
+                    onChange={(e) => setTenderForm((f) => ({ ...f, deadline: e.target.value }))}
+                    placeholder={t('e.g. Within 7 days', 'যেমন: ৭ দিনের মধ্যে')}
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                    required
+                  />
+                </div>
               </div>
+
               <div>
                 <label className="block font-bold text-stone-700 mb-1">
-                  {t('Procurement Deadline', 'দরপত্রের সময়সীমা')}
+                  {t('Pick-up Location / Delivery Point', 'পণ্য সংগ্রহের স্থান / ডেলিভারি পয়েন্ট')}
                 </label>
                 <input
                   type="text"
-                  value={tenderForm.deadline}
-                  onChange={(e) => setTenderForm((f) => ({ ...f, deadline: e.target.value }))}
-                  placeholder={t('e.g. Within 7 days', 'যেমন: ৭ দিনের মধ্যে')}
+                  value={tenderForm.location}
+                  onChange={(e) => setTenderForm((f) => ({ ...f, location: e.target.value }))}
+                  placeholder={t('e.g. Shibganj Wholesale Arat, Bogura', 'যেমন: শিবগঞ্জ পাইকারি আড়ত, বগুড়া')}
                   className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
                   required
                 />
               </div>
+
+              <div>
+                <label className="block font-bold text-stone-700 mb-1">
+                  {t('Notes / Terms', 'শর্তাবলী বা বিশেষ মন্তব্য')}
+                </label>
+                <textarea
+                  rows={2}
+                  value={tenderForm.notes}
+                  onChange={(e) => setTenderForm((f) => ({ ...f, notes: e.target.value }))}
+                  placeholder={t('e.g. Spot cash payment upon weighing and quality verification.', 'যেমন: ওজন ও মান যাচাই শেষে সাথে সাথে নগদ পরিশোধ।')}
+                  className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end">
+                <button
+                  type="submit"
+                  disabled={submittingTender}
+                  className="bg-amber-500 hover:bg-amber-400 text-stone-950 font-black px-6 py-2.5 rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer"
+                >
+                  {submittingTender ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>{t('Publishing Demand Post...', 'চাহিদা পোস্ট প্রকাশিত হচ্ছে...')}</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>{t('Publish Demand Post to Farmers', 'চাহিদা পোস্ট প্রকাশ করুন')}</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* List of Wholesaler's Own Published Demand Posts */}
+          <div className="bg-white rounded-3xl border border-stone-200 p-6 sm:p-7 shadow-xs space-y-4">
+            <div className="border-b border-stone-100 pb-3 flex items-center justify-between">
+              <div>
+                <h4 className="font-extrabold text-stone-900 text-sm">
+                  {t('My Published Demand Posts', 'আমার প্রকাশিত চাহিদা পোস্টসমূহ')}
+                </h4>
+                <p className="text-xs text-stone-500">
+                  {t('Track fulfillment status from local farmers.', 'কৃষকদের কাছ থেকে সরবরাহ ও অর্ডারের অগ্রগতি পর্যবেক্ষণ করুন।')}
+                </p>
+              </div>
+              <span className="text-xs font-bold text-stone-600 bg-stone-100 px-2.5 py-1 rounded-full">
+                {myPostedDemands.length} {t('Active Posts', 'টি সক্রিয় পোস্ট')}
+              </span>
             </div>
 
-            <div>
-              <label className="block font-bold text-stone-700 mb-1">
-                {t('Pick-up Location / Delivery Point', 'পণ্য সংগ্রহের স্থান / ডেলিভারি পয়েন্ট')}
-              </label>
-              <input
-                type="text"
-                value={tenderForm.location}
-                onChange={(e) => setTenderForm((f) => ({ ...f, location: e.target.value }))}
-                placeholder={t('e.g. Shibganj Wholesale Arat, Bogura', 'যেমন: শিবগঞ্জ পাইকারি আড়ত, বগুড়া')}
-                className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
-                required
-              />
-            </div>
+            {myPostedDemands.length === 0 ? (
+              <div className="text-center py-8 text-stone-400 text-xs">
+                {t('No demand posts created yet. Fill the form above to post your purchase demand.', 'এখনও কোনো চাহিদা পোস্ট করা হয়নি। উপরের ফর্ম পূরণ করে চাহিদা পোস্ট করুন।')}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                {myPostedDemands.map((demand) => (
+                  <div key={demand.id} className="p-4 rounded-2xl border border-stone-200 bg-stone-50/70 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <h5 className="font-black text-stone-900 text-sm">{demand.cropBangla || demand.cropName}</h5>
+                        <p className="text-[11px] text-stone-500">{demand.cropName}</p>
+                      </div>
+                      {demand.urgent && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-red-100 text-red-700">
+                          {t('Urgent', 'জরুরি')}
+                        </span>
+                      )}
+                    </div>
 
-            <div>
-              <label className="block font-bold text-stone-700 mb-1">
-                {t('Notes / Terms', 'শর্তাবলী বা বিশেষ মন্তব্য')}
-              </label>
-              <textarea
-                rows={2}
-                value={tenderForm.notes}
-                onChange={(e) => setTenderForm((f) => ({ ...f, notes: e.target.value }))}
-                placeholder={t('e.g. Spot cash payment upon weighing and quality verification.', 'যেমন: ওজন ও মান যাচাই শেষে সাথে সাথে নগদ পরিশোধ।')}
-                className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
-              />
-            </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-stone-200/60">
+                      <div>
+                        <span className="text-stone-500 block text-[10px]">{t('Quantity Needed', 'প্রয়োজনীয় পরিমাণ')}</span>
+                        <span className="font-black text-stone-800">
+                          {demand.quantityDozenNeeded ? `${demand.quantityDozenNeeded} ${t('dozen', 'ডজন')}` : `${demand.quantityKgNeeded} ${t('kg', 'কেজি')}`}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-stone-500 block text-[10px]">{t('Offered Price', 'প্রস্তাবিত দর')}</span>
+                        <span className="font-black text-emerald-700">
+                          ৳{demand.offeredPricePerKg} / {demand.unit === 'dozen' ? t('dozen', 'ডজন') : t('kg', 'কেজি')}
+                        </span>
+                      </div>
+                    </div>
 
-            <label className="flex items-center gap-2 cursor-pointer pt-1 font-semibold text-stone-700">
-              <input
-                type="checkbox"
-                checked={tenderForm.urgent}
-                onChange={(e) => setTenderForm((f) => ({ ...f, urgent: e.target.checked }))}
-                className="w-4 h-4 text-amber-600 rounded-sm"
-              />
-              <span>{t('Mark as Urgent Tender (Requires Fast Dispatch)', 'জরুরি উন্মুক্ত দরপত্র (দ্রুত সংগ্রহ প্রয়োজন)')}</span>
-            </label>
-
-            <div className="pt-2 flex justify-end gap-2 border-t border-stone-100">
-              <button
-                type="button"
-                onClick={() => setActiveTab('procure_crops')}
-                className="px-4 py-2 font-bold text-stone-600 hover:bg-stone-100 rounded-xl transition-colors cursor-pointer"
-              >
-                {t('Cancel', 'বাতিল')}
-              </button>
-              <button
-                type="submit"
-                disabled={submittingTender}
-                className="bg-blue-600 hover:bg-blue-700 disabled:bg-stone-400 text-white font-extrabold px-6 py-2 rounded-xl shadow-md flex items-center gap-2 transition-all cursor-pointer"
-              >
-                {submittingTender ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>{t('Publishing Tender...', 'দরপত্র প্রকাশ করা হচ্ছে...')}</span>
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>{t('Publish Tender to Farmers', 'কৃষকদের জন্য উন্মুক্ত দরপত্র প্রকাশ করুন')}</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </form>
+                    <div className="text-[11px] text-stone-500 pt-1 flex items-center justify-between">
+                      <span>📍 {demand.location}</span>
+                      <span className="font-semibold text-blue-700">{demand.deadline}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -1023,32 +1174,65 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
                 </p>
                 <div className="flex justify-between font-bold text-stone-800 pt-1">
                   <span>Farm Gate Price:</span>
-                  <span className="text-emerald-700 text-sm">৳{selectedCropToBuy.pricePerKg}/kg</span>
+                  <span className="text-emerald-700 text-sm font-mono">
+                    ৳{selectedCropToBuy.pricePerKg} / {purchaseUnit === 'dozen' ? t('dozen', 'ডজন') : t('kg', 'কেজি')}
+                  </span>
                 </div>
                 <div className="flex justify-between text-stone-500">
                   <span>Available Batch:</span>
-                  <span>{selectedCropToBuy.availableKg} kg</span>
+                  <span>
+                    {selectedCropToBuy.availableKg} {purchaseUnit === 'dozen' ? t('dozen', 'ডজন') : t('kg', 'কেজি')}
+                  </span>
+                </div>
+              </div>
+
+              {/* Two side-by-side optional quantity inputs without * */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-stone-700 mb-1">
+                    {t('Quantity (kg) / পরিমাণ (কেজি)', 'পরিমাণ (কেজি)')}
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={purchaseQtyKg}
+                    onChange={(e) => {
+                      const val = e.target.value === '' ? '' : Math.max(0, Number(e.target.value));
+                      setPurchaseQtyKg(val);
+                      if (val !== '') {
+                        setPurchaseQtyDozen('');
+                        setPurchaseUnit('kg');
+                      }
+                    }}
+                    placeholder={t('e.g. 100', 'যেমন: ১০০')}
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl font-black text-stone-900 text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-stone-700 mb-1">
+                    {t('Quantity (Dozen) / পরিমাণ (ডজন)', 'পরিমাণ (ডজন)')}
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={purchaseQtyDozen}
+                    onChange={(e) => {
+                      const val = e.target.value === '' ? '' : Math.max(0, Number(e.target.value));
+                      setPurchaseQtyDozen(val);
+                      if (val !== '') {
+                        setPurchaseQtyKg('');
+                        setPurchaseUnit('dozen');
+                      }
+                    }}
+                    placeholder={t('e.g. 20', 'যেমন: ২০')}
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl font-black text-stone-900 text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                  />
                 </div>
               </div>
 
               <div>
                 <label className="block font-bold text-stone-700 mb-1">
-                  Quantity to Purchase (kg) *
-                </label>
-                <input
-                  type="number"
-                  min={selectedCropToBuy.minOrderKg || 50}
-                  max={selectedCropToBuy.availableKg}
-                  value={purchaseQtyKg}
-                  onChange={(e) => setPurchaseQtyKg(Number(e.target.value))}
-                  className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl font-black text-stone-900 text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-stone-700 mb-1">
-                  Wholesaler Receiving Hub / Arat Address *
+                  {t('Wholesaler Receiving Hub / Arat Address *', 'পাইকারের আড়ত / মোকামের ঠিকানা *')}
                 </label>
                 <input
                   type="text"
@@ -1060,9 +1244,9 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
               </div>
 
               <div className="p-3.5 bg-blue-50 rounded-2xl border border-blue-200 flex justify-between items-center font-bold text-blue-900">
-                <span>Total Wholesale Amount:</span>
-                <span className="text-lg font-black text-blue-700">
-                  ৳{(purchaseQtyKg * selectedCropToBuy.pricePerKg).toLocaleString()}
+                <span>{t('Total Wholesale Amount:', 'সর্বমোট পাইকারি মূল্য:')}</span>
+                <span className="text-lg font-black text-blue-700 font-mono">
+                  ৳{(((purchaseUnit === 'dozen' ? (Number(purchaseQtyDozen) || 0) : (Number(purchaseQtyKg) || 0))) * selectedCropToBuy.pricePerKg).toLocaleString()}
                 </span>
               </div>
 

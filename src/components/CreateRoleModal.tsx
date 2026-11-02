@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { User, Language, UserRole } from '../types';
 import { AuthStore } from '../data/store';
-import { BANGLADESH_LOCATIONS } from '../data/mockData';
+import { BANGLADESH_LOCATIONS, getSortedDistricts } from '../data/mockData';
 import {
   X,
   Sprout,
@@ -189,9 +189,9 @@ export const CreateRoleModal: React.FC<CreateRoleModalProps> = ({
                 }}
                 className="w-full px-3 py-2 text-xs border border-stone-200 rounded-xl focus:ring-2 focus:ring-emerald-500 font-medium text-stone-800 bg-white"
               >
-                {BANGLADESH_LOCATIONS.map((loc) => (
+                {getSortedDistricts(language).map((loc) => (
                   <option key={loc.district} value={loc.district}>
-                    {loc.district} ({loc.districtBn})
+                    {language === 'bn' ? `${loc.districtBn} (${loc.district})` : `${loc.district} (${loc.districtBn})`}
                   </option>
                 ))}
               </select>
