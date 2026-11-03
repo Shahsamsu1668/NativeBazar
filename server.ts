@@ -507,18 +507,86 @@ async function requireAdmin(req: any, res: any): Promise<boolean> {
   return true;
 }
 
-// Health Check
-app.get('/api/health', (req, res) => {
+// ─── HEALTH, READINESS & LIVENESS PROBES ─────────────────────────────────────
+
+// Liveness Probe (Instant response, verifies event loop, zero DB I/O)
+app.get('/api/health/liveness', (_req, res) => {
   res.json({
     status: 'ok',
-    service: 'Amar Haat Backend (Persistent SQLite)',
-    aiEnabled: !!ai,
-    database: 'SQLite WAL Mode',
-    models: ['gemini-2.5-flash', 'gemini-3.1-flash-lite'],
-    roles: ['Farmer', 'Wholesaler', 'Retailer', 'Consumer'],
-    pilotDistrict: 'Bogura, Bangladesh',
+    uptime: process.uptime(),
     timestamp: new Date().toISOString(),
   });
+});
+
+// Primary Health Check (Verifies active Neon Cloud PostgreSQL connectivity)
+app.get('/api/health', async (_req, res) => {
+  const start = Date.now();
+  try {
+    await pool.query('SELECT 1');
+    const latencyMs = Date.now() - start;
+    return res.json({
+      status: 'ok',
+      service: 'NativeBazar Backend (Neon Cloud PostgreSQL)',
+      database: 'Neon PostgreSQL (Connected)',
+      latencyMs,
+      aiEnabled: !!ai,
+      roles: ['Farmer', 'Wholesaler', 'Retailer', 'Consumer', 'Supplier', 'Admin'],
+      pilotDistrict: 'Bogura, Bangladesh',
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    const latencyMs = Date.now() - start;
+    return res.status(503).json({
+      status: 'unhealthy',
+      service: 'NativeBazar Backend',
+      database: 'Neon PostgreSQL (Disconnected)',
+      error: err.message || 'Database connection error',
+      latencyMs,
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+// Readiness Probe (Verifies PostgreSQL connectivity AND core schema availability)
+app.get('/api/health/readiness', async (_req, res) => {
+  const start = Date.now();
+  try {
+    const tableRes = await pool.query(`
+      SELECT table_name
+      FROM information_schema.tables
+      WHERE table_schema = 'public'
+        AND table_name IN ('users', 'sessions', 'products', 'orders', 'order_items')
+    `);
+    const tablesReady = tableRes.rows.map((r: any) => r.table_name);
+    const hasCoreAuth = tablesReady.includes('users') && tablesReady.includes('sessions');
+
+    if (!hasCoreAuth) {
+      return res.status(503).json({
+        status: 'not_ready',
+        database: 'connected',
+        error: 'Essential authentication tables missing in Neon PostgreSQL',
+        tablesReady,
+        latencyMs: Date.now() - start,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    return res.json({
+      status: 'ready',
+      database: 'connected',
+      tablesReady,
+      latencyMs: Date.now() - start,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    return res.status(503).json({
+      status: 'not_ready',
+      database: 'disconnected',
+      error: err.message || 'Readiness probe failed',
+      latencyMs: Date.now() - start,
+      timestamp: new Date().toISOString(),
+    });
+  }
 });
 
 // ─── AUTHENTICATION ENDPOINTS (NO DEMO ACCOUNTS) ─────────────────────────────
@@ -1775,20 +1843,46 @@ app.get('/api/farmer/intelligence', async (req, res) => {
   }
 });
 
-// Admin Metrics & System Overview
+// Admin Metrics & System Overview (Neon PostgreSQL authoritative)
 app.get('/api/admin/metrics', async (req, res) => {
   try {
     if (!await requireAdmin(req, res)) return;
-    const userCounts = db.prepare('SELECT role, COUNT(*) as count FROM users GROUP BY role').all() as any[];
-    const productCounts = db.prepare('SELECT target_role, COUNT(*) as count, SUM(available_kg) as total_kg FROM products GROUP BY target_role').all() as any[];
-    const orderStats = db.prepare('SELECT COUNT(*) as total_orders, SUM(total_bdt) as total_volume FROM orders').get() as any;
-    const recentAudit = db.prepare('SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 20').all();
+
+    let userCounts: any[] = [];
+    let productCounts: any[] = [];
+    let totalOrders = 0;
+    let totalVolumeBDT = 0;
+    let recentAudit: any[] = [];
+
+    try {
+      const [uRes, pRes, oRes, aRes] = await Promise.all([
+        pool.query('SELECT role, COUNT(*)::int as count FROM users GROUP BY role'),
+        pool.query('SELECT target_role, COUNT(*)::int as count, COALESCE(SUM(available_qty), 0)::numeric as total_kg FROM products GROUP BY target_role'),
+        pool.query('SELECT COUNT(*)::int as total_orders, COALESCE(SUM(total_bdt), 0)::numeric as total_volume FROM orders'),
+        pool.query('SELECT id, order_id, type, amount, actor_role, actor_name, description, created_at FROM trade_audit_logs ORDER BY created_at DESC LIMIT 20'),
+      ]);
+
+      userCounts = uRes.rows;
+      productCounts = pRes.rows.map((r: any) => ({ ...r, total_kg: parseFloat(r.total_kg) || 0 }));
+      const orderRow = oRes.rows[0];
+      totalOrders = orderRow?.total_orders || 0;
+      totalVolumeBDT = parseFloat(orderRow?.total_volume) || 0;
+      recentAudit = aRes.rows;
+    } catch (neonErr: any) {
+      console.warn('[Admin Metrics] Notice: querying Neon failed, falling back to local store:', neonErr.message);
+      userCounts = db.prepare('SELECT role, COUNT(*) as count FROM users GROUP BY role').all() as any[];
+      productCounts = db.prepare('SELECT target_role, COUNT(*) as count, SUM(available_kg) as total_kg FROM products GROUP BY target_role').all() as any[];
+      const orderStats = db.prepare('SELECT COUNT(*) as total_orders, SUM(total_bdt) as total_volume FROM orders').get() as any;
+      recentAudit = db.prepare('SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 20').all();
+      totalOrders = orderStats?.total_orders || 0;
+      totalVolumeBDT = orderStats?.total_volume || 0;
+    }
 
     return res.json({
       userCounts,
       productCounts,
-      totalOrders: orderStats?.total_orders || 0,
-      totalVolumeBDT: orderStats?.total_volume || 0,
+      totalOrders,
+      totalVolumeBDT,
       auditLogs: recentAudit,
       timestamp: new Date().toISOString(),
     });
@@ -2099,23 +2193,53 @@ app.put('/api/users/profile', requireAuth, async (req: AuthenticatedRequest, res
   return res.json({ success: true, user: safeUser });
 });
 
-// ─── USER DIRECTORY REST API ─────────────────────────────────────────────────
+// ─── USER DIRECTORY REST API (NEON POSTGRESQL AUTHORITATIVE) ────────────────
 // Returns all eligible users for the cross-role communication directory.
-// Strips sensitive fields (passwordHash, sessionToken, securityPin) before sending.
-app.get('/api/users', (req, res) => {
+// Authoritatively queries Neon Cloud PostgreSQL in production.
+// Strips sensitive fields (passwordHash, sessionToken, securityPin, etc.) before sending.
+app.get('/api/users', async (req, res) => {
   try {
     const { excludeId, viewerRole, role, district, search } = req.query;
 
-    const sqliteRows = db.prepare('SELECT id, role, name, name_bn as nameBn, phone, email, district, upazila, verified, farm_size_acres as farmSizeAcres, primary_crops as primaryCrops, business_name as businessName, business_type as businessType, shop_name as shopName, license_number as licenseNumber FROM users').all() as any[];
-    const sqliteUsers = sqliteRows.map((u: any) => ({
-      ...u,
-      primaryCrops: u.primaryCrops ? (typeof u.primaryCrops === 'string' ? JSON.parse(u.primaryCrops) : u.primaryCrops) : undefined,
-    }));
+    let neonUsers: any[] = [];
+    try {
+      const neonRes = await pool.query(`
+        SELECT id, role, name, name_bn AS "nameBn", phone, email, district, upazila, verified,
+               farm_size_acres AS "farmSizeAcres", primary_crops AS "primaryCrops",
+               business_name AS "businessName", business_type AS "businessType",
+               shop_name AS "shopName", license_number AS "licenseNumber",
+               trade_address AS "tradeAddress", delivery_address AS "deliveryAddress",
+               created_at AS "createdAt"
+        FROM users
+        ORDER BY created_at DESC
+      `);
 
-    const jsonUsers = jsonDb.getUsers();
+      neonUsers = neonRes.rows.map((u: any) => ({
+        ...u,
+        primaryCrops: u.primaryCrops
+          ? (typeof u.primaryCrops === 'string' ? JSON.parse(u.primaryCrops) : u.primaryCrops)
+          : undefined,
+        verified: Boolean(u.verified),
+      }));
+    } catch (neonErr: any) {
+      console.warn('[Directory] Notice: querying Neon users failed, falling back to local store:', neonErr.message);
+    }
+
     const userMap = new Map<string, any>();
-    jsonUsers.forEach((u: any) => userMap.set(u.id, u));
-    sqliteUsers.forEach((u: any) => userMap.set(u.id, { ...userMap.get(u.id), ...u }));
+
+    // 1. Seed fallback local users if in dev/offline
+    try {
+      const jsonUsers = jsonDb.getUsers();
+      jsonUsers.forEach((u: any) => userMap.set(u.id, u));
+      const sqliteRows = db.prepare('SELECT id, role, name, name_bn as nameBn, phone, email, district, upazila, verified, farm_size_acres as farmSizeAcres, primary_crops as primaryCrops, business_name as businessName, business_type as businessType, shop_name as shopName, license_number as licenseNumber FROM users').all() as any[];
+      sqliteRows.forEach((u: any) => {
+        const primaryCrops = u.primaryCrops ? (typeof u.primaryCrops === 'string' ? JSON.parse(u.primaryCrops) : u.primaryCrops) : undefined;
+        userMap.set(u.id, { ...userMap.get(u.id), ...u, primaryCrops });
+      });
+    } catch {}
+
+    // 2. Authoritative Neon users take absolute precedence
+    neonUsers.forEach((u: any) => userMap.set(u.id, { ...userMap.get(u.id), ...u }));
 
     const dummyIds = new Set([
       'f-1', 'f-2', 'b-1', 'b-2', 's-1', 'c-1', 'a-1', 'e-1', 'e-2', 'e-3', 'e-4',
@@ -2154,8 +2278,8 @@ app.get('/api/users', (req, res) => {
       if (u.role === 'admin') return false;
       // Filter out all demo / dummy users
       if (dummyIds.has(u.id)) return false;
-      if (u.phone && dummyPhones.has(u.phone.replace(/\D/g, ''))) return false;
-      if (u.email && dummyEmails.has(u.email.toLowerCase())) return false;
+      if (u.phone && dummyPhones.has(String(u.phone).replace(/\D/g, ''))) return false;
+      if (u.email && dummyEmails.has(String(u.email).toLowerCase())) return false;
       if (u.isDemo || u.isMock || u.isDummy) return false;
       // Exclude the requesting user themselves
       if (excludeId && u.id === String(excludeId)) return false;
@@ -2191,8 +2315,8 @@ app.get('/api/users', (req, res) => {
       const q = String(search).toLowerCase().trim();
       users = users.filter((u: any) => {
         if (u.name && u.name.toLowerCase().includes(q)) return true;
-        if (u.nameBn && u.nameBn.includes(q)) return true;
-        if (u.phone && u.phone.includes(q)) return true;
+        if (u.nameBn && String(u.nameBn).includes(q)) return true;
+        if (u.phone && String(u.phone).includes(q)) return true;
         if (u.district && u.district.toLowerCase().includes(q)) return true;
         if (u.businessName && u.businessName.toLowerCase().includes(q)) return true;
         if (u.shopName && u.shopName.toLowerCase().includes(q)) return true;
@@ -2204,9 +2328,19 @@ app.get('/api/users', (req, res) => {
       });
     }
 
-    // Strip sensitive fields
+    // Strictly strip sensitive and private authentication fields
     const safeUsers = users.map((u: any) => {
-      const { passwordHash: _, password_hash: __, sessionToken: ___, securityPin: ____, ...safe } = u;
+      const {
+        passwordHash: _1,
+        password_hash: _2,
+        password_algo: _3,
+        sessionToken: _4,
+        securityPin: _5,
+        security_pin: _6,
+        two_factor_enabled: _7,
+        twoFactorEnabled: _8,
+        ...safe
+      } = u;
       return {
         ...safe,
         phone: safe.phone ? `****${String(safe.phone).slice(-4)}` : '',
@@ -2383,18 +2517,79 @@ app.delete('/api/crops/:id', requireAuth, async (req: AuthenticatedRequest, res)
   }
 });
 
-// ─── SUPPLIER PRODUCTS REST APIS ─────────────────────────────────────────────
-app.get('/api/supplier-products', (req, res) => {
+// ─── SUPPLIER PRODUCTS REST APIS (NEON POSTGRESQL AUTHORITATIVE) ─────────────
+
+function formatSupplierProductRow(r: any) {
+  let suitableCrops: string[] = ['All crops'];
+  try {
+    if (r.suitable_crops) {
+      suitableCrops = typeof r.suitable_crops === 'string' ? JSON.parse(r.suitable_crops) : r.suitable_crops;
+    }
+  } catch {}
+
+  return {
+    id: r.id,
+    supplierId: r.supplier_id || r.supplierId || undefined,
+    supplierName: r.supplier_name || r.supplierName || 'Certified Organic Depot',
+    shopName: r.shop_name || r.shopName || 'অর্গানিক বায়ো এগ্রো বিতান',
+    category: r.category,
+    name: r.name,
+    banglaName: r.bangla_name || r.banglaName || r.name,
+    brand: r.brand || 'Organic Bio-Agro',
+    unitPriceBDT: parseFloat(r.unit_price_bdt !== undefined ? r.unit_price_bdt : r.unitPriceBDT) || 0,
+    unit: r.unit || 'kg',
+    inStock: r.in_stock !== undefined ? Boolean(r.in_stock) : (r.inStock !== undefined ? Boolean(r.inStock) : true),
+    distanceKm: parseFloat(r.delivery_radius_km !== undefined ? r.delivery_radius_km : r.deliveryRadiusKm) || 10,
+    rating: 4.8,
+    phone: r.phone || '',
+    suitableCrops,
+    stockQty: parseFloat(r.stock_qty !== undefined ? r.stock_qty : r.stockQty) || 100,
+    description: r.description || '',
+    organicCertified: Boolean(r.organic_certified !== undefined ? r.organic_certified : r.organicCertified),
+    certificationNumber: r.certification_number || r.certificationNumber || undefined,
+    deliveryRadiusKm: parseFloat(r.delivery_radius_km !== undefined ? r.delivery_radius_km : r.deliveryRadiusKm) || 10,
+    createdAt: r.created_at || r.createdAt,
+    updatedAt: r.updated_at || r.updatedAt,
+  };
+}
+
+app.get('/api/supplier-products', async (req, res) => {
   const { supplierId, category, organicOnly } = req.query;
-  const products = jsonDb.getSupplierProducts({
-    supplierId: supplierId ? String(supplierId) : undefined,
-    category: category ? String(category) : undefined,
-    organicOnly: organicOnly === 'true',
-  });
-  res.json({ success: true, products });
+
+  try {
+    let query = 'SELECT * FROM supplier_products WHERE 1=1';
+    const params: any[] = [];
+    let idx = 1;
+
+    if (supplierId) {
+      query += ` AND supplier_id = $${idx++}`;
+      params.push(String(supplierId));
+    }
+    if (category && category !== 'All' && category !== 'all') {
+      query += ` AND category = $${idx++}`;
+      params.push(String(category));
+    }
+    if (organicOnly === 'true') {
+      query += ' AND organic_certified = true';
+    }
+    query += ' ORDER BY created_at DESC';
+
+    const result = await pool.query(query, params);
+    const products = result.rows.map(formatSupplierProductRow);
+    return res.json({ success: true, products });
+  } catch (neonErr: any) {
+    // Graceful fallback to local JSON DB during dev / offline
+    console.warn('[Supplier] Notice: Neon query failed, falling back to local store:', neonErr.message);
+    const products = jsonDb.getSupplierProducts({
+      supplierId: supplierId ? String(supplierId) : undefined,
+      category: category ? String(category) : undefined,
+      organicOnly: organicOnly === 'true',
+    });
+    return res.json({ success: true, products });
+  }
 });
 
-app.post('/api/supplier-products', requireAuth, (req: AuthenticatedRequest, res) => {
+app.post('/api/supplier-products', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
     const authUser = req.user!;
     if (authUser.role !== 'supplier' && authUser.role !== 'admin') {
@@ -2432,54 +2627,199 @@ app.post('/api/supplier-products', requireAuth, (req: AuthenticatedRequest, res)
       });
     }
 
-    const created = jsonDb.addSupplierProduct({
-      id: `sup-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      supplierId,
-      supplierName: supplierName || 'Certified Organic Depot',
-      shopName: shopName || 'অর্গানিক বায়ো এগ্রো বিতান',
-      category,
-      name,
-      banglaName: banglaName || name,
-      brand,
-      unitPriceBDT: Number(unitPriceBDT),
-      unit,
-      inStock: true,
-      stockQty: Number(stockQty),
-      phone: contactPhone,
-      suitableCrops,
-      description,
-      organicCertified: !!organicCertified,
-      certificationNumber,
-      deliveryRadiusKm: Number(deliveryRadiusKm),
-      createdAt: new Date().toISOString(),
-    });
+    const prodId = `sup-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const suitableCropsJson = JSON.stringify(Array.isArray(suitableCrops) ? suitableCrops : [suitableCrops]);
 
-    return res.status(201).json({ success: true, product: created });
+    try {
+      const ins = await pool.query(`
+        INSERT INTO supplier_products (
+          id, supplier_id, supplier_name, shop_name, category, name, bangla_name,
+          brand, unit_price_bdt, unit, in_stock, stock_qty, phone, suitable_crops,
+          description, organic_certified, certification_number, delivery_radius_km,
+          created_at, updated_at
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, $7,
+          $8, $9, $10, true, $11, $12, $13,
+          $14, $15, $16, $17,
+          NOW(), NOW()
+        ) RETURNING *
+      `, [
+        prodId,
+        supplierId,
+        supplierName || 'Certified Organic Depot',
+        shopName || 'অর্গানিক বায়ো এগ্রো বিতান',
+        category,
+        name,
+        banglaName || name,
+        brand,
+        Number(unitPriceBDT),
+        unit,
+        Number(stockQty),
+        contactPhone,
+        suitableCropsJson,
+        description,
+        Boolean(organicCertified),
+        certificationNumber || null,
+        Number(deliveryRadiusKm),
+      ]);
+
+      // Mirror to jsonDb for local continuity
+      try {
+        jsonDb.addSupplierProduct({
+          id: prodId,
+          supplierId,
+          supplierName: supplierName || 'Certified Organic Depot',
+          shopName: shopName || 'অর্গানিক বায়ো এগ্রো বিতান',
+          category,
+          name,
+          banglaName: banglaName || name,
+          brand,
+          unitPriceBDT: Number(unitPriceBDT),
+          unit,
+          inStock: true,
+          stockQty: Number(stockQty),
+          phone: contactPhone,
+          suitableCrops: Array.isArray(suitableCrops) ? suitableCrops : [suitableCrops],
+          description,
+          organicCertified: !!organicCertified,
+          certificationNumber,
+          deliveryRadiusKm: Number(deliveryRadiusKm),
+          createdAt: new Date().toISOString(),
+        });
+      } catch {}
+
+      return res.status(201).json({ success: true, product: formatSupplierProductRow(ins.rows[0]) });
+    } catch (neonErr: any) {
+      console.warn('[Supplier] Notice: Neon insert failed, falling back to local JSON store:', neonErr.message);
+      const created = jsonDb.addSupplierProduct({
+        id: prodId,
+        supplierId,
+        supplierName: supplierName || 'Certified Organic Depot',
+        shopName: shopName || 'অর্গানিক বায়ো এগ্রো বিতান',
+        category,
+        name,
+        banglaName: banglaName || name,
+        brand,
+        unitPriceBDT: Number(unitPriceBDT),
+        unit,
+        inStock: true,
+        stockQty: Number(stockQty),
+        phone: contactPhone,
+        suitableCrops: Array.isArray(suitableCrops) ? suitableCrops : [suitableCrops],
+        description,
+        organicCertified: !!organicCertified,
+        certificationNumber,
+        deliveryRadiusKm: Number(deliveryRadiusKm),
+        createdAt: new Date().toISOString(),
+      });
+      return res.status(201).json({ success: true, product: created });
+    }
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err.message });
   }
 });
 
-app.put('/api/supplier-products/:id', requireAuth, (req: AuthenticatedRequest, res) => {
-  const authUser = req.user!;
-  const existing = jsonDb.getSupplierProductById(req.params.id);
-  if (!existing) return res.status(404).json({ success: false, error: 'Product not found' });
-  if (existing.supplierId !== authUser.id && authUser.role !== 'admin') {
-    return res.status(403).json({ success: false, error: 'Forbidden: You cannot modify another supplier\'s product.' });
+app.put('/api/supplier-products/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const authUser = req.user!;
+    const { id } = req.params;
+
+    let existing: any = null;
+    try {
+      const existingRes = await pool.query('SELECT * FROM supplier_products WHERE id = $1', [id]);
+      if (existingRes.rows.length > 0) existing = existingRes.rows[0];
+    } catch {}
+
+    if (!existing) {
+      existing = jsonDb.getSupplierProductById(id);
+    }
+    if (!existing) return res.status(404).json({ success: false, error: 'Product not found' });
+
+    const existingSupplierId = existing.supplier_id || existing.supplierId;
+    if (existingSupplierId !== authUser.id && authUser.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Forbidden: You cannot modify another supplier\'s product.' });
+    }
+
+    const {
+      name, banglaName, category, brand, unitPriceBDT, unit, stockQty,
+      phone, description, organicCertified, inStock, certificationNumber, deliveryRadiusKm
+    } = req.body;
+
+    try {
+      const upd = await pool.query(`
+        UPDATE supplier_products
+        SET name = COALESCE($1, name),
+            bangla_name = COALESCE($2, bangla_name),
+            category = COALESCE($3, category),
+            brand = COALESCE($4, brand),
+            unit_price_bdt = COALESCE($5, unit_price_bdt),
+            unit = COALESCE($6, unit),
+            stock_qty = COALESCE($7, stock_qty),
+            phone = COALESCE($8, phone),
+            description = COALESCE($9, description),
+            organic_certified = COALESCE($10, organic_certified),
+            in_stock = COALESCE($11, in_stock),
+            certification_number = COALESCE($12, certification_number),
+            delivery_radius_km = COALESCE($13, delivery_radius_km),
+            updated_at = NOW()
+        WHERE id = $14
+        RETURNING *
+      `, [
+        name || null,
+        banglaName || null,
+        category || null,
+        brand || null,
+        unitPriceBDT !== undefined ? Number(unitPriceBDT) : null,
+        unit || null,
+        stockQty !== undefined ? Number(stockQty) : null,
+        phone || null,
+        description || null,
+        organicCertified !== undefined ? Boolean(organicCertified) : null,
+        inStock !== undefined ? Boolean(inStock) : null,
+        certificationNumber || null,
+        deliveryRadiusKm !== undefined ? Number(deliveryRadiusKm) : null,
+        id
+      ]);
+
+      try { jsonDb.updateSupplierProduct(id, req.body); } catch {}
+      return res.json({ success: true, product: formatSupplierProductRow(upd.rows[0]) });
+    } catch (neonErr: any) {
+      console.warn('[Supplier] Notice: Neon update failed, falling back to local JSON store:', neonErr.message);
+      const updated = jsonDb.updateSupplierProduct(id, req.body);
+      return res.json({ success: true, product: updated });
+    }
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
   }
-  const updated = jsonDb.updateSupplierProduct(req.params.id, req.body);
-  return res.json({ success: true, product: updated });
 });
 
-app.delete('/api/supplier-products/:id', requireAuth, (req: AuthenticatedRequest, res) => {
-  const authUser = req.user!;
-  const existing = jsonDb.getSupplierProductById(req.params.id);
-  if (!existing) return res.status(404).json({ success: false, error: 'Product not found' });
-  if (existing.supplierId !== authUser.id && authUser.role !== 'admin') {
-    return res.status(403).json({ success: false, error: 'Forbidden: You cannot delete another supplier\'s product.' });
+app.delete('/api/supplier-products/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const authUser = req.user!;
+    const { id } = req.params;
+
+    let existing: any = null;
+    try {
+      const existingRes = await pool.query('SELECT * FROM supplier_products WHERE id = $1', [id]);
+      if (existingRes.rows.length > 0) existing = existingRes.rows[0];
+    } catch {}
+
+    if (!existing) existing = jsonDb.getSupplierProductById(id);
+    if (!existing) return res.status(404).json({ success: false, error: 'Product not found' });
+
+    const existingSupplierId = existing.supplier_id || existing.supplierId;
+    if (existingSupplierId !== authUser.id && authUser.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Forbidden: You cannot delete another supplier\'s product.' });
+    }
+
+    try {
+      await pool.query('DELETE FROM supplier_products WHERE id = $1', [id]);
+    } catch {}
+    try { jsonDb.deleteSupplierProduct(id); } catch {}
+    return res.json({ success: true, message: 'Supplier product deleted' });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
   }
-  const deleted = jsonDb.deleteSupplierProduct(req.params.id);
-  return res.json({ success: true, message: 'Product deleted' });
 });
 
 // ─── NEON ORDERS & ORDER TRACKING REST APIS ─────────────────────────────────
