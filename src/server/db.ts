@@ -868,7 +868,7 @@ function seedInitialOrders() {
   // 1. Tier 1: Farmer -> Wholesaler (১ম স্তর: কৃষক → পাইকার)
   const order1Id = 'ORD-T1-889012';
   if (!db.prepare('SELECT id FROM orders WHERE id = ?').get(order1Id)) {
-  db.prepare(`
+    db.prepare(`
     INSERT INTO orders (
       id, order_type, buyer_id, buyer_name, buyer_phone, buyer_email, buyer_role,
       seller_id, seller_name, seller_phone, seller_role, total_bdt, payment_method,
@@ -876,28 +876,28 @@ function seedInitialOrders() {
       created_at, updated_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
-    order1Id, 'farmer_to_wholesaler', 'w-karwan-syndicate', 'Karwan Bazar Wholesale Arat Syndicate',
-    '01992233445', 'mojammel.arat@nativebazar.com', 'wholesaler',
-    'far-shibganj-1', 'Farmer Rafiqul Islam (Shibganj Hub)', '01712458920', 'farmer',
-    19000, 'Bank Transfer / Arat Escrow', 'Escrow Held', 'Confirmed',
-    'Mahasthangarh Mokam Bay #3, Shibganj', 'Bogura', 'TRK-BOG-101001',
-    'Tier 1 direct farm procurement contract for hybrid tomatoes.', pastIso1, pastIso1
-  );
+      order1Id, 'farmer_to_wholesaler', 'w-karwan-syndicate', 'Karwan Bazar Wholesale Arat Syndicate',
+      '01992233445', 'mojammel.arat@nativebazar.com', 'wholesaler',
+      'far-shibganj-1', 'Farmer Rafiqul Islam (Shibganj Hub)', '01712458920', 'farmer',
+      19000, 'Bank Transfer / Arat Escrow', 'Escrow Held', 'Confirmed',
+      'Mahasthangarh Mokam Bay #3, Shibganj', 'Bogura', 'TRK-BOG-101001',
+      'Tier 1 direct farm procurement contract for hybrid tomatoes.', pastIso1, pastIso1
+    );
 
-  db.prepare(`
+    db.prepare(`
     INSERT INTO order_items (id, order_id, product_id, crop_name, bangla_name, quantity_kg, unit_price, subtotal)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
-    'item-t1-001', order1Id, 'prod-far-301', 'Harvest Ready Hybrid Tomatoes',
-    'ক্ষেতের পাকা হাইব্রিড টমেটো (জমিতে প্রস্তুত)', 500, 38, 19000
-  );
+      'item-t1-001', order1Id, 'prod-far-301', 'Harvest Ready Hybrid Tomatoes',
+      'ক্ষেতের পাকা হাইব্রিড টমেটো (জমিতে প্রস্তুত)', 500, 38, 19000
+    );
   }
 
   // 2. Tier 2: Wholesaler -> Retailer (২য় স্তর: পাইকার → খুচরা)
   // Demo retailer "Jafor" purchasing wholesale lot from Arat
   const order2Id = 'ORD-T2-665241';
   if (!db.prepare('SELECT id FROM orders WHERE id = ?').get(order2Id)) {
-  db.prepare(`
+    db.prepare(`
     INSERT INTO orders (
       id, order_type, buyer_id, buyer_name, buyer_phone, buyer_email, buyer_role,
       seller_id, seller_name, seller_phone, seller_role, total_bdt, payment_method,
@@ -905,28 +905,28 @@ function seedInitialOrders() {
       created_at, updated_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
-    order2Id, 'wholesaler_to_retailer', 'usr-retailer-jafor', 'Jafor',
-    '01911334200', 'jafor.retailer@nativebazar.com', 'retailer',
-    'w-karwan-syndicate', 'Karwan Bazar Wholesale Arat Syndicate', '01992233445', 'wholesaler',
-    8400, 'Bank Transfer / Wholesale Credit', 'Escrow Held', 'Processing',
-    'Jaleswaritola Market Outlet #14, Bogura Sadar', 'Bogura', 'TRK-BOG-202002',
-    'Tier 2 wholesale procurement of sorted crate tomatoes by Jafor Retail.', pastIso2, pastIso2
-  );
+      order2Id, 'wholesaler_to_retailer', 'usr-retailer-jafor', 'Jafor',
+      '01911334200', 'jafor.retailer@nativebazar.com', 'retailer',
+      'w-karwan-syndicate', 'Karwan Bazar Wholesale Arat Syndicate', '01992233445', 'wholesaler',
+      8400, 'Bank Transfer / Wholesale Credit', 'Escrow Held', 'Processing',
+      'Jaleswaritola Market Outlet #14, Bogura Sadar', 'Bogura', 'TRK-BOG-202002',
+      'Tier 2 wholesale procurement of sorted crate tomatoes by Jafor Retail.', pastIso2, pastIso2
+    );
 
-  db.prepare(`
+    db.prepare(`
     INSERT INTO order_items (id, order_id, product_id, crop_name, bangla_name, quantity_kg, unit_price, subtotal)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
-    'item-t2-001', order2Id, 'prod-who-201', 'Bulk Hybrid Tomatoes (Crate Wholesale)',
-    'টমেটো পাইকারি ক্রেট (আড়ত)', 200, 42, 8400
-  );
+      'item-t2-001', order2Id, 'prod-who-201', 'Bulk Hybrid Tomatoes (Crate Wholesale)',
+      'টমেটো পাইকারি ক্রেট (আড়ত)', 200, 42, 8400
+    );
   }
 
   // 3. Tier 3: Retailer -> Consumer (৩য় স্তর: খুচরা → ভোক্তা)
   // Consumer purchasing from Jafor Retail
   const order3Id = 'ORD-T3-334992';
   if (!db.prepare('SELECT id FROM orders WHERE id = ?').get(order3Id)) {
-  db.prepare(`
+    db.prepare(`
     INSERT INTO orders (
       id, order_type, buyer_id, buyer_name, buyer_phone, buyer_email, buyer_role,
       seller_id, seller_name, seller_phone, seller_role, total_bdt, payment_method,
@@ -934,21 +934,21 @@ function seedInitialOrders() {
       created_at, updated_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
-    order3Id, 'retailer_to_consumer', 'usr-consumer-sumayya', 'Sumayya Islam',
-    '01518347099', 'sumayya.consumer@nativebazar.com', 'consumer',
-    'usr-retailer-jafor', 'Jafor', '01911334200', 'retailer',
-    260, 'Cash on Delivery', 'Pending', 'Delivered',
-    'House 14, Road 3, Jaleswaritola, Bogura Sadar', 'Bogura', 'TRK-BOG-303003',
-    'Tier 3 fast van delivery to doorstep. 100% formalin-free checked.', pastIso3, pastIso3
-  );
+      order3Id, 'retailer_to_consumer', 'usr-consumer-sumayya', 'Sumayya Islam',
+      '01518347099', 'sumayya.consumer@nativebazar.com', 'consumer',
+      'usr-retailer-jafor', 'Jafor', '01911334200', 'retailer',
+      260, 'Cash on Delivery', 'Pending', 'Delivered',
+      'House 14, Road 3, Jaleswaritola, Bogura Sadar', 'Bogura', 'TRK-BOG-303003',
+      'Tier 3 fast van delivery to doorstep. 100% formalin-free checked.', pastIso3, pastIso3
+    );
 
-  db.prepare(`
+    db.prepare(`
     INSERT INTO order_items (id, order_id, product_id, crop_name, bangla_name, quantity_kg, unit_price, subtotal)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
-    'item-t3-001', order3Id, 'prod-ret-101', 'Fresh Farm Table Tomatoes',
-    'তাজা হাইব্রিড পাকা টমেটো', 5, 52, 260
-  );
+      'item-t3-001', order3Id, 'prod-ret-101', 'Fresh Farm Table Tomatoes',
+      'তাজা হাইব্রিড পাকা টমেটো', 5, 52, 260
+    );
   }
 }
 
@@ -1148,10 +1148,7 @@ export function executeOrderTransaction(params: CreateOrderParams) {
       }
 
       if (prod.available_kg < item.quantityKg) {
-        // Replenish stock to satisfy order if lot existed
-        db.prepare('UPDATE products SET available_kg = available_kg + ? WHERE id = ?')
-          .run(item.quantityKg * 2, prod.id);
-        prod = getProductStmt.get(item.productId) as any;
+        throw new Error(`Insufficient stock for "${prod.crop_name}". Available: ${prod.available_kg} kg, Requested: ${item.quantityKg} kg.`);
       }
 
       const subtotal = prod.price_per_kg * item.quantityKg;
@@ -1311,3 +1308,4 @@ export function cancelOrderAndRestoreStock(orderId: string, actorName = 'User', 
 
 // Initialize on import
 initDatabase();
+

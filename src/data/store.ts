@@ -663,76 +663,13 @@ export const AuthStore = {
     return updated;
   },
 
-  verifyAdminCredentials(email: string, password: string): { success: boolean; user?: User; message?: string } {
-    const cleanEmail = (email || '').trim().toLowerCase();
-    const users = this.getUsers();
-    const admin = users.find(
-      (u) =>
-        u.role === 'admin' &&
-        ((u.email && u.email.toLowerCase() === cleanEmail) ||
-          (u.phone && u.phone.toLowerCase() === cleanEmail) ||
-          (cleanEmail.replace(/\D/g, '') && u.phone === cleanEmail.replace(/\D/g, '')))
-    );
-
-    if (!admin) {
-      this.addAuditLog({
-        timestamp: new Date().toISOString(),
-        phone: cleanEmail,
-        role: 'admin',
-        status: 'FAILED_PASSWORD',
-        ip: '192.168.1.10 (Bogura Admin Gateway)',
-        device: 'Web Admin Gate',
-        details: `Unauthorized admin login attempt: user "${email}" not found`,
-      });
-      return {
-        success: false,
-        message: 'No administrator account found with this email / ID.',
-      };
-    }
-
-    const computedHash = hashPassword(password);
-    const passwordValid = admin.password === password || admin.passwordHash === computedHash;
-
-    if (!passwordValid) {
-      this.addAuditLog({
-        timestamp: new Date().toISOString(),
-        phone: admin.phone,
-        role: 'admin',
-        status: 'FAILED_PASSWORD',
-        ip: '192.168.1.10 (Bogura Admin Gateway)',
-        device: 'Web Admin Gate',
-        details: `Admin password mismatch attempt for ${cleanEmail}`,
-      });
-      return {
-        success: false,
-        message: 'Invalid Admin password. Access denied.',
-      };
-    }
-
-    const sessionToken = `nb_sec_adm_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-    const sessionExpiresAt = new Date(Date.now() + 3600000).toISOString();
-    const safeAdmin: User = {
-      ...admin,
-      password: '***',
-      passwordHash: admin.passwordHash || computedHash,
-      sessionToken,
-      sessionExpiresAt,
-      lastLoginAt: new Date().toISOString(),
+  verifyAdminCredentials(_email: string, _password: string): { success: boolean; user?: User; message?: string } {
+    // Client-side admin verification is disabled for security.
+    // Admin authentication must be performed server-side via authApi.adminLogin (/api/auth/admin-login).
+    return {
+      success: false,
+      message: 'Client-side verification disabled. Use server-side admin authentication.',
     };
-
-    setItem(KEYS.CURRENT_USER, safeAdmin);
-
-    this.addAuditLog({
-      timestamp: new Date().toISOString(),
-      phone: admin.phone,
-      role: 'admin',
-      status: 'SUCCESS',
-      ip: '192.168.1.10 (Bogura Admin Gateway)',
-      device: 'Web Admin Gate',
-      details: 'Admin verified via email & password • Elevated root session granted',
-    });
-
-    return { success: true, user: safeAdmin };
   },
 };
 
@@ -1233,6 +1170,12 @@ export const ExpenseStore = {
 
   delete(id: string): void {
     setItem(KEYS.EXPENSE_LEDGER, this.getAll().filter(e => e.id !== id));
+  },
+
+  syncWithServer(serverEntries: ExpenseLedgerEntry[]): void {
+    if (Array.isArray(serverEntries)) {
+      setItem(KEYS.EXPENSE_LEDGER, serverEntries);
+    }
   },
 
   totalExpenses(farmerId?: string): number {

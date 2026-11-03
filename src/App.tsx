@@ -26,6 +26,7 @@ import {
   CallStore,
 } from './data/store';
 import { apiService } from './services/apiService';
+import { authApi } from './services/api';
 
 import { Header, toBanglaDistrict, toBanglaNumber } from './components/Header';
 import { AuthPage } from './components/AuthPage';
@@ -56,20 +57,14 @@ export default function App() {
 
   const [theme, setTheme] = useState<Theme>(() => ThemeStore.init());
 
-  const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    initializeStore();
-    return AuthStore.getCurrentUser();
-  });
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isAuthChecking, setIsAuthChecking] = useState<boolean>(true);
 
   const [language, setLanguage] = useState<Language>('bn');
 
   // Separate viewDistrict (filtering only) from currentUser.district (saved profile)
   // Initial state comes from the logged-in user's saved profile district (defaulting to 'Bogura')
-  const [viewDistrict, setViewDistrict] = useState<string>(() => {
-    initializeStore();
-    const user = AuthStore.getCurrentUser();
-    return user?.district || 'Bogura';
-  });
+  const [viewDistrict, setViewDistrict] = useState<string>('Bogura');
 
   // When currentUser changes (e.g. login, switch role), sync the filter to their profile district
   useEffect(() => {
@@ -77,6 +72,27 @@ export default function App() {
       setViewDistrict(currentUser.district);
     }
   }, [currentUser?.id, currentUser?.district]);
+
+  // Validate server session on startup across devices/reloads (server session is source of truth)
+  useEffect(() => {
+    authApi.getMe()
+      .then((res) => {
+        if (res && res.success && res.user) {
+          AuthStore.setCurrentUser(res.user);
+          setCurrentUser(res.user);
+        } else {
+          AuthStore.setCurrentUser(null);
+          setCurrentUser(null);
+        }
+      })
+      .catch(() => {
+        AuthStore.setCurrentUser(null);
+        setCurrentUser(null);
+      })
+      .finally(() => {
+        setIsAuthChecking(false);
+      });
+  }, []);
 
   const [activeView, setActiveView] = useState<ActiveView>('dashboard');
 
@@ -246,7 +262,7 @@ export default function App() {
     setRoleSwitchError('');
   };
 
-  const confirmRoleSwitch = () => {
+  const confirmRoleSwitch = async () => {
     if (!pendingRole || !currentUser) return;
     const identifier = currentUser.email || currentUser.phone || '';
     const targetUser = AuthStore.getRoleAccount(identifier, pendingRole);
@@ -260,46 +276,42 @@ export default function App() {
       return;
     }
 
-    const result = AuthStore.login(targetUser.email || targetUser.phone, roleSwitchPwd, undefined, pendingRole);
-    if (!result.success || !result.user) {
-      setRoleSwitchError(
-        result.locked
-          ? language === 'bn' ? 'অ্যাকাউন্ট সাময়িকভাবে লক হয়েছে।' : 'Account temporarily locked.'
-          : language === 'bn' ? 'পাসওয়ার্ড ভুল। আবার চেষ্টা করুন।' : 'Incorrect password. Try again.'
-      );
-      return;
-    }
+    try {
+      const result = await authApi.login({
+        identifier: targetUser.email || targetUser.phone,
+        password: roleSwitchPwd,
+        role: pendingRole,
+      });
 
-    const safeUser: User = {
-      ...result.user,
-      password: '***',
-      sessionToken: `nb_sec_${Date.now()}_switch`,
-      sessionExpiresAt: new Date(Date.now() + 43200000).toISOString(),
-    };
-    setCurrentUser(safeUser);
-    localStorage.setItem('nb_current_user', JSON.stringify(safeUser));
-    setPendingRole(null);
-    setRoleSwitchPwd('');
-    setRoleSwitchError('');
-    setViewedUser(null);
-    setActiveView('dashboard');
-    showToast(
-      language === 'bn'
-        ? `ভূমিকা পরিবর্তন সফল: ${safeUser.name} (${pendingRole})`
-        : `Switched to: ${safeUser.name} (${pendingRole.toUpperCase()})`
-    );
+      if (!result.success || !result.user) {
+        setRoleSwitchError(
+          language === 'bn' ? 'পাসওয়ার্ড ভুল। আবার চেষ্টা করুন।' : 'Incorrect password. Try again.'
+        );
+        return;
+      }
+
+      AuthStore.setCurrentUser(result.user);
+      setCurrentUser(result.user);
+      setPendingRole(null);
+      setRoleSwitchPwd('');
+      setRoleSwitchError('');
+      setViewedUser(null);
+      setActiveView('dashboard');
+      showToast(
+        language === 'bn'
+          ? `ভূমিকা পরিবর্তন সফল: ${result.user.name} (${pendingRole})`
+          : `Switched to: ${result.user.name} (${pendingRole.toUpperCase()})`
+      );
+    } catch (err: any) {
+      setRoleSwitchError(
+        err?.message || (language === 'bn' ? 'পাসওয়ার্ড ভুল। আবার চেষ্টা করুন।' : 'Incorrect password. Try again.')
+      );
+    }
   };
 
   const handleAdminVerifySuccess = (adminUser: User) => {
-    const safeAdmin: User = {
-      ...adminUser,
-      password: '***',
-      sessionToken: `nb_sec_${Date.now()}_admin`,
-      sessionExpiresAt: new Date(Date.now() + 3600000).toISOString(),
-      lastLoginAt: new Date().toISOString(),
-    };
-    setCurrentUser(safeAdmin);
-    localStorage.setItem('nb_current_user', JSON.stringify(safeAdmin));
+    AuthStore.setCurrentUser(adminUser);
+    setCurrentUser(adminUser);
     setActiveView('dashboard');
     setIsAdminVerifyOpen(false);
     showToast(
@@ -310,6 +322,7 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    authApi.logout().catch(() => {});
     AuthStore.logout();
     setCurrentUser(null);
     setIsAuthOpen(true);
@@ -326,6 +339,17 @@ export default function App() {
     window.addEventListener('nb_logout', handleLogoutEvent);
     return () => window.removeEventListener('nb_logout', handleLogoutEvent);
   }, []);
+
+  if (isAuthChecking) {
+    return (
+      <div className="min-h-screen bg-stone-900 flex flex-col items-center justify-center p-4">
+        <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4" />
+        <div className="text-stone-300 text-xs font-semibold tracking-wide">
+          {language === 'bn' ? 'নিরাপত্তা যাচাইকরণ হচ্ছে...' : 'Verifying secure session...'}
+        </div>
+      </div>
+    );
+  }
 
   // If Auth modal is triggered by user clicking "Sign In / Register"
   if (isAuthOpen) {

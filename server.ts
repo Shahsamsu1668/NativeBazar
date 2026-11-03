@@ -1,19 +1,41 @@
 import express from 'express';
 import fs from 'fs';
+import crypto from 'crypto';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import cookieParser from 'cookie-parser';
+import rateLimit from 'express-rate-limit';
 import { GoogleGenAI } from '@google/genai';
 import {
   db,
-  hashPassword,
-  verifyPassword,
   validateSupplyChainTrade,
   executeOrderTransaction,
   cancelOrderAndRestoreStock,
 } from './src/server/db.js';
 import { db as jsonDb } from './server/db.js';
+import {
+  pool,
+  initNeonDatabase,
+  syncLegacyUsersToNeon,
+  executeNeonOrderTransaction,
+} from './src/server/neonDb.js';
+import {
+  hashPassword,
+  hashPasswordSync,
+  verifyPassword,
+  createSession,
+  revokeSessionByToken,
+  validateToken,
+  requireAuth,
+  optionalAuth,
+  extractToken,
+  SESSION_COOKIE_NAME,
+  SESSION_COOKIE_OPTIONS,
+  type AuthenticatedRequest,
+} from './src/server/auth.js';
 
+dotenv.config({ path: '.env.local' });
 dotenv.config();
 
 // ─── PERSISTENCE & BI-DIRECTIONAL DATABASE SYNCHRONIZATION ──────────────────
@@ -224,8 +246,27 @@ function syncDatabaseStores() {
   }
 }
 
-// Initial synchronization on load
-syncDatabaseStores();
+// Initial synchronization on load (development prototype stores only)
+if (process.env.NODE_ENV !== 'production') {
+  syncDatabaseStores();
+}
+
+// Initialize Neon Cloud PostgreSQL
+try {
+  await initNeonDatabase();
+  // Safe gate: Never automatically sync or overwrite legacy SQLite users in production.
+  // Production user records in Neon PostgreSQL are the authoritative source of truth.
+  // Legacy user sync is only executed in development when explicitly requested via env var.
+  if (process.env.AUTO_SYNC_LEGACY_USERS === 'true' && process.env.NODE_ENV !== 'production') {
+    const sqliteUsers = db.prepare('SELECT * FROM users').all() as any[];
+    await syncLegacyUsersToNeon(sqliteUsers);
+    console.log('[Neon] Development legacy users sync completed.');
+  } else {
+    console.log('[Neon] PostgreSQL connection verified and schema tables ready.');
+  }
+} catch (neonErr: any) {
+  console.warn('[Neon] Database initialization notice:', neonErr?.message || neonErr);
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -233,23 +274,78 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 
-// ─── GLOBAL CORS & PREFLIGHT HANDLING ─────────────────────────────────────────
-// Full Cross-Origin Resource Sharing (CORS) support for web clients,
-// database_viewer.html (file:// or external origin), and local dev tools.
+// ─── REVERSE PROXY & CLIENT IP RESOLUTION ─────────────────────────────────────
+// In production (Render / Cloudflare edge proxies), trust the 1st hop reverse proxy
+// so req.ip correctly resolves to the real client IP rather than the edge proxy IP.
+// This prevents cross-client rate-limit collisions and securely ignores spoofed prefixes.
+if (process.env.NODE_ENV === 'production' || process.env.TRUST_PROXY === 'true') {
+  app.set('trust proxy', 1);
+}
+
+// ─── SAFE COMPARISON HELPER (CONSTANT TIME) ──────────────────────────────────
+function safeCompare(a?: string, b?: string): boolean {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  const bufA = Buffer.from(a, 'utf8');
+  const bufB = Buffer.from(b, 'utf8');
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
+// ─── GLOBAL CORS & PREFLIGHT HANDLING (STRICT ALLOWLIST) ───────────────────────
+const ALLOWED_ORIGIN_PATTERNS = [
+  /^http:\/\/localhost(:\d+)?$/,
+  /^http:\/\/127\.0\.0\.1(:\d+)?$/,
+  /^https?:\/\/([a-zA-Z0-9-]+\.)?nativebazar\.gov\.bd$/,
+  /^https?:\/\/([a-zA-Z0-9-]+\.)?nativebazar\.com$/,
+  /^https?:\/\/([a-zA-Z0-9-]+\.)?github\.io$/,
+];
+
+function isOriginAllowed(origin?: string): boolean {
+  if (!origin) return false;
+  if (process.env.APP_URL && origin === process.env.APP_URL) return true;
+  if (process.env.FRONTEND_URL && origin === process.env.FRONTEND_URL) return true;
+  return ALLOWED_ORIGIN_PATTERNS.some(pattern => pattern.test(origin));
+}
+
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
+  const origin = req.headers.origin;
+  if (origin) {
+    if (isOriginAllowed(origin)) {
+      res.header('Access-Control-Allow-Origin', origin);
+      res.header('Access-Control-Allow-Credentials', 'true');
+      res.header('Vary', 'Origin');
+    }
+  } else {
+    res.header('Access-Control-Allow-Origin', '*');
+  }
+
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Admin-Token');
   res.header('Access-Control-Max-Age', '86400');
 
   if (req.method === 'OPTIONS') {
+    if (origin && !isOriginAllowed(origin)) {
+      return res.status(403).json({ error: 'CORS origin not allowed' });
+    }
     return res.status(200).end();
   }
   next();
 });
 
-// Explicit OPTIONS preflight handler for database admin routes
-app.options('*', (_req, res) => {
+// Explicit OPTIONS preflight handler
+app.options('*', (req, res) => {
+  const origin = req.headers.origin;
+  if (origin) {
+    if (isOriginAllowed(origin)) {
+      res.header('Access-Control-Allow-Origin', origin);
+      res.header('Access-Control-Allow-Credentials', 'true');
+      res.header('Vary', 'Origin');
+      res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+      res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Admin-Token');
+      return res.sendStatus(200);
+    }
+    return res.status(403).json({ error: 'CORS origin not allowed' });
+  }
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Admin-Token');
@@ -267,6 +363,62 @@ app.get(['/database_viewer.html', '/database-viewer', '/admin/db/viewer'], (_req
 });
 
 app.use(express.json({ limit: '15mb' }));
+app.use(cookieParser());
+
+// ─── EXPRESS RATE LIMITING MIDDLEWARES ─────────────────────────────────────────
+
+// Strict limiter for authentication endpoints (prevents brute-force credential stuffing)
+export const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes window
+  max: 20, // Max 20 authentication attempts per IP per 15 minutes
+  standardHeaders: true, // Return standard RateLimit-* headers
+  legacyHeaders: false, // Disable X-RateLimit-* headers
+  validate: { trustProxy: false },
+  handler: (req, res) => {
+    res.status(429).json({
+      success: false,
+      error: 'Too many authentication attempts. Please try again after 15 minutes.',
+      code: 'AUTH_RATE_LIMIT_EXCEEDED',
+    });
+  },
+});
+
+// AI endpoints limiter (protects Gemini API quota and prevents denial-of-wallet)
+export const aiLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute window
+  max: 30, // Max 30 AI queries per minute per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { trustProxy: false },
+  handler: (req, res) => {
+    res.status(429).json({
+      success: false,
+      error: 'AI query rate limit reached. Please wait a moment before trying again.',
+      code: 'AI_RATE_LIMIT_EXCEEDED',
+    });
+  },
+});
+
+// Product endpoints limiter (protects inventory queries, mutations, and scraping)
+export const productsLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute window
+  max: 120, // Max 120 product requests per minute per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { trustProxy: false },
+  handler: (req, res) => {
+    res.status(429).json({
+      success: false,
+      error: 'Too many product requests. Please slow down.',
+      code: 'PRODUCT_RATE_LIMIT_EXCEEDED',
+    });
+  },
+});
+
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/register', authLimiter);
+app.use('/api/ai', aiLimiter);
+app.use('/api/products', productsLimiter);
 
 // Initialize Google GenAI client if API key is present
 const apiKey = process.env.GEMINI_API_KEY;
@@ -325,6 +477,36 @@ async function callGemini(contents: any, config?: any, timeoutMs = 15000) {
   throw lastError || new Error('All candidate AI models were unreachable');
 }
 
+// ─── ADMIN AUTHORIZATION ENFORCER (SERVER-SIDE VALIDATED) ───────────────────
+async function requireAdmin(req: any, res: any): Promise<boolean> {
+  if (req.method === 'OPTIONS') {
+    return true;
+  }
+
+  const token = extractToken(req);
+  if (!token) {
+    res.status(401).json({ success: false, error: 'UNAUTHORIZED', message: 'Administrator authentication required.' });
+    return false;
+  }
+
+  const sessionData = await validateToken(token);
+  if (!sessionData || !sessionData.user) {
+    const { maxAge: _unused, ...clearOptions } = SESSION_COOKIE_OPTIONS;
+    res.clearCookie(SESSION_COOKIE_NAME, clearOptions);
+    res.status(401).json({ success: false, error: 'SESSION_EXPIRED', message: 'Admin session is invalid, expired, or revoked.' });
+    return false;
+  }
+
+  if (sessionData.user.role !== 'admin') {
+    res.status(403).json({ success: false, error: 'FORBIDDEN', message: 'Access denied. Administrator privileges required.' });
+    return false;
+  }
+
+  req.user = sessionData.user;
+  req.sessionId = sessionData.sessionId;
+  return true;
+}
+
 // Health Check
 app.get('/api/health', (req, res) => {
   res.json({
@@ -342,7 +524,7 @@ app.get('/api/health', (req, res) => {
 // ─── AUTHENTICATION ENDPOINTS (NO DEMO ACCOUNTS) ─────────────────────────────
 
 // Register new user: Farmer, Wholesaler, Retailer, Consumer
-app.post('/api/auth/register', (req, res) => {
+app.post('/api/auth/register', async (req, res) => {
   try {
     const {
       role, name, phone, password, email = '', district = 'Bogura', upazila = '',
@@ -367,47 +549,100 @@ app.post('/api/auth/register', (req, res) => {
       return res.status(400).json({ error: 'Password must be at least 6 characters long.' });
     }
 
-    // Check if phone is already registered
-    const existing = db.prepare('SELECT id, role, phone FROM users WHERE phone = ?').get(phone) as any;
+    // Check if phone is already registered in Neon (with fallback to SQLite)
+    let existing: any = null;
+    try {
+      const neonRes = await pool.query('SELECT id, role, phone FROM users WHERE phone = $1 LIMIT 1', [phone]);
+      if (neonRes.rows.length > 0) existing = neonRes.rows[0];
+    } catch (checkErr) {
+      console.warn('[Neon] Check existing user query fallback to SQLite:', checkErr);
+    }
+    if (!existing) {
+      existing = db.prepare('SELECT id, role, phone FROM users WHERE phone = ?').get(phone) as any;
+    }
     if (existing) {
       return res.status(409).json({ error: `An account with phone number ${phone} is already registered (${existing.role}). Please log in.` });
     }
 
     const userId = `usr-${canonicalRole}-${Date.now()}`;
-    const passwordHash = hashPassword(password);
+    const passwordHash = await hashPassword(password);
     const nowIso = new Date().toISOString();
 
-    const insertStmt = db.prepare(`
-      INSERT INTO users (
-        id, role, name, phone, email, password_hash, district, upazila, verified,
-        farm_size_acres, primary_crops, business_name, business_type, shop_name,
-        license_number, trade_address, created_at, last_login_at
-      ) VALUES (
-        ?, ?, ?, ?, ?, ?, ?, ?, 1,
-        ?, ?, ?, ?, ?,
-        ?, ?, ?, ?
-      )
-    `);
+    // 1. Insert into Neon Cloud PostgreSQL
+    try {
+      await pool.query(`
+        INSERT INTO users (
+          id, role, name, phone, email, password_hash, password_algo, district, upazila, verified,
+          farm_size_acres, primary_crops, business_name, business_type, shop_name,
+          license_number, trade_address, created_at, last_login_at
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, 'bcrypt', $7, $8, true,
+          $9, $10, $11, $12, $13,
+          $14, $15, $16, $17
+        )
+      `, [
+        userId,
+        canonicalRole,
+        name,
+        phone,
+        email || null,
+        passwordHash,
+        district,
+        upazila || null,
+        farmSizeAcres ? Number(farmSizeAcres) : null,
+        primaryCrops ? (Array.isArray(primaryCrops) ? JSON.stringify(primaryCrops) : primaryCrops) : null,
+        businessName || null,
+        businessType || null,
+        shopName || null,
+        licenseNumber || null,
+        tradeAddress || null,
+        nowIso,
+        nowIso
+      ]);
+    } catch (neonInsertErr: any) {
+      console.error('[Neon] Insert user failed:', neonInsertErr.message);
+      return res.status(500).json({ error: 'Failed to create user account in cloud database.' });
+    }
 
-    insertStmt.run(
-      userId,
-      canonicalRole,
-      name,
-      phone,
-      email || null,
-      passwordHash,
-      district,
-      upazila || null,
-      farmSizeAcres ? Number(farmSizeAcres) : null,
-      primaryCrops ? (Array.isArray(primaryCrops) ? JSON.stringify(primaryCrops) : primaryCrops) : null,
-      businessName || null,
-      businessType || null,
-      shopName || null,
-      licenseNumber || null,
-      tradeAddress || null,
-      nowIso,
-      nowIso
-    );
+    // 2. Sync to local SQLite for backwards compatibility
+    try {
+      const insertStmt = db.prepare(`
+        INSERT INTO users (
+          id, role, name, phone, email, password_hash, district, upazila, verified,
+          farm_size_acres, primary_crops, business_name, business_type, shop_name,
+          license_number, trade_address, created_at, last_login_at
+        ) VALUES (
+          ?, ?, ?, ?, ?, ?, ?, ?, 1,
+          ?, ?, ?, ?, ?,
+          ?, ?, ?, ?
+        )
+      `);
+      insertStmt.run(
+        userId,
+        canonicalRole,
+        name,
+        phone,
+        email || null,
+        passwordHash,
+        district,
+        upazila || null,
+        farmSizeAcres ? Number(farmSizeAcres) : null,
+        primaryCrops ? (Array.isArray(primaryCrops) ? JSON.stringify(primaryCrops) : primaryCrops) : null,
+        businessName || null,
+        businessType || null,
+        shopName || null,
+        licenseNumber || null,
+        tradeAddress || null,
+        nowIso,
+        nowIso
+      );
+    } catch (sqliteErr) {
+      console.warn('[Sync] SQLite user mirror notice:', sqliteErr);
+    }
+
+    // 3. Issue server-side session in Neon
+    const { rawToken } = await createSession(userId, canonicalRole, req);
+    res.cookie(SESSION_COOKIE_NAME, rawToken, SESSION_COOKIE_OPTIONS);
 
     const safeUser = {
       id: userId,
@@ -425,9 +660,10 @@ app.post('/api/auth/register', (req, res) => {
       shopName,
       licenseNumber,
       createdAt: nowIso,
-      sessionToken: `nb_token_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+      sessionToken: rawToken,
     };
-    // Ensure newly registered user is also immediately available in jsonDb for cross-device persistence
+
+    // Ensure newly registered user is also mirrored in jsonDb
     try {
       jsonDb.addUser({
         id: userId,
@@ -446,7 +682,7 @@ app.post('/api/auth/register', (req, res) => {
         businessType: businessType || undefined,
         shopName: shopName || undefined,
         licenseNumber: licenseNumber || undefined,
-        sessionToken: safeUser.sessionToken,
+        sessionToken: rawToken,
       });
     } catch (syncErr) {
       console.warn('[Sync] jsonDb user sync warning on register:', syncErr);
@@ -464,82 +700,128 @@ app.post('/api/auth/register', (req, res) => {
 });
 
 // Login for registered users
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
   try {
     const { identifier, password, role } = req.body;
     if (!identifier || !password) {
       return res.status(400).json({ error: 'Phone/Email and password are required.' });
     }
 
-    let query = 'SELECT * FROM users WHERE (phone = ? OR email = ?)';
-    const params: any[] = [identifier, identifier];
-    if (role) {
-      query += ' AND role = ?';
-      params.push(role);
-    }
-    query += ' LIMIT 1';
+    let user: any = null;
 
-    const user = db.prepare(query).get(...params) as any;
+    // 1. Check Neon PostgreSQL
+    try {
+      let q = 'SELECT * FROM users WHERE (phone = $1 OR email = $2)';
+      const params: any[] = [identifier, identifier];
+      if (role) {
+        q += ' AND role = $3';
+        params.push(role);
+      }
+      q += ' LIMIT 1';
+      const r = await pool.query(q, params);
+      if (r.rows.length > 0) {
+        user = r.rows[0];
+      }
+    } catch (err) {
+      console.warn('[Neon] Login query error, falling back to SQLite:', err);
+    }
+
+    // Fallback to SQLite if not found in Neon
+    if (!user) {
+      let query = 'SELECT * FROM users WHERE (phone = ? OR email = ?)';
+      const params: any[] = [identifier, identifier];
+      if (role) {
+        query += ' AND role = ?';
+        params.push(role);
+      }
+      query += ' LIMIT 1';
+      user = db.prepare(query).get(...params) as any;
+    }
+
     if (!user) {
       return res.status(401).json({ error: 'No account found with these credentials. Please register first.' });
     }
 
-    const isValid = verifyPassword(password, user.password_hash);
-    if (!isValid) {
+    const { valid, needsRehash } = await verifyPassword(password, user.password_hash || user.passwordHash);
+    if (!valid) {
+      try {
+        await pool.query(
+          `INSERT INTO login_audit_logs (user_id, phone, role, status, ip_address, user_agent, details)
+           VALUES ($1, $2, $3, 'FAILED', $4, $5, 'Invalid password attempt')`,
+          [user.id, user.phone, user.role, req.ip || '127.0.0.1', req.headers['user-agent'] || 'Web Client']
+        );
+      } catch {}
       return res.status(401).json({ error: 'Incorrect password. Please try again.' });
     }
 
+    // 2. Transparent password migration: safely upgrade legacy hash to modern bcrypt
+    if (needsRehash) {
+      try {
+        const modernHash = await hashPassword(password);
+        await pool.query(
+          `UPDATE users SET password_hash = $1, password_algo = 'bcrypt' WHERE id = $2`,
+          [modernHash, user.id]
+        );
+        db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(modernHash, user.id);
+        jsonDb.updateUser(user.id, { passwordHash: modernHash });
+        console.log(`[Auth Migration] Password hash for user ${user.phone} (${user.id}) successfully migrated to bcrypt.`);
+      } catch (rehashErr) {
+        console.warn('[Auth Migration] Notice: transparent rehash deferral:', rehashErr);
+      }
+    }
+
     const nowIso = new Date().toISOString();
-    db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?').run(nowIso, user.id);
+    try {
+      await pool.query('UPDATE users SET last_login_at = $1 WHERE id = $2', [nowIso, user.id]);
+    } catch {}
+    try {
+      db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?').run(nowIso, user.id);
+    } catch {}
+
+    // 3. Issue server-side revocable session in Neon PostgreSQL
+    const { rawToken } = await createSession(user.id, user.role, req);
+    res.cookie(SESSION_COOKIE_NAME, rawToken, SESSION_COOKIE_OPTIONS);
+
+    // Audit log successful login
+    try {
+      await pool.query(
+        `INSERT INTO login_audit_logs (user_id, phone, role, status, ip_address, user_agent, details)
+         VALUES ($1, $2, $3, 'SUCCESS', $4, $5, 'Session created')`,
+        [user.id, user.phone, user.role, req.ip || '127.0.0.1', req.headers['user-agent'] || 'Web Client']
+      );
+    } catch {}
+
+    let primaryCropsParsed = undefined;
+    try {
+      if (user.primary_crops) {
+        primaryCropsParsed = typeof user.primary_crops === 'string' ? JSON.parse(user.primary_crops) : user.primary_crops;
+      }
+    } catch {}
 
     const safeUser = {
       id: user.id,
       role: user.role,
       name: user.name,
-      nameBn: user.name_bn,
+      nameBn: user.name_bn || user.nameBn,
       phone: user.phone,
       email: user.email,
       district: user.district,
       upazila: user.upazila,
       verified: Boolean(user.verified),
-      farmSizeAcres: user.farm_size_acres,
-      primaryCrops: user.primary_crops ? JSON.parse(user.primary_crops) : undefined,
-      businessName: user.business_name,
-      businessType: user.business_type,
-      shopName: user.shop_name,
-      licenseNumber: user.license_number,
-      createdAt: user.created_at,
+      farmSizeAcres: user.farm_size_acres || user.farmSizeAcres,
+      primaryCrops: primaryCropsParsed,
+      businessName: user.business_name || user.businessName,
+      businessType: user.business_type || user.businessType,
+      shopName: user.shop_name || user.shopName,
+      licenseNumber: user.license_number || user.licenseNumber,
+      createdAt: user.created_at || user.createdAt,
       lastLoginAt: nowIso,
-      sessionToken: `nb_token_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+      sessionToken: rawToken,
     };
-    // Ensure user is synced to jsonDb with current sessionToken
+
+    // Ensure user session is updated in jsonDb
     try {
-      const existingInJson = jsonDb.getUserById(user.id) || jsonDb.findUserByIdentifier(user.phone);
-      if (existingInJson) {
-        jsonDb.updateUser(existingInJson.id, { sessionToken: safeUser.sessionToken, lastLoginAt: nowIso });
-      } else {
-        jsonDb.addUser({
-          id: user.id,
-          role: user.role,
-          name: user.name,
-          nameBn: user.name_bn || undefined,
-          phone: user.phone,
-          email: user.email || undefined,
-          passwordHash: user.password_hash,
-          district: user.district,
-          upazila: user.upazila || undefined,
-          verified: Boolean(user.verified),
-          createdAt: user.created_at,
-          lastLoginAt: nowIso,
-          sessionToken: safeUser.sessionToken,
-          farmSizeAcres: user.farm_size_acres || undefined,
-          primaryCrops: user.primary_crops ? JSON.parse(user.primary_crops) : undefined,
-          businessName: user.business_name || undefined,
-          businessType: user.business_type || undefined,
-          shopName: user.shop_name || undefined,
-          licenseNumber: user.license_number || undefined,
-        });
-      }
+      jsonDb.updateUser(user.id, { sessionToken: rawToken, lastLoginAt: nowIso });
     } catch (syncErr) {
       console.warn('[Sync] jsonDb user sync warning on login:', syncErr);
     }
@@ -555,38 +837,96 @@ app.post('/api/auth/login', (req, res) => {
 });
 
 // Admin Authorization Login (Restricted to authorized administrators only)
-app.post('/api/auth/admin-login', (req, res) => {
+app.post('/api/auth/admin-login', async (req, res) => {
   try {
     const { username, password, securityPin } = req.body;
-    const validUser = process.env.ADMIN_USER;
-    const validPass = process.env.ADMIN_PASSWORD;
-    const validPin = process.env.ADMIN_PIN;
-
-    // Fail closed if admin credentials have not been explicitly configured in environment
-    if (!validUser || !validPass || !validPin) {
-      console.error('[Security] Admin login blocked: ADMIN_USER, ADMIN_PASSWORD, or ADMIN_PIN environment variable is not configured.');
-      return res.status(503).json({ error: 'Administrator access is currently not configured or disabled.' });
+    if (!username || !password) {
+      return res.status(400).json({ success: false, error: 'Username and password are required.' });
     }
 
-    const isMatch = username === validUser && password === validPass && securityPin === validPin;
+    const envUser = process.env.ADMIN_USER;
+    const envPass = process.env.ADMIN_PASSWORD;
+    const envPin = process.env.ADMIN_PIN;
 
-    if (!isMatch) {
-      return res.status(403).json({ error: 'Access Denied: Invalid administrator credentials or clearance PIN.' });
+    let isAuthorized = false;
+    let adminRecord: any = null;
+
+    // 1. If explicit environment admin credentials are configured, check them safely
+    if (envUser && envPass) {
+      if (safeCompare(username, envUser) && safeCompare(password, envPass)) {
+        if (!envPin || safeCompare(securityPin, envPin)) {
+          isAuthorized = true;
+        }
+      }
     }
 
+    // 2. Also allow authenticating against the registered admin in the database
+    if (!isAuthorized) {
+      try {
+        const q = await pool.query(
+          "SELECT * FROM users WHERE (email = $1 OR phone = $2) AND role = 'admin' LIMIT 1",
+          [username, username]
+        );
+        if (q.rows.length > 0) adminRecord = q.rows[0];
+      } catch (err) {
+        console.warn('[Neon] admin lookup fallback to SQLite:', err);
+      }
+      if (!adminRecord) {
+        adminRecord = db.prepare(
+          "SELECT * FROM users WHERE (email = ? OR phone = ?) AND role = 'admin' LIMIT 1"
+        ).get(username, username) as any;
+      }
+
+      if (adminRecord) {
+        const { valid, needsRehash } = await verifyPassword(password, adminRecord.password_hash || adminRecord.passwordHash);
+        if (valid) {
+          if (needsRehash) {
+            const modernHash = await hashPassword(password);
+            try {
+              await pool.query("UPDATE users SET password_hash = $1, password_algo = 'bcrypt' WHERE id = $2", [modernHash, adminRecord.id]);
+            } catch {}
+            try {
+              db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(modernHash, adminRecord.id);
+            } catch {}
+          }
+          isAuthorized = true;
+        }
+      }
+    }
+
+    if (!isAuthorized) {
+      return res.status(401).json({ success: false, error: 'Access Denied: Invalid administrator credentials.' });
+    }
+
+    const adminId = adminRecord ? adminRecord.id : 'admin-root';
     const nowIso = new Date().toISOString();
+
+    // Ensure admin user exists in Neon
+    try {
+      await pool.query(`
+        INSERT INTO users (id, role, name, name_bn, phone, email, password_hash, password_algo, district, upazila, verified, created_at, last_login_at)
+        VALUES ($1, 'admin', 'Central Platform Administrator', 'কেন্দ্রীয় প্ল্যাটফর্ম প্রশাসক', 'NativeBazarSJS', 'admin@nativebazar.gov.bd', 'sha256_admin_protected', 'bcrypt', 'Bogura', 'Bogura Sadar', true, NOW(), NOW())
+        ON CONFLICT (id) DO UPDATE SET last_login_at = NOW()
+      `, [adminId]);
+    } catch (adminUpsertErr) {
+      console.warn('[Neon] Admin user record sync note:', adminUpsertErr);
+    }
+
+    const { rawToken } = await createSession(adminId, 'admin', req);
+    res.cookie(SESSION_COOKIE_NAME, rawToken, SESSION_COOKIE_OPTIONS);
+
     const adminUser = {
-      id: 'admin-authorized-root',
+      id: adminId,
       role: 'admin',
-      name: 'Central Platform Administrator',
-      phone: '01700000000',
-      email: 'admin@nativebazar.gov.bd',
-      district: 'Bogura',
-      upazila: 'Bogura Sadar',
+      name: adminRecord?.name || 'Central Platform Administrator',
+      phone: adminRecord?.phone || '01700000000',
+      email: adminRecord?.email || 'admin@nativebazar.gov.bd',
+      district: adminRecord?.district || 'Bogura',
+      upazila: adminRecord?.upazila || 'Bogura Sadar',
       verified: true,
-      createdAt: '2026-01-01T00:00:00Z',
+      createdAt: adminRecord?.created_at || '2026-01-01T00:00:00Z',
       lastLoginAt: nowIso,
-      sessionToken: `nb_admin_token_${Date.now()}`,
+      sessionToken: rawToken,
     };
 
     return res.json({
@@ -594,53 +934,65 @@ app.post('/api/auth/admin-login', (req, res) => {
       user: adminUser,
     });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message || 'Admin login failed.' });
+    return res.status(500).json({ success: false, error: err.message || 'Admin login failed.' });
   }
 });
 
 // ─── PRODUCT MARKETPLACE ENDPOINTS (STRICT ROLE-BASED ACCESS) ─────────────────
 
 // Get products with role filtering
-// Consumers ONLY see Retailer products
-// Retailers ONLY see Wholesaler products
-// Wholesalers ONLY see Farmer products
-app.get('/api/products', (req, res) => {
+// ─── NEON POSTGRESQL PRODUCTS & SUPPLY CHAIN CATALOG ─────────────────────────
+// Strict supply chain visibility:
+// Consumers ONLY see Retailer products (target_role = 'consumer')
+// Retailers ONLY see Wholesaler products (target_role = 'retailer')
+// Wholesalers ONLY see Farmer products (target_role = 'wholesaler')
+app.get('/api/products', async (req, res) => {
   try {
     const { targetRole, sellerRole, sellerId, district, category, search, minAvailable = 0 } = req.query as any;
 
-    let query = 'SELECT * FROM products WHERE available_kg > ?';
+    let query = `
+      SELECT id, seller_id, seller_name, seller_phone, seller_role, target_role,
+             crop_name, bangla_name, category, variety, unit, quantity, available_qty,
+             quantity_kg, available_kg, min_order_qty, unit_price, price_per_kg,
+             market_price, quality_grade, district, upazila, location_details,
+             harvest_status, available_date, organic_certified, image_url, description,
+             farmer_origin, wholesaler_arat, procurement_date, safety_note, created_at, updated_at
+      FROM products
+      WHERE harvest_status != 'Archived' AND available_qty > $1
+    `;
     const params: any[] = [Number(minAvailable) || 0];
+    let idx = 2;
 
-    // Strict role filters
     if (targetRole) {
-      query += ' AND target_role = ?';
+      query += ` AND target_role = $${idx++}`;
       params.push(targetRole);
     }
     if (sellerRole) {
-      query += ' AND seller_role = ?';
+      query += ` AND seller_role = $${idx++}`;
       params.push(sellerRole);
     }
     if (sellerId) {
-      query += ' AND seller_id = ?';
+      query += ` AND seller_id = $${idx++}`;
       params.push(sellerId);
     }
     if (district && district !== 'All') {
-      query += ' AND district = ?';
+      query += ` AND district = $${idx++}`;
       params.push(district);
     }
     if (category && category !== 'All') {
-      query += ' AND category = ?';
+      query += ` AND category = $${idx++}`;
       params.push(category);
     }
     if (search) {
-      query += ' AND (crop_name LIKE ? OR bangla_name LIKE ? OR seller_name LIKE ?)';
-      params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+      query += ` AND (crop_name ILIKE $${idx} OR bangla_name ILIKE $${idx} OR seller_name ILIKE $${idx})`;
+      params.push(`%${search}%`);
+      idx++;
     }
 
     query += ' ORDER BY created_at DESC';
 
-    const rows = db.prepare(query).all(...params) as any[];
-    const mapped = rows.map((r) => ({
+    const result = await pool.query(query, params);
+    const mapped = result.rows.map((r) => ({
       id: r.id,
       sellerId: r.seller_id,
       sellerName: r.seller_name,
@@ -651,11 +1003,15 @@ app.get('/api/products', (req, res) => {
       banglaName: r.bangla_name,
       category: r.category,
       variety: r.variety,
-      quantityKg: r.quantity_kg,
-      availableKg: r.available_kg,
-      minOrderKg: r.min_order_kg,
-      pricePerKg: r.price_per_kg,
-      marketPricePerKg: r.market_price_per_kg,
+      unit: r.unit || 'kg',
+      quantity: parseFloat(r.quantity),
+      availableQty: parseFloat(r.available_qty),
+      quantityKg: r.quantity_kg !== null ? parseFloat(r.quantity_kg) : parseFloat(r.quantity),
+      availableKg: r.available_kg !== null ? parseFloat(r.available_kg) : parseFloat(r.available_qty),
+      minOrderKg: parseFloat(r.min_order_qty || 1),
+      pricePerKg: parseFloat(r.unit_price),
+      unitPrice: parseFloat(r.unit_price),
+      marketPricePerKg: r.market_price ? parseFloat(r.market_price) : parseFloat(r.unit_price) * 1.15,
       qualityGrade: r.quality_grade,
       district: r.district,
       upazila: r.upazila,
@@ -676,98 +1032,76 @@ app.get('/api/products', (req, res) => {
 
     return res.json({ products: mapped, total: mapped.length });
   } catch (err: any) {
-    console.error('Error fetching products:', err);
+    console.error('Error fetching Neon products:', err);
     return res.status(500).json({ error: err.message || 'Failed to fetch products.' });
   }
 });
 
-// Publish new product: Enforces seller role restrictions
-app.post('/api/products', (req, res) => {
+// Publish new product in Neon: Enforces seller role restrictions
+app.post('/api/products', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
+    const authUser = req.user!;
     const {
-      sellerId, sellerName, sellerPhone = '', sellerRole, cropName, banglaName,
-      category = 'Vegetables', variety = '', quantityKg, pricePerKg, marketPricePerKg,
+      cropName, banglaName, category = 'Vegetables', variety = '',
+      unit = 'kg', quantityKg, quantity, pricePerKg, unitPrice, marketPricePerKg,
       qualityGrade = 'A', district = 'Bogura', upazila = '', locationDetails = '',
       harvestStatus = 'Harvested Today', availableDate = 'In Stock', organicCertified = false,
       imageUrl = '', description = '', farmerOrigin = '', wholesalerArat = '',
       procurementDate = '', safetyNote = '', minOrderKg = 1,
     } = req.body;
 
-    const sRole = (sellerRole || '').toLowerCase();
-    let targetRole = 'consumer';
+    const effectiveSellerId = authUser.id;
+    const effectiveSellerName = authUser.name;
+    const effectiveSellerPhone = authUser.phone || '';
+    const effectiveSellerRole = authUser.role;
 
-    // Strict supply chain mapping:
-    // Farmer lists crops -> Wholesaler buys
+    const sRole = (effectiveSellerRole || '').toLowerCase();
+    let targetRole = 'consumer';
     if (sRole === 'farmer') {
       targetRole = 'wholesaler';
-    }
-    // Wholesaler lists produce -> Retailer buys
-    else if (sRole === 'wholesaler') {
+    } else if (sRole === 'wholesaler') {
       targetRole = 'retailer';
-    }
-    // Retailer lists goods -> Consumer buys
-    else if (sRole === 'retailer') {
+    } else if (sRole === 'retailer') {
+      targetRole = 'consumer';
+    } else if (sRole === 'admin') {
       targetRole = 'consumer';
     } else {
       return res.status(403).json({ error: 'Only Farmers, Wholesalers, and Retailers are authorized to publish products.' });
     }
 
-    if (!cropName || !pricePerKg || !quantityKg) {
-      return res.status(400).json({ error: 'Crop name, quantity, and price are required.' });
+    const finalQuantity = Number(quantity || quantityKg);
+    const finalPrice = Number(unitPrice || pricePerKg);
+
+    if (!cropName || !finalPrice || !finalQuantity || finalQuantity <= 0 || finalPrice <= 0) {
+      return res.status(400).json({ error: 'Valid crop name, quantity, and unit price are required.' });
     }
 
     const prodId = `prod-${sRole.slice(0, 3)}-${Date.now()}`;
-    const nowIso = new Date().toISOString();
+    const finalMarketPrice = marketPricePerKg ? Number(marketPricePerKg) : finalPrice * 1.15;
 
-    const insertStmt = db.prepare(`
+    await pool.query(`
       INSERT INTO products (
         id, seller_id, seller_name, seller_phone, seller_role, target_role,
-        crop_name, bangla_name, category, variety, quantity_kg, available_kg,
-        min_order_kg, price_per_kg, market_price_per_kg, quality_grade, district,
+        crop_name, bangla_name, category, variety, unit, quantity, available_qty,
+        min_order_qty, unit_price, market_price, quality_grade, district,
         upazila, location_details, harvest_status, available_date, organic_certified,
         image_url, description, farmer_origin, wholesaler_arat, procurement_date,
-        safety_note, created_at
+        safety_note, created_at, updated_at
       ) VALUES (
-        ?, ?, ?, ?, ?, ?,
-        ?, ?, ?, ?, ?, ?,
-        ?, ?, ?, ?, ?,
-        ?, ?, ?, ?, ?,
-        ?, ?, ?, ?, ?,
-        ?, ?
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+        $14, $15, $16, $17, $18, $19, $20, $21, $22, $23,
+        $24, $25, $26, $27, $28, $29, NOW(), NOW()
       )
-    `);
-
-    insertStmt.run(
-      prodId,
-      sellerId || 'seller-1',
-      sellerName || 'Verified Seller',
-      sellerPhone || '',
-      sRole,
-      targetRole,
-      cropName,
-      banglaName || cropName,
-      category,
-      variety || '',
-      Number(quantityKg),
-      Number(quantityKg),
-      Number(minOrderKg) || 1,
-      Number(pricePerKg),
-      marketPricePerKg ? Number(marketPricePerKg) : Number(pricePerKg) * 1.15,
-      qualityGrade,
-      district,
-      upazila || '',
-      locationDetails || '',
-      harvestStatus,
-      availableDate,
-      organicCertified ? 1 : 0,
+    `, [
+      prodId, effectiveSellerId, effectiveSellerName, effectiveSellerPhone, sRole, targetRole,
+      cropName, banglaName || cropName, category, variety || '', unit || 'kg', finalQuantity, finalQuantity,
+      Number(minOrderKg) || 1, finalPrice, finalMarketPrice, qualityGrade, district,
+      upazila || '', locationDetails || '', harvestStatus, availableDate, Boolean(organicCertified),
       imageUrl || 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=800&auto=format&fit=crop&q=80',
-      description || '',
-      farmerOrigin || '',
-      wholesalerArat || '',
-      procurementDate || '',
-      safetyNote || '',
-      nowIso
-    );
+      description || '', farmerOrigin || (sRole === 'farmer' ? effectiveSellerName : ''),
+      wholesalerArat || (sRole === 'wholesaler' ? effectiveSellerName : ''),
+      procurementDate || '', safetyNote || ''
+    ]);
 
     return res.status(201).json({
       success: true,
@@ -776,40 +1110,44 @@ app.post('/api/products', (req, res) => {
       message: `Product successfully published for ${targetRole}s!`,
     });
   } catch (err: any) {
-    console.error('Error creating product:', err);
+    console.error('Error creating product in Neon:', err);
     return res.status(500).json({ error: err.message || 'Failed to publish product.' });
   }
 });
 
-// Update product
-app.put('/api/products/:id', (req, res) => {
+// Update product in Neon
+app.put('/api/products/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
     const { id } = req.params;
-    const { pricePerKg, quantityKg, availableKg, qualityGrade, harvestStatus, description, imageUrl } = req.body;
+    const { pricePerKg, unitPrice, quantityKg, quantity, availableKg, availableQty, qualityGrade, harvestStatus, description, imageUrl } = req.body;
 
-    const existing = db.prepare('SELECT id FROM products WHERE id = ?').get(id);
-    if (!existing) return res.status(404).json({ error: 'Product not found.' });
+    const existingRes = await pool.query('SELECT * FROM products WHERE id = $1', [id]);
+    if (existingRes.rows.length === 0) return res.status(404).json({ error: 'Product not found.' });
+    const existing = existingRes.rows[0];
 
-    db.prepare(`
+    if (existing.seller_id !== req.user!.id && req.user!.role !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden: You can only edit your own products.' });
+    }
+
+    const newPrice = unitPrice !== undefined ? Number(unitPrice) : (pricePerKg !== undefined ? Number(pricePerKg) : null);
+    const newQty = quantity !== undefined ? Number(quantity) : (quantityKg !== undefined ? Number(quantityKg) : null);
+    const newAvail = availableQty !== undefined ? Number(availableQty) : (availableKg !== undefined ? Number(availableKg) : null);
+
+    await pool.query(`
       UPDATE products
-      SET price_per_kg = COALESCE(?, price_per_kg),
-          quantity_kg = COALESCE(?, quantity_kg),
-          available_kg = COALESCE(?, available_kg),
-          quality_grade = COALESCE(?, quality_grade),
-          harvest_status = COALESCE(?, harvest_status),
-          description = COALESCE(?, description),
-          image_url = COALESCE(?, image_url)
-      WHERE id = ?
-    `).run(
-      pricePerKg !== undefined ? Number(pricePerKg) : null,
-      quantityKg !== undefined ? Number(quantityKg) : null,
-      availableKg !== undefined ? Number(availableKg) : null,
-      qualityGrade || null,
-      harvestStatus || null,
-      description || null,
-      imageUrl || null,
-      id
-    );
+      SET unit_price = COALESCE($1, unit_price),
+          quantity = COALESCE($2, quantity),
+          available_qty = COALESCE($3, available_qty),
+          quality_grade = COALESCE($4, quality_grade),
+          harvest_status = COALESCE($5, harvest_status),
+          description = COALESCE($6, description),
+          image_url = COALESCE($7, image_url),
+          updated_at = NOW()
+      WHERE id = $8
+    `, [
+      newPrice, newQty, newAvail, qualityGrade || null, harvestStatus || null,
+      description || null, imageUrl || null, id
+    ]);
 
     return res.json({ success: true, message: 'Product updated successfully.' });
   } catch (err: any) {
@@ -817,29 +1155,42 @@ app.put('/api/products/:id', (req, res) => {
   }
 });
 
-// Delete product
-app.delete('/api/products/:id', (req, res) => {
+// Delete product in Neon
+app.delete('/api/products/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
     const { id } = req.params;
-    db.prepare('DELETE FROM products WHERE id = ?').run(id);
+    const existingRes = await pool.query('SELECT * FROM products WHERE id = $1', [id]);
+    if (existingRes.rows.length === 0) return res.status(404).json({ error: 'Product not found.' });
+    const existing = existingRes.rows[0];
+
+    if (existing.seller_id !== req.user!.id && req.user!.role !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden: You can only delete your own products.' });
+    }
+
+    await pool.query('DELETE FROM products WHERE id = $1', [id]);
     return res.json({ success: true, message: 'Product removed.' });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
 });
 
-// ─── ORDER & SUPPLY CHAIN EXECUTION (STRICT RULES ENFORCED) ─────────────────
-
-// Create an order: Verifies supply chain rules, reserves stock, creates tracking code
-app.post('/api/orders', (req, res) => {
+// ─── NEON SECURE ORDER & SUPPLY CHAIN EXECUTION ──────────────────────────────
+// Create order: calls executeNeonOrderTransaction with full locking and atomicity
+app.post('/api/orders', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
+    const authUser = req.user!;
     const {
-      buyerId, buyerName, buyerPhone, buyerEmail, buyerRole,
-      sellerId, sellerName, sellerPhone, sellerRole, items,
-      paymentMethod = 'Cash on Delivery', deliveryAddress, district = 'Bogura', notes,
+      items, paymentMethod = 'Cash on Delivery',
+      deliveryAddress, district = 'Bogura', notes,
     } = req.body;
 
-    if (!buyerName || !buyerPhone || !deliveryAddress) {
+    const effectiveBuyerId = authUser.id;
+    const effectiveBuyerName = authUser.name;
+    const effectiveBuyerPhone = authUser.phone || req.body.buyerPhone || '';
+    const effectiveBuyerEmail = authUser.email || req.body.buyerEmail || '';
+    const effectiveBuyerRole = authUser.role;
+
+    if (!effectiveBuyerName || !effectiveBuyerPhone || !deliveryAddress) {
       return res.status(400).json({ error: 'Name, phone number, and delivery address are required.' });
     }
 
@@ -847,150 +1198,192 @@ app.post('/api/orders', (req, res) => {
       return res.status(400).json({ error: 'No items in cart to order.' });
     }
 
-    let finalSellerId = sellerId;
-    let finalSellerName = sellerName;
-    let finalSellerPhone = sellerPhone;
-    let finalSellerRole = sellerRole;
-
-    if ((!finalSellerId || !finalSellerRole) && items && items.length > 0) {
-      const firstProd = db.prepare('SELECT * FROM products WHERE id = ?').get(items[0].productId) as any;
-      if (firstProd) {
-        finalSellerId = finalSellerId || firstProd.seller_id;
-        finalSellerName = finalSellerName || firstProd.seller_name;
-        finalSellerPhone = finalSellerPhone || firstProd.seller_phone;
-        finalSellerRole = finalSellerRole || firstProd.seller_role;
-      }
-    }
-
-    // Default seller fallback for consumer orders
-    if (!finalSellerId) {
-      finalSellerId = 'usr-retailer-jafor';
-      finalSellerName = finalSellerName || 'Jafor';
-      finalSellerPhone = finalSellerPhone || '01911334200';
-      finalSellerRole = finalSellerRole || 'retailer';
-    }
-
-    // Execute atomic transaction with supply chain validation
-    const result = executeOrderTransaction({
-      buyerId,
-      buyerName,
-      buyerPhone,
-      buyerEmail,
-      buyerRole: buyerRole || 'consumer',
-      sellerId: finalSellerId,
-      sellerName: finalSellerName,
-      sellerPhone: finalSellerPhone,
-      sellerRole: finalSellerRole,
-      items,
+    const result = await executeNeonOrderTransaction({
+      buyerId: effectiveBuyerId,
+      buyerName: effectiveBuyerName,
+      buyerPhone: effectiveBuyerPhone,
+      buyerEmail: effectiveBuyerEmail,
+      buyerRole: effectiveBuyerRole,
+      items: items.map((it: any) => ({
+        productId: it.productId,
+        quantityKg: Number(it.quantityKg || it.quantity || 1),
+      })),
       paymentMethod,
       deliveryAddress,
       district,
       notes,
-    });
+    }, pool);
 
     return res.status(201).json({
       success: true,
-      message: 'Order confirmed successfully!',
+      message: 'Order confirmed successfully via Neon PostgreSQL!',
       order: result,
     });
   } catch (err: any) {
-    console.error('Order creation error:', err.message);
-    if (err.message.includes('Rule Violation')) {
+    console.error('Order creation error in Neon:', err.message);
+    if (err.message.includes('Rule Violation') || err.message.includes('Multi-Seller Violation')) {
       return res.status(403).json({ error: err.message });
     }
-    if (err.message.includes('Insufficient stock')) {
+    if (err.message.includes('Insufficient stock') || err.message.includes('Invalid')) {
       return res.status(400).json({ error: err.message });
     }
     return res.status(500).json({ error: err.message || 'Order execution failed.' });
   }
 });
 
-// Get orders: filtered by user or role
-app.get('/api/orders', (req, res) => {
+// Get orders: filtered by user or role from Neon PostgreSQL
+app.get('/api/orders', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
-    const { userId, role, sellerId, buyerId, customerId } = req.query as any;
-    const targetBuyer = buyerId || customerId;
-
+    const authUser = req.user!;
     let query = 'SELECT * FROM orders WHERE 1=1';
     const params: any[] = [];
+    let idx = 1;
 
-    if (targetBuyer) {
-      query += ' AND buyer_id = ?';
-      params.push(targetBuyer);
-    } else if (sellerId) {
-      query += ' AND seller_id = ?';
-      params.push(sellerId);
-    } else if (userId) {
-      query += ' AND (buyer_id = ? OR seller_id = ?)';
-      params.push(userId, userId);
-    }
-
-    if (role) {
-      query += ' AND (buyer_role = ? OR seller_role = ?)';
-      params.push(role, role);
+    if (authUser.role === 'admin') {
+      const { userId, role, sellerId, buyerId, customerId } = req.query as any;
+      const targetBuyer = buyerId || customerId;
+      if (targetBuyer) {
+        query += ` AND buyer_id = $${idx++}`;
+        params.push(targetBuyer);
+      } else if (sellerId) {
+        query += ` AND seller_id = $${idx++}`;
+        params.push(sellerId);
+      } else if (userId) {
+        query += ` AND (buyer_id = $${idx} OR seller_id = $${idx})`;
+        params.push(userId);
+        idx++;
+      }
+      if (role) {
+        query += ` AND (buyer_role = $${idx} OR seller_role = $${idx})`;
+        params.push(role);
+        idx++;
+      }
+    } else {
+      // Non-admins strictly access only orders where they are buyer or seller
+      query += ` AND (buyer_id = $${idx} OR seller_id = $${idx})`;
+      params.push(authUser.id);
+      idx++;
     }
 
     query += ' ORDER BY created_at DESC';
 
-    const orders = db.prepare(query).all(...params) as any[];
-    const itemsStmt = db.prepare('SELECT * FROM order_items WHERE order_id = ?');
+    const orderRes = await pool.query(query, params);
+    const orderRows = orderRes.rows;
 
-    const fullOrders = orders.map((o) => {
-      const items = itemsStmt.all(o.id) as any[];
-      return {
-        id: o.id,
-        orderType: o.order_type,
-        buyerId: o.buyer_id,
-        buyerName: o.buyer_name,
-        buyerPhone: o.buyer_phone,
-        buyerEmail: o.buyer_email,
-        buyerRole: o.buyer_role,
-        sellerId: o.seller_id,
-        sellerName: o.seller_name,
-        sellerPhone: o.seller_phone,
-        sellerRole: o.seller_role,
-        totalBDT: o.total_bdt,
-        paymentMethod: o.payment_method,
-        paymentStatus: o.payment_status,
-        deliveryStatus: o.delivery_status,
-        status: o.delivery_status,
-        deliveryAddress: o.delivery_address,
-        district: o.district,
-        trackingCode: o.tracking_code,
-        notes: o.notes,
-        createdAt: o.created_at,
-        updatedAt: o.updated_at,
-        items: items.map((it) => ({
-          id: it.id,
-          productId: it.product_id,
-          cropName: it.crop_name,
-          banglaName: it.bangla_name,
-          quantityKg: it.quantity_kg,
-          unitPrice: it.unit_price,
-          subtotal: it.subtotal,
-        })),
-      };
-    });
+    if (orderRows.length === 0) {
+      return res.json({ success: true, orders: [], total: 0 });
+    }
+
+    const orderIds = orderRows.map((o) => o.id);
+    const itemsRes = await pool.query(
+      'SELECT * FROM order_items WHERE order_id = ANY($1::text[]) ORDER BY id',
+      [orderIds]
+    );
+
+    const itemsByOrderId = new Map<string, any[]>();
+    for (const it of itemsRes.rows) {
+      if (!itemsByOrderId.has(it.order_id)) {
+        itemsByOrderId.set(it.order_id, []);
+      }
+      itemsByOrderId.get(it.order_id)!.push({
+        id: it.id,
+        productId: it.product_id,
+        cropName: it.crop_name,
+        banglaName: it.bangla_name,
+        quantityKg: parseFloat(it.quantity_kg),
+        unitPrice: parseFloat(it.unit_price),
+        subtotal: parseFloat(it.subtotal),
+      });
+    }
+
+    const fullOrders = orderRows.map((o) => ({
+      id: o.id,
+      orderType: o.order_type,
+      buyerId: o.buyer_id,
+      buyerName: o.buyer_name,
+      buyerPhone: o.buyer_phone,
+      buyerEmail: o.buyer_email,
+      buyerRole: o.buyer_role,
+      sellerId: o.seller_id,
+      sellerName: o.seller_name,
+      sellerPhone: o.seller_phone,
+      sellerRole: o.seller_role,
+      totalBDT: parseFloat(o.total_bdt),
+      paymentMethod: o.payment_method,
+      paymentStatus: o.payment_status,
+      deliveryStatus: o.delivery_status,
+      status: o.delivery_status,
+      deliveryAddress: o.delivery_address,
+      district: o.district,
+      trackingCode: o.tracking_code,
+      notes: o.notes,
+      createdAt: o.created_at,
+      updatedAt: o.updated_at,
+      items: itemsByOrderId.get(o.id) || [],
+    }));
 
     return res.json({ success: true, orders: fullOrders, total: fullOrders.length });
   } catch (err: any) {
+    console.error('Error fetching Neon orders:', err);
     return res.status(500).json({ error: err.message });
   }
 });
 
-// Update order status (or cancel with stock restoration)
-app.put('/api/orders/:id/status', (req, res) => {
+// Update order status in Neon (or cancel with stock restoration)
+app.put('/api/orders/:id/status', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
     const { id } = req.params;
-    const { status, actorName, actorRole } = req.body;
+    const { status } = req.body;
+    const authUser = req.user!;
 
-    if (status === 'Cancelled') {
-      const cancelResult = cancelOrderAndRestoreStock(id, actorName, actorRole);
-      return res.json(cancelResult);
+    const orderRes = await pool.query('SELECT * FROM orders WHERE id = $1', [id]);
+    if (orderRes.rows.length === 0) return res.status(404).json({ error: 'Order not found.' });
+    const order = orderRes.rows[0];
+
+    const isSeller = order.seller_id === authUser.id;
+    const isBuyer = order.buyer_id === authUser.id;
+    const isAdmin = authUser.role === 'admin';
+
+    if (!isSeller && !isBuyer && !isAdmin) {
+      return res.status(403).json({ error: 'Forbidden: You are not authorized to update this order.' });
     }
 
-    const nowIso = new Date().toISOString();
-    db.prepare('UPDATE orders SET delivery_status = ?, updated_at = ? WHERE id = ?').run(status, nowIso, id);
+    if (status === 'Cancelled') {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const items = (await client.query('SELECT product_id, quantity_kg FROM order_items WHERE order_id = $1', [id])).rows;
+        for (const item of items) {
+          await client.query(
+            'UPDATE products SET available_qty = available_qty + $1, updated_at = NOW() WHERE id = $2',
+            [item.quantity_kg, item.product_id]
+          );
+        }
+        await client.query(
+          "UPDATE orders SET delivery_status = 'Cancelled', updated_at = NOW() WHERE id = $1",
+          [id]
+        );
+        await client.query(`
+          INSERT INTO trade_audit_logs (id, order_id, type, amount, actor_role, actor_name, description, created_at)
+          VALUES ($1, $2, 'ORDER_CANCELLED', $3, $4, $5, $6, NOW())
+        `, [
+          `aud-cancel-${Date.now()}`, id, order.total_bdt, authUser.role, authUser.name,
+          `Order ${id} cancelled by ${authUser.name} (${authUser.role}). Stock restored.`
+        ]);
+        await client.query('COMMIT');
+        return res.json({ success: true, message: `Order ${id} cancelled and inventory restored.` });
+      } catch (cancelErr: any) {
+        await client.query('ROLLBACK');
+        throw cancelErr;
+      } finally {
+        client.release();
+      }
+    }
+
+    await pool.query(
+      'UPDATE orders SET delivery_status = $1, updated_at = NOW() WHERE id = $2',
+      [status, id]
+    );
 
     return res.json({ success: true, message: `Order status updated to ${status}.` });
   } catch (err: any) {
@@ -998,26 +1391,92 @@ app.put('/api/orders/:id/status', (req, res) => {
   }
 });
 
-// ─── WHOLESALER BIDS & FARMER INTELLIGENCE (FARMER-ONLY) ─────────────────────
+// ─── WHOLESALER BIDS & FARMER INTELLIGENCE (NEON POSTGRESQL) ─────────────────────
+
+function formatWholesalerOfferRow(r: any) {
+  return {
+    id: r.id,
+    wholesalerId: r.wholesaler_id,
+    wholesaler_id: r.wholesaler_id,
+    wholesalerName: r.wholesaler_name,
+    wholesaler_name: r.wholesaler_name,
+    wholesalerPhone: r.wholesaler_phone,
+    wholesaler_phone: r.wholesaler_phone,
+    businessName: r.business_name,
+    business_name: r.business_name,
+    cropName: r.crop_name,
+    crop_name: r.crop_name,
+    cropBangla: r.crop_bangla,
+    crop_bangla: r.crop_bangla,
+    quantityKgNeeded: parseFloat(r.quantity_kg_needed),
+    quantity_kg_needed: parseFloat(r.quantity_kg_needed),
+    fulfilledKg: r.fulfilled_kg !== null ? parseFloat(r.fulfilled_kg) : 0,
+    fulfilled_kg: r.fulfilled_kg !== null ? parseFloat(r.fulfilled_kg) : 0,
+    offeredPricePerKg: parseFloat(r.offered_price_per_kg),
+    offered_price_per_kg: parseFloat(r.offered_price_per_kg),
+    district: r.district,
+    upazila: r.upazila,
+    location: r.location,
+    deadline: r.deadline,
+    urgent: Boolean(r.urgent),
+    verified: Boolean(r.verified),
+    notes: r.notes,
+    createdAt: r.created_at,
+    created_at: r.created_at,
+  };
+}
+
+function formatMarketPriceRow(r: any) {
+  return {
+    id: r.id,
+    district: r.district,
+    upazila: r.upazila,
+    marketName: r.market_name,
+    market_name: r.market_name,
+    marketNameBn: r.market_name_bn,
+    market_name_bn: r.market_name_bn,
+    cropName: r.crop_name,
+    crop_name: r.crop_name,
+    banglaName: r.bangla_name,
+    bangla_name: r.bangla_name,
+    category: r.category,
+    wholesalePrice: parseFloat(r.wholesale_price),
+    wholesale_price: parseFloat(r.wholesale_price),
+    wholesaleDhaka: parseFloat(r.wholesale_dhaka),
+    wholesale_dhaka: parseFloat(r.wholesale_dhaka),
+    retailPrice: parseFloat(r.retail_price),
+    retail_price: parseFloat(r.retail_price),
+    unit: r.unit || 'kg',
+    change24h: r.change_24h !== null ? parseFloat(r.change_24h) : 0,
+    change_24h: r.change_24h !== null ? parseFloat(r.change_24h) : 0,
+    trend: r.trend || 'stable',
+    source: r.source || 'Department of Agricultural Marketing (DAM)',
+    lastUpdated: r.last_updated,
+    last_updated: r.last_updated,
+  };
+}
 
 // Get verified wholesaler purchase offers for farmers
-app.get('/api/wholesaler-offers', (req, res) => {
+app.get('/api/wholesaler-offers', async (req, res) => {
   try {
     const { district, crop } = req.query as any;
     let query = 'SELECT * FROM wholesaler_offers WHERE 1=1';
     const params: any[] = [];
+    let idx = 1;
 
     if (district && district !== 'All') {
-      query += ' AND district = ?';
+      query += ` AND district = $${idx++}`;
       params.push(district);
     }
     if (crop) {
-      query += ' AND (crop_name LIKE ? OR crop_bangla LIKE ?)';
-      params.push(`%${crop}%`, `%${crop}%`);
+      query += ` AND (crop_name ILIKE $${idx} OR crop_bangla ILIKE $${idx})`;
+      params.push(`%${crop}%`);
+      idx++;
     }
 
     query += ' ORDER BY urgent DESC, created_at DESC';
-    const offers = db.prepare(query).all(...params);
+    const result = await pool.query(query, params);
+    const offers = result.rows.map(formatWholesalerOfferRow);
     return res.json({ offers });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -1025,71 +1484,260 @@ app.get('/api/wholesaler-offers', (req, res) => {
 });
 
 // Wholesalers post procurement demands / purchase offers
-app.post('/api/wholesaler-offers', (req, res) => {
+app.post('/api/wholesaler-offers', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
+    const authUser = req.user!;
+    if (authUser.role !== 'wholesaler' && authUser.role !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden: Only wholesalers and administrators can post procurement offers.' });
+    }
+
     const {
-      wholesalerId, wholesalerName, wholesalerPhone, businessName,
       cropName, cropBangla, quantityKgNeeded, offeredPricePerKg,
       district = 'Bogura', upazila = '', location, deadline, urgent = false, notes = '',
     } = req.body;
+
+    const wholesalerId = authUser.id;
+    const wholesalerName = authUser.name || 'Verified Wholesaler';
+    const wholesalerPhone = authUser.phone || '';
+    const businessName = req.body.businessName || (authUser as any).businessName || wholesalerName || 'Wholesale Arat';
 
     if (!cropName || !quantityKgNeeded || !offeredPricePerKg || !location) {
       return res.status(400).json({ error: 'Crop, quantity, offered price, and delivery location are required.' });
     }
 
-    const offerId = `bid-${Date.now()}`;
-    const nowIso = new Date().toISOString();
+    const qty = Number(quantityKgNeeded);
+    const price = Number(offeredPricePerKg);
+    if (isNaN(qty) || qty <= 0 || isNaN(price) || price <= 0) {
+      return res.status(400).json({ error: 'Quantity and offered price must be positive numbers.' });
+    }
 
-    db.prepare(`
+    const offerId = `bid-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
+    const insertRes = await pool.query(`
       INSERT INTO wholesaler_offers (
         id, wholesaler_id, wholesaler_name, wholesaler_phone, business_name,
         crop_name, crop_bangla, quantity_kg_needed, fulfilled_kg, offered_price_per_kg,
         district, upazila, location, deadline, urgent, verified, notes, created_at
       ) VALUES (
-        ?, ?, ?, ?, ?,
-        ?, ?, ?, 0, ?,
-        ?, ?, ?, ?, ?, 1, ?, ?
-      )
-    `).run(
+        $1, $2, $3, $4, $5,
+        $6, $7, $8, 0, $9,
+        $10, $11, $12, $13, $14, true, $15, NOW()
+      ) RETURNING *
+    `, [
       offerId,
-      wholesalerId || 'w-user',
-      wholesalerName || 'Verified Wholesaler',
-      wholesalerPhone || '',
-      businessName || wholesalerName || 'Wholesale Arat',
+      wholesalerId,
+      wholesalerName,
+      wholesalerPhone,
+      businessName,
       cropName,
       cropBangla || cropName,
-      Number(quantityKgNeeded),
-      Number(offeredPricePerKg),
+      qty,
+      price,
       district,
       upazila || null,
       location,
       deadline || 'Within 7 days',
-      urgent ? 1 : 0,
+      Boolean(urgent),
       notes || null,
-      nowIso
-    );
+    ]);
 
-    return res.status(201).json({ success: true, offerId, message: 'Purchase offer broadcast to farmers successfully!' });
+    const createdOffer = formatWholesalerOfferRow(insertRes.rows[0]);
+    return res.status(201).json({
+      success: true,
+      offerId,
+      offer: createdOffer,
+      message: 'Purchase offer broadcast to farmers successfully!'
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Update a wholesaler procurement offer
+app.put('/api/wholesaler-offers/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const authUser = req.user!;
+    const offerRes = await pool.query('SELECT * FROM wholesaler_offers WHERE id = $1', [req.params.id]);
+    if (offerRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Wholesaler offer not found.' });
+    }
+
+    const offer = offerRes.rows[0];
+    if (offer.wholesaler_id !== authUser.id && authUser.role !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden: You cannot modify another wholesaler\'s offer.' });
+    }
+
+    const {
+      quantityKgNeeded, fulfilledKg, offeredPricePerKg, district, upazila,
+      location, deadline, urgent, notes, cropName, cropBangla
+    } = req.body;
+
+    const updated = await pool.query(`
+      UPDATE wholesaler_offers
+      SET quantity_kg_needed = COALESCE($1, quantity_kg_needed),
+          fulfilled_kg = COALESCE($2, fulfilled_kg),
+          offered_price_per_kg = COALESCE($3, offered_price_per_kg),
+          district = COALESCE($4, district),
+          upazila = COALESCE($5, upazila),
+          location = COALESCE($6, location),
+          deadline = COALESCE($7, deadline),
+          urgent = COALESCE($8, urgent),
+          notes = COALESCE($9, notes),
+          crop_name = COALESCE($10, crop_name),
+          crop_bangla = COALESCE($11, crop_bangla)
+      WHERE id = $12
+      RETURNING *
+    `, [
+      quantityKgNeeded !== undefined ? Number(quantityKgNeeded) : null,
+      fulfilledKg !== undefined ? Number(fulfilledKg) : null,
+      offeredPricePerKg !== undefined ? Number(offeredPricePerKg) : null,
+      district || null,
+      upazila !== undefined ? upazila : null,
+      location || null,
+      deadline || null,
+      urgent !== undefined ? Boolean(urgent) : null,
+      notes !== undefined ? notes : null,
+      cropName || null,
+      cropBangla || null,
+      req.params.id
+    ]);
+
+    return res.json({ success: true, offer: formatWholesalerOfferRow(updated.rows[0]) });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Delete a wholesaler procurement offer
+app.delete('/api/wholesaler-offers/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const authUser = req.user!;
+    const offerRes = await pool.query('SELECT * FROM wholesaler_offers WHERE id = $1', [req.params.id]);
+    if (offerRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Wholesaler offer not found.' });
+    }
+
+    const offer = offerRes.rows[0];
+    if (offer.wholesaler_id !== authUser.id && authUser.role !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden: You cannot delete another wholesaler\'s offer.' });
+    }
+
+    await pool.query('DELETE FROM wholesaler_offers WHERE id = $1', [req.params.id]);
+    return res.json({ success: true, message: 'Wholesaler offer deleted successfully.' });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
 });
 
 // Official Department of Agricultural Marketing (DAM) market prices
-app.get('/api/market-prices', (req, res) => {
+app.get(['/api/market-prices', '/api/market-rates'], async (req, res) => {
   try {
     const { district } = req.query as any;
     let query = 'SELECT * FROM market_prices';
     const params: any[] = [];
 
     if (district && district !== 'All') {
-      query += ' WHERE district = ?';
+      query += ' WHERE district = $1';
       params.push(district);
     }
     query += ' ORDER BY crop_name ASC';
 
-    const rates = db.prepare(query).all(...params);
+    const result = await pool.query(query, params);
+    const rates = result.rows.map(formatMarketPriceRow);
     return res.json({ rates, source: 'Department of Agricultural Marketing (DAM)' });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin-only: create market price
+app.post('/api/market-prices', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const authUser = req.user!;
+    if (authUser.role !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden: Admin access required to update market prices.' });
+    }
+    const {
+      district, upazila, marketName, marketNameBn, cropName, banglaName,
+      category, wholesalePrice, wholesaleDhaka, retailPrice, unit = 'kg',
+      change24h = 0, trend = 'stable', source = 'Department of Agricultural Marketing (DAM)'
+    } = req.body;
+
+    if (!district || !marketName || !cropName || !banglaName || !wholesalePrice || !retailPrice) {
+      return res.status(400).json({ error: 'District, market name, crop names, and prices are required.' });
+    }
+
+    const priceId = `mp-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const ins = await pool.query(`
+      INSERT INTO market_prices (
+        id, district, upazila, market_name, market_name_bn, crop_name, bangla_name,
+        category, wholesale_price, wholesale_dhaka, retail_price, unit, change_24h,
+        trend, source, last_updated
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7,
+        $8, $9, $10, $11, $12, $13,
+        $14, $15, NOW()
+      ) RETURNING *
+    `, [
+      priceId, district, upazila || null, marketName, marketNameBn || marketName, cropName, banglaName,
+      category || 'Vegetables', Number(wholesalePrice), Number(wholesaleDhaka || wholesalePrice),
+      Number(retailPrice), unit, Number(change24h), trend, source
+    ]);
+
+    return res.status(201).json({ success: true, rate: formatMarketPriceRow(ins.rows[0]) });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin-only: update market price
+app.put('/api/market-prices/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const authUser = req.user!;
+    if (authUser.role !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden: Admin access required to update market prices.' });
+    }
+    const { wholesalePrice, wholesaleDhaka, retailPrice, change24h, trend } = req.body;
+    const upd = await pool.query(`
+      UPDATE market_prices
+      SET wholesale_price = COALESCE($1, wholesale_price),
+          wholesale_dhaka = COALESCE($2, wholesale_dhaka),
+          retail_price = COALESCE($3, retail_price),
+          change_24h = COALESCE($4, change_24h),
+          trend = COALESCE($5, trend),
+          last_updated = NOW()
+      WHERE id = $6
+      RETURNING *
+    `, [
+      wholesalePrice !== undefined ? Number(wholesalePrice) : null,
+      wholesaleDhaka !== undefined ? Number(wholesaleDhaka) : null,
+      retailPrice !== undefined ? Number(retailPrice) : null,
+      change24h !== undefined ? Number(change24h) : null,
+      trend || null,
+      req.params.id
+    ]);
+
+    if (upd.rows.length === 0) {
+      return res.status(404).json({ error: 'Market price record not found.' });
+    }
+    return res.json({ success: true, rate: formatMarketPriceRow(upd.rows[0]) });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin-only: delete market price
+app.delete('/api/market-prices/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const authUser = req.user!;
+    if (authUser.role !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden: Admin access required.' });
+    }
+    const del = await pool.query('DELETE FROM market_prices WHERE id = $1 RETURNING id', [req.params.id]);
+    if (del.rows.length === 0) {
+      return res.status(404).json({ error: 'Market price record not found.' });
+    }
+    return res.json({ success: true, message: 'Market price record deleted.' });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
@@ -1100,8 +1748,11 @@ app.get('/api/farmer/intelligence', async (req, res) => {
   try {
     const district = (req.query.district as string) || 'Bogura';
 
-    const rates = db.prepare('SELECT * FROM market_prices WHERE district = ?').all(district);
-    const offers = db.prepare('SELECT * FROM wholesaler_offers WHERE district = ? ORDER BY urgent DESC').all(district);
+    const ratesRes = await pool.query('SELECT * FROM market_prices WHERE district = $1', [district]);
+    const offersRes = await pool.query('SELECT * FROM wholesaler_offers WHERE district = $1 ORDER BY urgent DESC', [district]);
+
+    const rates = ratesRes.rows.map(formatMarketPriceRow);
+    const offers = offersRes.rows.map(formatWholesalerOfferRow);
 
     const highDemandCrops = [
       { name: 'Hybrid Tomatoes (হাইব্রিড টমেটো)', demandIndex: 94, trend: 'High Demand', reason: 'High arat arrivals from Karwan Bazar & Dhaka wholesale corridor' },
@@ -1125,8 +1776,9 @@ app.get('/api/farmer/intelligence', async (req, res) => {
 });
 
 // Admin Metrics & System Overview
-app.get('/api/admin/metrics', (req, res) => {
+app.get('/api/admin/metrics', async (req, res) => {
   try {
+    if (!await requireAdmin(req, res)) return;
     const userCounts = db.prepare('SELECT role, COUNT(*) as count FROM users GROUP BY role').all() as any[];
     const productCounts = db.prepare('SELECT target_role, COUNT(*) as count, SUM(available_kg) as total_kg FROM products GROUP BY target_role').all() as any[];
     const orderStats = db.prepare('SELECT COUNT(*) as total_orders, SUM(total_bdt) as total_volume FROM orders').get() as any;
@@ -1298,56 +1950,110 @@ Return JSON:
 });
 
 // 3. Current User Profile
-app.get('/api/auth/me', (req, res) => {
-  const token = req.headers.authorization?.replace('Bearer ', '');
-  const phone = req.query.phone as string;
-
-  let user: any = token ? jsonDb.getUsers().find((u: any) => u.sessionToken === token) : undefined;
-  if (!user && phone) {
-    user = jsonDb.findUserByIdentifier(phone);
-  }
-
-  // Also check SQLite database if not found in jsonDb
-  if (!user && phone) {
-    const row = db.prepare('SELECT * FROM users WHERE phone = ? LIMIT 1').get(phone) as any;
-    if (row) {
-      user = {
-        id: row.id,
-        role: row.role,
-        name: row.name,
-        nameBn: row.name_bn,
-        phone: row.phone,
-        email: row.email,
-        district: row.district,
-        upazila: row.upazila,
-        verified: Boolean(row.verified),
-        farmSizeAcres: row.farm_size_acres,
-        primaryCrops: row.primary_crops ? JSON.parse(row.primary_crops) : undefined,
-        businessName: row.business_name,
-        businessType: row.business_type,
-        shopName: row.shop_name,
-        licenseNumber: row.license_number,
-        createdAt: row.created_at,
-      };
+app.get('/api/auth/me', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const authUser = req.user!;
+    let userRow: any = null;
+    try {
+      const q = await pool.query('SELECT * FROM users WHERE id = $1 LIMIT 1', [authUser.id]);
+      if (q.rows.length > 0) userRow = q.rows[0];
+    } catch (e) {
+      console.warn('[Neon] error fetching user in /api/auth/me:', e);
     }
-  }
+    if (!userRow) {
+      userRow = db.prepare('SELECT * FROM users WHERE id = ? LIMIT 1').get(authUser.id) as any;
+    }
+    if (!userRow && authUser.role === 'admin') {
+      return res.json({
+        success: true,
+        user: {
+          id: authUser.id,
+          role: 'admin',
+          name: authUser.name || 'Central Platform Administrator',
+          phone: authUser.phone || '01700000000',
+          email: authUser.email || 'admin@nativebazar.gov.bd',
+          district: 'Bogura',
+          upazila: 'Bogura Sadar',
+          verified: true
+        }
+      });
+    }
+    if (!userRow) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
 
-  if (!user) {
-    return res.status(401).json({ success: false, error: 'Unauthorized' });
-  }
+    let primaryCropsParsed: any = undefined;
+    try {
+      if (userRow.primary_crops) {
+        primaryCropsParsed = typeof userRow.primary_crops === 'string' ? JSON.parse(userRow.primary_crops) : userRow.primary_crops;
+      }
+    } catch {}
 
-  const { passwordHash: _, ...safeUser } = user;
-  return res.json({ success: true, user: safeUser });
+    const safeUser = {
+      id: userRow.id,
+      role: userRow.role,
+      name: userRow.name,
+      nameBn: userRow.name_bn || userRow.nameBn,
+      phone: userRow.phone,
+      email: userRow.email,
+      district: userRow.district,
+      upazila: userRow.upazila,
+      verified: Boolean(userRow.verified),
+      farmSizeAcres: userRow.farm_size_acres || userRow.farmSizeAcres,
+      primaryCrops: primaryCropsParsed,
+      businessName: userRow.business_name || userRow.businessName,
+      businessType: userRow.business_type || userRow.businessType,
+      shopName: userRow.shop_name || userRow.shopName,
+      licenseNumber: userRow.license_number || userRow.licenseNumber,
+      createdAt: userRow.created_at || userRow.createdAt,
+      lastLoginAt: userRow.last_login_at || userRow.lastLoginAt,
+    };
+
+    return res.json({ success: true, user: safeUser });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // 4. Update Profile
-app.put('/api/users/profile', (req, res) => {
-  const { id, name, nameBn, district, upazila, farmSizeAcres, primaryCrops, shopName, licenseNumber } = req.body;
-  if (!id) return res.status(400).json({ success: false, error: 'User id is required' });
+app.put('/api/users/profile', requireAuth, async (req: AuthenticatedRequest, res) => {
+  const authUser = req.user!;
+  const targetId = authUser.role === 'admin' ? (req.body.id || authUser.id) : authUser.id;
+  if (!targetId) return res.status(400).json({ success: false, error: 'User id is required' });
+
+  const { name, nameBn, district, upazila, farmSizeAcres, primaryCrops, shopName, licenseNumber } = req.body;
+
+  // Update in Neon PostgreSQL
+  try {
+    await pool.query(`
+      UPDATE users SET
+        name = COALESCE($1, name),
+        name_bn = COALESCE($2, name_bn),
+        district = COALESCE($3, district),
+        upazila = COALESCE($4, upazila),
+        farm_size_acres = COALESCE($5, farm_size_acres),
+        primary_crops = COALESCE($6, primary_crops),
+        shop_name = COALESCE($7, shop_name),
+        license_number = COALESCE($8, license_number)
+      WHERE id = $9
+    `, [
+      name ?? null,
+      nameBn ?? null,
+      district ?? null,
+      upazila ?? null,
+      farmSizeAcres !== undefined ? Number(farmSizeAcres) : null,
+      primaryCrops ? (Array.isArray(primaryCrops) ? JSON.stringify(primaryCrops) : primaryCrops) : null,
+      shopName ?? null,
+      licenseNumber ?? null,
+      targetId,
+    ]);
+  } catch (neonErr) {
+    console.warn('[Neon] error updating profile:', neonErr);
+  }
 
   // Update in SQLite if exists there
   try {
-    const existing = db.prepare('SELECT id FROM users WHERE id = ?').get(id);
+    const existing = db.prepare('SELECT id FROM users WHERE id = ?').get(targetId);
     if (existing) {
       db.prepare(`
         UPDATE users SET
@@ -1369,14 +2075,14 @@ app.put('/api/users/profile', (req, res) => {
         primaryCrops ? JSON.stringify(primaryCrops) : null,
         shopName ?? null,
         licenseNumber ?? null,
-        id
+        targetId
       );
     }
   } catch {
     // continue to jsonDb
   }
 
-  const updated = jsonDb.updateUser(id, {
+  const updated = jsonDb.updateUser(targetId, {
     name,
     nameBn,
     district,
@@ -1387,7 +2093,7 @@ app.put('/api/users/profile', (req, res) => {
     licenseNumber,
   });
 
-  const finalUser = updated || (db.prepare('SELECT * FROM users WHERE id = ?').get(id) as any);
+  const finalUser = updated || (db.prepare('SELECT * FROM users WHERE id = ?').get(targetId) as any);
   if (!finalUser) return res.status(404).json({ success: false, error: 'User not found' });
   const { passwordHash: _, password_hash: __, ...safeUser } = finalUser;
   return res.json({ success: true, user: safeUser });
@@ -1513,35 +2219,53 @@ app.get('/api/users', (req, res) => {
   }
 });
 
-// ─── CROPS REST APIS ─────────────────────────────────────────────────────────
-app.get('/api/crops', (req, res) => {
-  const { farmerId, district } = req.query;
-  const crops = jsonDb.getCrops({
-    farmerId: farmerId ? String(farmerId) : undefined,
-    district: district ? String(district) : undefined,
-  });
-  res.json({ success: true, crops });
+// ─── NEON CROPS REST APIS (VIEW & PRODUCTS UNIFIED) ─────────────────────────
+app.get('/api/crops', async (req, res) => {
+  try {
+    const { farmerId, district } = req.query;
+    let query = 'SELECT * FROM crops WHERE 1=1';
+    const params: any[] = [];
+    let idx = 1;
+
+    if (farmerId) {
+      query += ` AND "farmerId" = $${idx++}`;
+      params.push(String(farmerId));
+    }
+    if (district && district !== 'All') {
+      query += ` AND district = $${idx++}`;
+      params.push(String(district));
+    }
+
+    query += ' ORDER BY "createdAt" DESC';
+    const result = await pool.query(query, params);
+    res.json({ success: true, crops: result.rows });
+  } catch (err: any) {
+    console.error('Error fetching Neon crops view:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
-app.post('/api/crops', (req, res) => {
+app.post('/api/crops', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
+    const authUser = req.user!;
+    if (authUser.role !== 'farmer' && authUser.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        error: 'Forbidden: Only farmers and administrators can list crops.',
+      });
+    }
+
     const {
-      farmerId,
-      farmerName,
-      farmerPhone,
-      district,
-      upazila,
-      cropName,
-      cropBangla,
-      variety = 'Standard',
-      quantityKg,
-      availableDate,
-      expectedPricePerKg,
-      marketBenchmarkPrice,
-      imageUrl,
-      qualityGrade = 'A',
-      organicCertified = false,
+      farmerId: bodyFarmerId, farmerName: bodyFarmerName, farmerPhone: bodyFarmerPhone,
+      district = 'Bogura', upazila = 'Shibganj', cropName, cropBangla, variety = 'Standard',
+      quantityKg, availableDate = 'Ready to Harvest', expectedPricePerKg, marketBenchmarkPrice,
+      imageUrl = 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=600&auto=format&fit=crop&q=80',
+      qualityGrade = 'A', organicCertified = false,
     } = req.body;
+
+    const farmerId = authUser.role === 'admin' ? (bodyFarmerId || authUser.id) : authUser.id;
+    const farmerName = authUser.role === 'admin' ? (bodyFarmerName || authUser.name) : authUser.name;
+    const farmerPhone = authUser.role === 'admin' ? (bodyFarmerPhone || authUser.phone || '') : (authUser.phone || bodyFarmerPhone || '');
 
     if (!farmerId || !farmerName || !cropName || !quantityKg || !expectedPricePerKg) {
       return res.status(400).json({
@@ -1550,118 +2274,113 @@ app.post('/api/crops', (req, res) => {
       });
     }
 
-    // Ensure farmer exists in jsonDb before adding crop so foreign key validation never fails
-    let existingFarmer = jsonDb.getUserById(farmerId) || jsonDb.findUserByIdentifier(farmerPhone || farmerId);
-    if (!existingFarmer) {
-      try {
-        const sqlFarmer = db.prepare('SELECT * FROM users WHERE id = ? OR phone = ?').get(farmerId, farmerPhone || farmerId) as any;
-        if (sqlFarmer) {
-          jsonDb.addUser({
-            id: sqlFarmer.id,
-            role: sqlFarmer.role,
-            name: sqlFarmer.name,
-            phone: sqlFarmer.phone,
-            email: sqlFarmer.email || undefined,
-            passwordHash: sqlFarmer.password_hash,
-            district: sqlFarmer.district || 'Bogura',
-            upazila: sqlFarmer.upazila || undefined,
-            verified: Boolean(sqlFarmer.verified),
-            createdAt: sqlFarmer.created_at || new Date().toISOString(),
-          });
-        } else {
-          // Auto-register farmer placeholder in jsonDb
-          jsonDb.addUser({
-            id: farmerId,
-            role: 'farmer',
-            name: farmerName,
-            phone: farmerPhone || `017${Date.now().toString().slice(-8)}`,
-            passwordHash: 'sha256_farmer_auto',
-            district: district || 'Bogura',
-            upazila: upazila || 'Shibganj',
-            verified: true,
-            createdAt: new Date().toISOString(),
-          });
-        }
-      } catch (fErr) {
-        console.warn('[Sync] Auto-farmer register warning:', fErr);
-      }
-    }
+    const prodId = `crop-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const finalMarketPrice = marketBenchmarkPrice ? Number(marketBenchmarkPrice) : Number(expectedPricePerKg) * 1.15;
 
-    const newCrop = jsonDb.addCrop({
-      id: `crop-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    await pool.query(`
+      INSERT INTO products (
+        id, seller_id, seller_name, seller_phone, seller_role, target_role,
+        crop_name, bangla_name, category, variety, unit, quantity, available_qty,
+        min_order_qty, unit_price, market_price, quality_grade, district,
+        upazila, harvest_status, available_date, organic_certified, image_url,
+        created_at, updated_at
+      ) VALUES (
+        $1, $2, $3, $4, 'farmer', 'wholesaler',
+        $5, $6, 'Vegetables', $7, 'kg', $8, $8,
+        1, $9, $10, $11, $12,
+        $13, 'Ready to Harvest', $14, $15, $16,
+        NOW(), NOW()
+      )
+    `, [
+      prodId, farmerId, farmerName, farmerPhone,
+      cropName, cropBangla || cropName, variety, Number(quantityKg),
+      Number(expectedPricePerKg), finalMarketPrice, qualityGrade, district,
+      upazila, availableDate, Boolean(organicCertified), imageUrl
+    ]);
+
+    const newCrop = {
+      id: prodId,
       farmerId,
       farmerName,
-      farmerPhone: farmerPhone || '',
-      district: district || 'Bogura',
-      upazila: upazila || 'Shibganj',
+      farmerPhone,
+      district,
+      upazila,
       cropName,
       cropBangla: cropBangla || cropName,
       variety,
       quantityKg: Number(quantityKg),
-      availableDate: availableDate || 'Ready to Harvest',
+      availableKg: Number(quantityKg),
+      availableDate,
       expectedPricePerKg: Number(expectedPricePerKg),
-      marketBenchmarkPrice: marketBenchmarkPrice ? Number(marketBenchmarkPrice) : Number(expectedPricePerKg) + 4,
-      status: 'Growing',
-      imageUrl: imageUrl || 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=600&auto=format&fit=crop&q=80',
+      marketBenchmarkPrice: finalMarketPrice,
+      status: 'Ready to Harvest',
+      imageUrl,
       qualityGrade,
-      organicCertified: !!organicCertified,
-      createdAt: new Date().toISOString(),
-    });
-
-    // Mirror newly added crop to SQLite products table for permanent persistence
-    try {
-      db.prepare(`
-        INSERT INTO products (
-          id, seller_id, seller_name, seller_phone, seller_role, target_role,
-          crop_name, bangla_name, category, variety, quantity_kg, available_kg,
-          min_order_kg, price_per_kg, market_price_per_kg, quality_grade, district,
-          upazila, harvest_status, available_date, organic_certified, image_url, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        newCrop.id,
-        newCrop.farmerId,
-        newCrop.farmerName,
-        newCrop.farmerPhone,
-        'farmer',
-        'wholesaler',
-        newCrop.cropName,
-        newCrop.cropBangla,
-        'Vegetables',
-        newCrop.variety,
-        newCrop.quantityKg,
-        newCrop.quantityKg,
-        1,
-        newCrop.expectedPricePerKg,
-        newCrop.marketBenchmarkPrice || newCrop.expectedPricePerKg,
-        newCrop.qualityGrade || 'A',
-        newCrop.district,
-        newCrop.upazila,
-        'Ready to Harvest',
-        newCrop.availableDate,
-        newCrop.organicCertified ? 1 : 0,
-        newCrop.imageUrl,
-        newCrop.createdAt
-      );
-    } catch {
-      // ignore duplicates
-    }
+      organicCertified: Boolean(organicCertified),
+      createdAt: new Date().toISOString()
+    };
 
     return res.status(201).json({ success: true, crop: newCrop });
+  } catch (err: any) {
+    console.error('Error creating crop in Neon:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.put('/api/crops/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const authUser = req.user!;
+    const existingRes = await pool.query('SELECT * FROM products WHERE id = $1', [req.params.id]);
+    if (existingRes.rows.length === 0) return res.status(404).json({ success: false, error: 'Crop listing not found' });
+    const existing = existingRes.rows[0];
+
+    if (existing.seller_id !== authUser.id && authUser.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Forbidden: You cannot modify another farmer\'s crops.' });
+    }
+
+    const { expectedPricePerKg, quantityKg, availableKg, qualityGrade, status, availableDate, imageUrl } = req.body;
+
+    await pool.query(`
+      UPDATE products
+      SET unit_price = COALESCE($1, unit_price),
+          quantity = COALESCE($2, quantity),
+          available_qty = COALESCE($3, available_qty),
+          quality_grade = COALESCE($4, quality_grade),
+          harvest_status = COALESCE($5, harvest_status),
+          available_date = COALESCE($6, available_date),
+          image_url = COALESCE($7, image_url),
+          updated_at = NOW()
+      WHERE id = $8
+    `, [
+      expectedPricePerKg !== undefined ? Number(expectedPricePerKg) : null,
+      quantityKg !== undefined ? Number(quantityKg) : null,
+      availableKg !== undefined ? Number(availableKg) : null,
+      qualityGrade || null, status || null, availableDate || null, imageUrl || null, req.params.id
+    ]);
+
+    const updatedCropRes = await pool.query('SELECT * FROM crops WHERE id = $1', [req.params.id]);
+    return res.json({ success: true, crop: updatedCropRes.rows[0] });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err.message });
   }
 });
 
-app.put('/api/crops/:id', (req, res) => {
-  const updated = jsonDb.updateCrop(req.params.id, req.body);
-  if (!updated) return res.status(404).json({ success: false, error: 'Crop listing not found' });
-  return res.json({ success: true, crop: updated });
-});
+app.delete('/api/crops/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const authUser = req.user!;
+    const existingRes = await pool.query('SELECT * FROM products WHERE id = $1', [req.params.id]);
+    if (existingRes.rows.length === 0) return res.status(404).json({ success: false, error: 'Crop listing not found' });
+    const existing = existingRes.rows[0];
 
-app.delete('/api/crops/:id', (req, res) => {
-  const deleted = jsonDb.deleteCrop(req.params.id);
-  if (!deleted) return res.status(404).json({ success: false, error: 'Crop listing not found' });
-  return res.json({ success: true, message: 'Crop listing deleted' });
+    if (existing.seller_id !== authUser.id && authUser.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Forbidden: You cannot delete another farmer\'s crops.' });
+    }
+
+    await pool.query('DELETE FROM products WHERE id = $1', [req.params.id]);
+    return res.json({ success: true, message: 'Crop listing deleted' });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // ─── SUPPLIER PRODUCTS REST APIS ─────────────────────────────────────────────
@@ -1675,11 +2394,17 @@ app.get('/api/supplier-products', (req, res) => {
   res.json({ success: true, products });
 });
 
-app.post('/api/supplier-products', (req, res) => {
+app.post('/api/supplier-products', requireAuth, (req: AuthenticatedRequest, res) => {
   try {
+    const authUser = req.user!;
+    if (authUser.role !== 'supplier' && authUser.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        error: 'Forbidden: Only suppliers and administrators can add supplier products.',
+      });
+    }
+
     const {
-      supplierId,
-      supplierName,
       shopName,
       category = 'Organic',
       name,
@@ -1695,6 +2420,10 @@ app.post('/api/supplier-products', (req, res) => {
       certificationNumber,
       deliveryRadiusKm = 10,
     } = req.body;
+
+    const supplierId = authUser.role === 'admin' ? (req.body.supplierId || authUser.id) : authUser.id;
+    const supplierName = authUser.role === 'admin' ? (req.body.supplierName || authUser.name) : authUser.name;
+    const contactPhone = authUser.phone || phone || '';
 
     if (!supplierId || !name || !unitPriceBDT) {
       return res.status(400).json({
@@ -1716,7 +2445,7 @@ app.post('/api/supplier-products', (req, res) => {
       unit,
       inStock: true,
       stockQty: Number(stockQty),
-      phone: phone || '',
+      phone: contactPhone,
       suitableCrops,
       description,
       organicCertified: !!organicCertified,
@@ -1731,58 +2460,245 @@ app.post('/api/supplier-products', (req, res) => {
   }
 });
 
-app.put('/api/supplier-products/:id', (req, res) => {
+app.put('/api/supplier-products/:id', requireAuth, (req: AuthenticatedRequest, res) => {
+  const authUser = req.user!;
+  const existing = jsonDb.getSupplierProductById(req.params.id);
+  if (!existing) return res.status(404).json({ success: false, error: 'Product not found' });
+  if (existing.supplierId !== authUser.id && authUser.role !== 'admin') {
+    return res.status(403).json({ success: false, error: 'Forbidden: You cannot modify another supplier\'s product.' });
+  }
   const updated = jsonDb.updateSupplierProduct(req.params.id, req.body);
-  if (!updated) return res.status(404).json({ success: false, error: 'Product not found' });
   return res.json({ success: true, product: updated });
 });
 
-app.delete('/api/supplier-products/:id', (req, res) => {
+app.delete('/api/supplier-products/:id', requireAuth, (req: AuthenticatedRequest, res) => {
+  const authUser = req.user!;
+  const existing = jsonDb.getSupplierProductById(req.params.id);
+  if (!existing) return res.status(404).json({ success: false, error: 'Product not found' });
+  if (existing.supplierId !== authUser.id && authUser.role !== 'admin') {
+    return res.status(403).json({ success: false, error: 'Forbidden: You cannot delete another supplier\'s product.' });
+  }
   const deleted = jsonDb.deleteSupplierProduct(req.params.id);
-  if (!deleted) return res.status(404).json({ success: false, error: 'Product not found' });
   return res.json({ success: true, message: 'Product deleted' });
 });
 
-// ─── ORDERS & ORDER TRACKING REST APIS ───────────────────────────────────────
-app.get('/api/legacy/orders', (req, res) => {
-  const { customerId, sellerId, orderType } = req.query;
-  const orders = jsonDb.getOrders({
-    customerId: customerId ? String(customerId) : undefined,
-    sellerId: sellerId ? String(sellerId) : undefined,
-    orderType: orderType ? String(orderType) : undefined,
-  });
-  res.json({ success: true, orders });
+// ─── NEON ORDERS & ORDER TRACKING REST APIS ─────────────────────────────────
+app.get('/api/legacy/orders', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const authUser = req.user!;
+    let query = 'SELECT * FROM orders WHERE 1=1';
+    const params: any[] = [];
+    let idx = 1;
+
+    if (authUser.role === 'admin') {
+      const { customerId, sellerId } = req.query;
+      if (customerId) {
+        query += ` AND buyer_id = $${idx++}`;
+        params.push(String(customerId));
+      } else if (sellerId) {
+        query += ` AND seller_id = $${idx++}`;
+        params.push(String(sellerId));
+      }
+    } else {
+      query += ` AND (buyer_id = $${idx} OR seller_id = $${idx})`;
+      params.push(authUser.id);
+      idx++;
+    }
+
+    query += ' ORDER BY created_at DESC';
+    const orderRes = await pool.query(query, params);
+    res.json({ success: true, orders: orderRes.rows });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
-// Verified Buyer Review Submission (Allowed ONLY on Delivered Orders)
-app.post('/api/orders/:id/review', (req, res) => {
+// ─── REVIEWS REST APIS (NEON POSTGRESQL) ────────────────────────────────────
+
+function formatReviewRow(r: any) {
+  return {
+    id: r.id,
+    orderId: r.order_id,
+    order_id: r.order_id,
+    productId: r.product_id,
+    product_id: r.product_id,
+    userId: r.user_id,
+    user_id: r.user_id,
+    userName: r.user_name,
+    user_name: r.user_name,
+    rating: parseInt(r.rating, 10),
+    comment: r.comment,
+    verifiedPurchase: Boolean(r.verified_purchase),
+    verified_purchase: Boolean(r.verified_purchase),
+    createdAt: r.created_at,
+    created_at: r.created_at,
+  };
+}
+
+// Verified Buyer Review Submission (Allowed ONLY on Delivered Orders in Neon)
+app.post('/api/orders/:id/review', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
-    const { rating, comment } = req.body;
-    if (!rating || Number(rating) < 1 || Number(rating) > 5) {
+    const authUser = req.user!;
+    const { rating, comment, productId } = req.body;
+    const starRating = Number(rating);
+    if (!starRating || starRating < 1 || starRating > 5) {
       return res.status(400).json({ success: false, error: 'Valid star rating between 1 and 5 is required' });
     }
 
-    const order = jsonDb.getOrderById(req.params.id);
-    if (!order) return res.status(404).json({ success: false, error: 'Order not found' });
-    if (order.status !== 'Delivered') {
+    const orderRes = await pool.query('SELECT * FROM orders WHERE id = $1', [req.params.id]);
+    if (orderRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Order not found' });
+    }
+    const order = orderRes.rows[0];
+
+    // Authorization: only the buyer or admin
+    if (order.buyer_id !== authUser.id && authUser.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        error: 'Forbidden: Only the customer who placed this order can submit a review.',
+      });
+    }
+
+    // Verify delivery status
+    if (order.delivery_status !== 'Delivered') {
       return res.status(400).json({
         success: false,
         error: 'Reviews are reserved exclusively for verified buyers with completed deliveries.',
       });
     }
 
-    const updated = jsonDb.addOrderReview(req.params.id, Number(rating), comment || '');
-    return res.json({ success: true, order: updated, message: 'Verified review submitted successfully' });
+    // Duplicate check: prevent duplicate reviews for the same order
+    const existingReviewRes = await pool.query('SELECT id FROM reviews WHERE order_id = $1', [req.params.id]);
+    if (existingReviewRes.rows.length > 0) {
+      return res.status(400).json({ success: false, error: 'Order has already been reviewed.' });
+    }
+
+    // Derive or find product_id from order_items if not provided
+    let effectiveProductId = productId || null;
+    if (!effectiveProductId) {
+      const itemRes = await pool.query('SELECT product_id FROM order_items WHERE order_id = $1 LIMIT 1', [req.params.id]);
+      if (itemRes.rows.length > 0) {
+        effectiveProductId = itemRes.rows[0].product_id;
+      }
+    }
+
+    const reviewId = `rev-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const ins = await pool.query(`
+      INSERT INTO reviews (
+        id, order_id, product_id, user_id, user_name, rating, comment, verified_purchase, created_at
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, true, NOW()
+      ) RETURNING *
+    `, [
+      reviewId,
+      req.params.id,
+      effectiveProductId,
+      authUser.id,
+      authUser.name,
+      starRating,
+      comment || ''
+    ]);
+
+    const formattedReview = formatReviewRow(ins.rows[0]);
+    return res.status(201).json({
+      success: true,
+      review: formattedReview,
+      message: 'Verified review submitted successfully'
+    });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// ─── REVIEWS REST APIS ───────────────────────────────────────────────────────
-app.get('/api/reviews', (req, res) => {
-  const { productId } = req.query;
-  const reviews = jsonDb.getReviews(productId ? String(productId) : undefined);
-  res.json({ success: true, reviews });
+// Get Reviews
+app.get('/api/reviews', async (req, res) => {
+  try {
+    const { productId, orderId } = req.query;
+    let query = 'SELECT * FROM reviews WHERE 1=1';
+    const params: any[] = [];
+    let idx = 1;
+
+    if (productId) {
+      query += ` AND product_id = $${idx++}`;
+      params.push(String(productId));
+    }
+    if (orderId) {
+      query += ` AND order_id = $${idx++}`;
+      params.push(String(orderId));
+    }
+
+    query += ' ORDER BY created_at DESC';
+    const result = await pool.query(query, params);
+    const reviews = result.rows.map(formatReviewRow);
+    return res.json({ success: true, reviews });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Submit Direct Product Review
+app.post('/api/reviews', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const authUser = req.user!;
+    const { productId, rating, comment } = req.body;
+    const starRating = Number(rating);
+
+    if (!productId || !starRating || starRating < 1 || starRating > 5) {
+      return res.status(400).json({ success: false, error: 'Product ID and rating between 1 and 5 are required.' });
+    }
+
+    const prodRes = await pool.query('SELECT id, seller_id FROM products WHERE id = $1', [productId]);
+    if (prodRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Product not found.' });
+    }
+
+    // Check if user already reviewed this product
+    const dupRes = await pool.query('SELECT id FROM reviews WHERE product_id = $1 AND user_id = $2', [productId, authUser.id]);
+    if (dupRes.rows.length > 0) {
+      return res.status(400).json({ success: false, error: 'You have already reviewed this product.' });
+    }
+
+    const reviewId = `rev-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const ins = await pool.query(`
+      INSERT INTO reviews (
+        id, order_id, product_id, user_id, user_name, rating, comment, verified_purchase, created_at
+      ) VALUES (
+        $1, null, $2, $3, $4, $5, $6, false, NOW()
+      ) RETURNING *
+    `, [
+      reviewId,
+      productId,
+      authUser.id,
+      authUser.name,
+      starRating,
+      comment || ''
+    ]);
+
+    return res.status(201).json({ success: true, review: formatReviewRow(ins.rows[0]) });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Delete Review (Author or Admin)
+app.delete('/api/reviews/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const authUser = req.user!;
+    const revRes = await pool.query('SELECT * FROM reviews WHERE id = $1', [req.params.id]);
+    if (revRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Review not found.' });
+    }
+
+    const rev = revRes.rows[0];
+    if (rev.user_id !== authUser.id && authUser.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Forbidden: You cannot delete another user\'s review.' });
+    }
+
+    await pool.query('DELETE FROM reviews WHERE id = $1', [req.params.id]);
+    return res.json({ success: true, message: 'Review deleted successfully.' });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // ─── REAL STATS REST API ────────────────────────────────────────────────────
@@ -1790,38 +2706,208 @@ app.get('/api/stats', (req, res) => {
   res.json({ success: true, stats: jsonDb.getStats() });
 });
 
-// ─── MASTER AGRICULTURAL CATALOG REST APIS ──────────────────────────────────
-app.get('/api/catalog', (req, res) => {
-  const { category, query, page = '1', limit = '24' } = req.query;
-  const cat = typeof category === 'string' ? category : undefined;
-  const q = typeof query === 'string' ? query : undefined;
-  const all = jsonDb.getCatalog(cat, q);
+// ─── MASTER AGRICULTURAL CATALOG REST APIS (NEON POSTGRESQL) ──────────────────
 
-  if (limit === 'all') {
-    return res.json({ success: true, products: all, total: all.length, page: 1, totalPages: 1 });
+function formatCatalogRow(r: any) {
+  let kw: string[] = [];
+  try {
+    if (Array.isArray(r.keywords)) kw = r.keywords;
+    else if (typeof r.keywords === 'string') kw = JSON.parse(r.keywords);
+  } catch {
+    kw = [];
   }
 
-  const p = Math.max(1, parseInt(String(page), 10) || 1);
-  const l = Math.max(1, parseInt(String(limit), 10) || 24);
-  const total = all.length;
-  const totalPages = Math.ceil(total / l);
-  const start = (p - 1) * l;
-  const paginated = all.slice(start, start + l);
+  return {
+    id: r.id,
+    name: r.name,
+    nameBn: r.name_bn,
+    name_bn: r.name_bn,
+    category: r.category,
+    categoryLabelEn: r.category_label_en,
+    category_label_en: r.category_label_en,
+    categoryLabelBn: r.category_label_bn,
+    category_label_bn: r.category_label_bn,
+    unit: r.unit || 'kg',
+    unitBn: r.unit_bn || 'কেজি',
+    unit_bn: r.unit_bn || 'কেজি',
+    keywords: kw,
+    imageUrl: r.image_url,
+    image_url: r.image_url,
+    damBenchmarkPrice: r.dam_benchmark_price !== null ? parseFloat(r.dam_benchmark_price) : null,
+    dam_benchmark_price: r.dam_benchmark_price !== null ? parseFloat(r.dam_benchmark_price) : null,
+    descriptionBn: r.description_bn,
+    description_bn: r.description_bn,
+    descriptionEn: r.description_en,
+    description_en: r.description_en,
+  };
+}
 
-  res.json({
-    success: true,
-    products: paginated,
-    total,
-    page: p,
-    totalPages,
-    limit: l,
-  });
+app.get('/api/catalog', async (req, res) => {
+  try {
+    const { category, query, page = '1', limit = '24' } = req.query;
+    let sql = 'SELECT * FROM catalog WHERE 1=1';
+    const params: any[] = [];
+    let idx = 1;
+
+    if (category && category !== 'All' && category !== 'all') {
+      sql += ` AND category = $${idx++}`;
+      params.push(String(category));
+    }
+    if (query) {
+      sql += ` AND (name ILIKE $${idx} OR name_bn ILIKE $${idx} OR description_en ILIKE $${idx} OR description_bn ILIKE $${idx})`;
+      params.push(`%${query}%`);
+      idx++;
+    }
+
+    sql += ' ORDER BY name ASC';
+    const allResult = await pool.query(sql, params);
+    const all = allResult.rows.map(formatCatalogRow);
+
+    if (limit === 'all') {
+      return res.json({ success: true, products: all, total: all.length, page: 1, totalPages: 1 });
+    }
+
+    const p = Math.max(1, parseInt(String(page), 10) || 1);
+    const l = Math.max(1, parseInt(String(limit), 10) || 24);
+    const total = all.length;
+    const totalPages = Math.ceil(total / l) || 1;
+    const start = (p - 1) * l;
+    const paginated = all.slice(start, start + l);
+
+    return res.json({
+      success: true,
+      products: paginated,
+      total,
+      page: p,
+      totalPages,
+      limit: l,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
 });
 
-app.get('/api/catalog/:id', (req, res) => {
-  const product = jsonDb.getCatalogById(req.params.id);
-  if (!product) return res.status(404).json({ success: false, error: 'Product not found' });
-  res.json({ success: true, product });
+app.get('/api/catalog/:id', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM catalog WHERE id = $1', [req.params.id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Catalog product not found' });
+    }
+    return res.json({ success: true, product: formatCatalogRow(result.rows[0]) });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Admin-only: create catalog item
+app.post('/api/catalog', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const authUser = req.user!;
+    if (authUser.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Forbidden: Admin access required to manage catalog.' });
+    }
+
+    const {
+      name, nameBn, category, categoryLabelEn, categoryLabelBn,
+      unit = 'kg', unitBn = 'কেজি', keywords = [], imageUrl,
+      damBenchmarkPrice, descriptionBn, descriptionEn
+    } = req.body;
+
+    if (!name || !nameBn || !category) {
+      return res.status(400).json({ success: false, error: 'Name, Bengali name, and category are required.' });
+    }
+
+    const id = req.body.id || `cat-custom-${Date.now()}`;
+    const ins = await pool.query(`
+      INSERT INTO catalog (
+        id, name, name_bn, category, category_label_en, category_label_bn,
+        unit, unit_bn, keywords, image_url, dam_benchmark_price, description_bn, description_en
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6,
+        $7, $8, $9, $10, $11, $12, $13
+      ) RETURNING *
+    `, [
+      id, name, nameBn, category, categoryLabelEn || category, categoryLabelBn || category,
+      unit, unitBn, JSON.stringify(keywords || []), imageUrl || null,
+      damBenchmarkPrice !== undefined ? Number(damBenchmarkPrice) : null,
+      descriptionBn || null, descriptionEn || null
+    ]);
+
+    return res.status(201).json({ success: true, product: formatCatalogRow(ins.rows[0]) });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Admin-only: update catalog item
+app.put('/api/catalog/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const authUser = req.user!;
+    if (authUser.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Forbidden: Admin access required to manage catalog.' });
+    }
+
+    const {
+      name, nameBn, category, categoryLabelEn, categoryLabelBn,
+      unit, unitBn, keywords, imageUrl, damBenchmarkPrice, descriptionBn, descriptionEn
+    } = req.body;
+
+    const upd = await pool.query(`
+      UPDATE catalog
+      SET name = COALESCE($1, name),
+          name_bn = COALESCE($2, name_bn),
+          category = COALESCE($3, category),
+          category_label_en = COALESCE($4, category_label_en),
+          category_label_bn = COALESCE($5, category_label_bn),
+          unit = COALESCE($6, unit),
+          unit_bn = COALESCE($7, unit_bn),
+          keywords = CASE WHEN $8::jsonb IS NOT NULL THEN $8::jsonb ELSE keywords END,
+          image_url = COALESCE($9, image_url),
+          dam_benchmark_price = COALESCE($10, dam_benchmark_price),
+          description_bn = COALESCE($11, description_bn),
+          description_en = COALESCE($12, description_en)
+      WHERE id = $13
+      RETURNING *
+    `, [
+      name || null,
+      nameBn || null,
+      category || null,
+      categoryLabelEn || null,
+      categoryLabelBn || null,
+      unit || null,
+      unitBn || null,
+      keywords ? JSON.stringify(keywords) : null,
+      imageUrl || null,
+      damBenchmarkPrice !== undefined ? Number(damBenchmarkPrice) : null,
+      descriptionBn || null,
+      descriptionEn || null,
+      req.params.id
+    ]);
+
+    if (upd.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Catalog product not found.' });
+    }
+    return res.json({ success: true, product: formatCatalogRow(upd.rows[0]) });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Admin-only: delete catalog item
+app.delete('/api/catalog/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const authUser = req.user!;
+    if (authUser.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Forbidden: Admin access required.' });
+    }
+    const del = await pool.query('DELETE FROM catalog WHERE id = $1 RETURNING id', [req.params.id]);
+    if (del.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Catalog product not found.' });
+    }
+    return res.json({ success: true, message: 'Catalog item deleted.' });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // ─── REAL-TIME SSE (SERVER-SENT EVENTS) ENGINE ──────────────────────────────
@@ -1841,11 +2927,10 @@ export function sendSSE(userId: string, event: string, data: any) {
   }
 }
 
-app.get('/api/realtime', (req, res) => {
-  const userId = req.query.userId as string;
-  if (!userId) {
-    return res.status(400).send('userId query parameter required');
-  }
+app.get('/api/realtime', requireAuth, (req: AuthenticatedRequest, res) => {
+  const authUser = req.user!;
+  const requestedUserId = req.query.userId as string;
+  const userId = (authUser.role === 'admin' && requestedUserId) ? requestedUserId : authUser.id;
 
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -1879,124 +2964,478 @@ app.get('/api/realtime', (req, res) => {
   });
 });
 
-// ─── DIRECT MESSAGING REST APIS ─────────────────────────────────────────────
-app.get('/api/messages', (req, res) => {
-  const { userA, userB } = req.query;
-  if (!userA || !userB) {
-    return res.status(400).json({ success: false, error: 'userA and userB are required' });
-  }
-  const messages = jsonDb.getMessages(String(userA), String(userB));
-  res.json({ success: true, messages });
-});
-
-app.post('/api/messages', (req, res) => {
+// ─── NEON NOTIFICATIONS HELPER ──────────────────────────────────────────────
+async function createNeonNotification(
+  userId: string,
+  title: string,
+  message: string,
+  type: string = 'info',
+  actionUrl?: string
+) {
+  const notifId = `notif-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const now = new Date();
+  await pool.query(
+    `INSERT INTO notifications (id, user_id, title, message, type, action_url, read, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, false, $7)`,
+    [notifId, userId, title, message, type, actionUrl || null, now]
+  );
+  const formatted = {
+    id: notifId,
+    userId,
+    user_id: userId,
+    title,
+    message,
+    type,
+    actionUrl: actionUrl || null,
+    action_url: actionUrl || null,
+    read: false,
+    createdAt: now.toISOString(),
+    created_at: now.toISOString(),
+  };
   try {
-    const { senderId, senderName, senderRole, recipientId, recipientName, recipientRole, content, replyToId } = req.body;
-    if (!senderId || !recipientId || !content || !content.trim()) {
-      return res.status(400).json({ success: false, error: 'Missing required message parameters' });
+    sendSSE(userId, 'new_notification', { notification: formatted });
+  } catch {}
+  return formatted;
+}
+
+function formatMessageRow(r: any) {
+  return {
+    id: r.id,
+    senderId: r.sender_id,
+    sender_id: r.sender_id,
+    senderName: r.sender_name,
+    sender_name: r.sender_name,
+    senderRole: r.sender_role,
+    sender_role: r.sender_role,
+    recipientId: r.recipient_id,
+    recipient_id: r.recipient_id,
+    recipientName: r.recipient_name,
+    recipient_name: r.recipient_name,
+    recipientRole: r.recipient_role,
+    recipient_role: r.recipient_role,
+    content: r.content,
+    read: Boolean(r.read),
+    replyToId: r.reply_to_id,
+    reply_to_id: r.reply_to_id,
+    messageType: r.message_type || 'text',
+    message_type: r.message_type || 'text',
+    createdAt: r.created_at,
+    created_at: r.created_at,
+  };
+}
+
+function formatConnectionRow(r: any) {
+  return {
+    id: r.id,
+    requesterId: r.requester_id,
+    requester_id: r.requester_id,
+    requesterName: r.requester_name,
+    requester_name: r.requester_name,
+    requesterRole: r.requester_role,
+    requester_role: r.requester_role,
+    requesterPhone: r.requester_phone,
+    requester_phone: r.requester_phone,
+    requesterDistrict: r.requester_district,
+    requester_district: r.requester_district,
+    recipientId: r.recipient_id,
+    recipient_id: r.recipient_id,
+    recipientName: r.recipient_name,
+    recipient_name: r.recipient_name,
+    recipientRole: r.recipient_role,
+    recipient_role: r.recipient_role,
+    recipientPhone: r.recipient_phone,
+    recipient_phone: r.recipient_phone,
+    recipientDistrict: r.recipient_district,
+    recipient_district: r.recipient_district,
+    status: r.status,
+    createdAt: r.created_at,
+    created_at: r.created_at,
+    updatedAt: r.updated_at,
+    updated_at: r.updated_at,
+  };
+}
+
+function formatNotificationRow(r: any) {
+  return {
+    id: r.id,
+    userId: r.user_id,
+    user_id: r.user_id,
+    title: r.title,
+    message: r.message,
+    type: r.type || 'info',
+    actionUrl: r.action_url,
+    action_url: r.action_url,
+    read: Boolean(r.read),
+    createdAt: r.created_at,
+    created_at: r.created_at,
+  };
+}
+
+// ─── DIRECT MESSAGING REST APIS (NEON POSTGRESQL) ───────────────────────────
+app.get('/api/messages', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const authUser = req.user!;
+    const { userA, userB } = req.query;
+    if (!userA || !userB) {
+      return res.status(400).json({ success: false, error: 'userA and userB are required' });
+    }
+    const uA = String(userA);
+    const uB = String(userB);
+
+    // Strict privacy boundary: non-admins cannot inspect other conversations
+    if (authUser.role !== 'admin' && authUser.id !== uA && authUser.id !== uB) {
+      return res.status(403).json({ success: false, error: 'Forbidden: You cannot view messages between other users.' });
     }
 
-    const message = jsonDb.addMessage({
-      senderId,
-      senderName: senderName || 'User',
-      senderRole: senderRole || 'farmer',
-      recipientId,
-      recipientName: recipientName || 'User',
-      recipientRole: recipientRole || 'wholesaler',
-      content: content.trim(),
-      replyToId,
-    });
+    const result = await pool.query(`
+      SELECT * FROM messages
+      WHERE (sender_id = $1 AND recipient_id = $2)
+         OR (sender_id = $2 AND recipient_id = $1)
+      ORDER BY created_at ASC
+    `, [uA, uB]);
+
+    const messages = result.rows.map(formatMessageRow);
+    return res.json({ success: true, messages });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/messages', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const authUser = req.user!;
+    const { senderId, senderName, senderRole, recipientId, content, replyToId } = req.body;
+
+    // Strict identity derivation: prevent forged sender ID
+    const effectiveSenderId = authUser.role === 'admin' ? (senderId || authUser.id) : authUser.id;
+    const effectiveSenderName = authUser.role === 'admin' ? (senderName || authUser.name) : authUser.name;
+    const effectiveSenderRole = authUser.role === 'admin' ? (senderRole || authUser.role) : authUser.role;
+
+    if (!recipientId || !content || !content.trim()) {
+      return res.status(400).json({ success: false, error: 'Recipient and non-empty content are required.' });
+    }
+
+    // Verify recipient existence in Neon users
+    const recipRes = await pool.query('SELECT id, name, role FROM users WHERE id = $1', [recipientId]);
+    if (recipRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Recipient user not found.' });
+    }
+    const recipient = recipRes.rows[0];
+
+    const messageId = `msg-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const ins = await pool.query(`
+      INSERT INTO messages (
+        id, sender_id, sender_name, sender_role,
+        recipient_id, recipient_name, recipient_role,
+        content, read, reply_to_id, message_type, created_at
+      ) VALUES (
+        $1, $2, $3, $4,
+        $5, $6, $7,
+        $8, false, $9, 'text', NOW()
+      ) RETURNING *
+    `, [
+      messageId,
+      effectiveSenderId,
+      effectiveSenderName,
+      effectiveSenderRole,
+      recipient.id,
+      recipient.name,
+      recipient.role,
+      content.trim(),
+      replyToId || null,
+    ]);
+
+    const formattedMessage = formatMessageRow(ins.rows[0]);
+
+    // Durable notification in Neon PostgreSQL
+    const notif = await createNeonNotification(
+      recipient.id,
+      `New message from ${effectiveSenderName}`,
+      content.trim().slice(0, 100),
+      'message',
+      `/contacts?tab=chat&userId=${effectiveSenderId}`
+    );
 
     // Real-time dispatch via SSE
-    sendSSE(recipientId, 'new_message', { message });
-    sendSSE(senderId, 'message_sent', { message });
+    sendSSE(recipient.id, 'new_message', { message: formattedMessage });
+    sendSSE(effectiveSenderId, 'message_sent', { message: formattedMessage });
 
-    res.status(201).json({ success: true, message });
+    return res.status(201).json({ success: true, message: formattedMessage, notificationId: notif.id });
   } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 
-app.put('/api/messages/read', (req, res) => {
-  const { recipientId, senderId } = req.body;
-  if (!recipientId || !senderId) {
-    return res.status(400).json({ success: false, error: 'recipientId and senderId are required' });
-  }
-  jsonDb.markMessagesRead(recipientId, senderId);
-  sendSSE(senderId, 'messages_read', { recipientId, senderId });
-  res.json({ success: true });
-});
-
-// ─── CONNECTIONS REST APIS ──────────────────────────────────────────────────
-app.get('/api/connections', (req, res) => {
-  const { userId } = req.query;
-  if (!userId) return res.status(400).json({ success: false, error: 'userId is required' });
-  const connections = jsonDb.getConnections(String(userId));
-  res.json({ success: true, connections });
-});
-
-app.post('/api/connections', (req, res) => {
+app.put('/api/messages/read', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
-    const { requesterId, recipientId } = req.body;
-    if (!requesterId || !recipientId) {
-      return res.status(400).json({ success: false, error: 'requesterId and recipientId are required' });
+    const authUser = req.user!;
+    const { recipientId, senderId } = req.body;
+    if (!senderId) {
+      return res.status(400).json({ success: false, error: 'senderId is required.' });
     }
-    const connection = jsonDb.addConnectionRequest(requesterId, recipientId);
-    sendSSE(recipientId, 'new_connection', { connection });
-    sendSSE(requesterId, 'connection_requested', { connection });
-    res.status(201).json({ success: true, connection });
+
+    // Non-admins can only mark messages where they are the recipient
+    const effectiveRecipientId = authUser.role === 'admin' ? (recipientId || authUser.id) : authUser.id;
+
+    await pool.query(`
+      UPDATE messages
+      SET read = true
+      WHERE recipient_id = $1 AND sender_id = $2 AND read = false
+    `, [effectiveRecipientId, String(senderId)]);
+
+    sendSSE(String(senderId), 'messages_read', { recipientId: effectiveRecipientId, senderId });
+    return res.json({ success: true });
   } catch (err: any) {
-    res.status(400).json({ success: false, error: err.message });
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 
-app.put('/api/connections/:id', (req, res) => {
-  const { status } = req.body;
-  if (status !== 'accepted' && status !== 'rejected') {
-    return res.status(400).json({ success: false, error: 'Status must be accepted or rejected' });
+// ─── CONNECTIONS REST APIS (NEON POSTGRESQL) ────────────────────────────────
+app.get('/api/connections', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const authUser = req.user!;
+    const targetUserId = authUser.role === 'admin' ? (req.query.userId ? String(req.query.userId) : authUser.id) : authUser.id;
+
+    const result = await pool.query(`
+      SELECT * FROM connections
+      WHERE requester_id = $1 OR recipient_id = $1
+      ORDER BY created_at DESC
+    `, [targetUserId]);
+
+    const connections = result.rows.map(formatConnectionRow);
+    return res.json({ success: true, connections });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
   }
-  const connection = jsonDb.updateConnectionStatus(req.params.id, status);
-  if (!connection) return res.status(404).json({ success: false, error: 'Connection not found' });
-
-  sendSSE(connection.requesterId, 'connection_updated', { connection });
-  sendSSE(connection.recipientId, 'connection_updated', { connection });
-  res.json({ success: true, connection });
 });
 
-app.delete('/api/connections/:id', (req, res) => {
-  const deleted = jsonDb.deleteConnection(req.params.id);
-  res.json({ success: deleted });
+app.post('/api/connections', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const authUser = req.user!;
+    const { requesterId, recipientId } = req.body;
+
+    const effectiveRequesterId = authUser.role === 'admin' ? (requesterId || authUser.id) : authUser.id;
+
+    if (!recipientId) {
+      return res.status(400).json({ success: false, error: 'recipientId is required.' });
+    }
+
+    // Prevent self-connection
+    if (effectiveRequesterId === recipientId) {
+      return res.status(400).json({ success: false, error: 'Cannot connect with yourself.' });
+    }
+
+    // Verify recipient in Neon users
+    const recipRes = await pool.query('SELECT id, name, role, phone, district FROM users WHERE id = $1', [recipientId]);
+    if (recipRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Recipient user not found.' });
+    }
+    const recipient = recipRes.rows[0];
+
+    // Verify requester in Neon users
+    const reqRes = await pool.query('SELECT id, name, role, phone, district FROM users WHERE id = $1', [effectiveRequesterId]);
+    const requester = reqRes.rows[0] || {
+      id: effectiveRequesterId,
+      name: authUser.name,
+      role: authUser.role,
+      phone: authUser.phone || null,
+      district: authUser.district || 'Bogura',
+    };
+
+    // Duplicate check: check if pending or accepted connection exists
+    const existingRes = await pool.query(`
+      SELECT * FROM connections
+      WHERE (requester_id = $1 AND recipient_id = $2)
+         OR (requester_id = $2 AND recipient_id = $1)
+    `, [effectiveRequesterId, recipientId]);
+
+    if (existingRes.rows.length > 0) {
+      const activeConn = existingRes.rows.find((c: any) => c.status === 'pending' || c.status === 'accepted');
+      if (activeConn) {
+        return res.status(400).json({
+          success: false,
+          error: `Connection already ${activeConn.status}.`,
+          connection: formatConnectionRow(activeConn),
+        });
+      }
+    }
+
+    const connId = `conn-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const ins = await pool.query(`
+      INSERT INTO connections (
+        id, requester_id, requester_name, requester_role, requester_phone, requester_district,
+        recipient_id, recipient_name, recipient_role, recipient_phone, recipient_district,
+        status, created_at, updated_at
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6,
+        $7, $8, $9, $10, $11,
+        'pending', NOW(), NOW()
+      ) RETURNING *
+    `, [
+      connId,
+      requester.id,
+      requester.name,
+      requester.role,
+      requester.phone || null,
+      requester.district || null,
+      recipient.id,
+      recipient.name,
+      recipient.role,
+      recipient.phone || null,
+      recipient.district || null,
+    ]);
+
+    const formattedConn = formatConnectionRow(ins.rows[0]);
+
+    // Send persistent notification to recipient in Neon
+    await createNeonNotification(
+      recipient.id,
+      'New Connection Request',
+      `${requester.name} (${requester.role}) wants to connect with you.`,
+      'connection',
+      '/contacts?tab=connections'
+    );
+
+    sendSSE(recipient.id, 'new_connection', { connection: formattedConn });
+    sendSSE(effectiveRequesterId, 'connection_requested', { connection: formattedConn });
+
+    return res.status(201).json({ success: true, connection: formattedConn });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
 });
 
-// ─── NOTIFICATIONS REST APIS ────────────────────────────────────────────────
-app.get('/api/notifications', (req, res) => {
-  const { userId } = req.query;
-  if (!userId) return res.status(400).json({ success: false, error: 'userId is required' });
-  const notifications = jsonDb.getNotifications(String(userId));
-  res.json({ success: true, notifications });
+app.put('/api/connections/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const authUser = req.user!;
+    const { status } = req.body;
+    if (status !== 'accepted' && status !== 'rejected') {
+      return res.status(400).json({ success: false, error: 'Status must be accepted or rejected' });
+    }
+
+    const connRes = await pool.query('SELECT * FROM connections WHERE id = $1', [req.params.id]);
+    if (connRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Connection not found' });
+    }
+
+    const existing = connRes.rows[0];
+    // Authorization: only the recipient (or admin) can accept or reject
+    if (existing.recipient_id !== authUser.id && authUser.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Forbidden: Only the connection recipient can accept or reject this request.' });
+    }
+
+    const upd = await pool.query(`
+      UPDATE connections
+      SET status = $1, updated_at = NOW()
+      WHERE id = $2
+      RETURNING *
+    `, [status, req.params.id]);
+
+    const formattedConn = formatConnectionRow(upd.rows[0]);
+
+    // Send persistent notification to requester in Neon
+    await createNeonNotification(
+      existing.requester_id,
+      `Connection ${status === 'accepted' ? 'Accepted' : 'Declined'}`,
+      `${existing.recipient_name} has ${status} your connection request.`,
+      'connection',
+      '/contacts?tab=connections'
+    );
+
+    sendSSE(existing.requester_id, 'connection_updated', { connection: formattedConn });
+    sendSSE(existing.recipient_id, 'connection_updated', { connection: formattedConn });
+
+    return res.json({ success: true, connection: formattedConn });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
 });
 
-app.put('/api/notifications/:id/read', (req, res) => {
-  jsonDb.markNotificationRead(req.params.id);
-  res.json({ success: true });
+app.delete('/api/connections/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const authUser = req.user!;
+    const connRes = await pool.query('SELECT * FROM connections WHERE id = $1', [req.params.id]);
+    if (connRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Connection not found' });
+    }
+
+    const existing = connRes.rows[0];
+    if (existing.requester_id !== authUser.id && existing.recipient_id !== authUser.id && authUser.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Forbidden: You cannot delete another user\'s connection.' });
+    }
+
+    await pool.query('DELETE FROM connections WHERE id = $1', [req.params.id]);
+    return res.json({ success: true });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
 });
 
-app.put('/api/notifications/read-all', (req, res) => {
-  const { userId } = req.body;
-  if (!userId) return res.status(400).json({ success: false, error: 'userId is required' });
-  jsonDb.markAllNotificationsRead(userId);
-  res.json({ success: true });
+// ─── NOTIFICATIONS REST APIS (NEON POSTGRESQL) ──────────────────────────────
+app.get('/api/notifications', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const authUser = req.user!;
+    const targetUserId = authUser.role === 'admin' ? (req.query.userId ? String(req.query.userId) : authUser.id) : authUser.id;
+
+    const result = await pool.query(`
+      SELECT * FROM notifications
+      WHERE user_id = $1
+      ORDER BY created_at DESC
+      LIMIT 100
+    `, [targetUserId]);
+
+    const notifications = result.rows.map(formatNotificationRow);
+    return res.json({ success: true, notifications });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.put('/api/notifications/:id/read', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const authUser = req.user!;
+    const notifRes = await pool.query('SELECT * FROM notifications WHERE id = $1', [req.params.id]);
+    if (notifRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Notification not found' });
+    }
+
+    const existing = notifRes.rows[0];
+    if (existing.user_id !== authUser.id && authUser.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Forbidden: You cannot mark another user\'s notification as read.' });
+    }
+
+    await pool.query('UPDATE notifications SET read = true WHERE id = $1', [req.params.id]);
+    return res.json({ success: true });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.put('/api/notifications/read-all', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const authUser = req.user!;
+    const targetUserId = authUser.role === 'admin' ? (req.body.userId || authUser.id) : authUser.id;
+
+    await pool.query('UPDATE notifications SET read = true WHERE user_id = $1 AND read = false', [targetUserId]);
+    return res.json({ success: true });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // ─── AUTH LOGOUT REST API ───────────────────────────────────────────────────
-app.post('/api/auth/logout', (req, res) => {
+app.post('/api/auth/logout', async (req, res) => {
   try {
-    const token = req.headers.authorization?.replace('Bearer ', '') || req.body.token;
-    const { userId } = req.body;
+    const rawToken = extractToken(req);
+    const { userId } = req.body || {};
+
+    if (rawToken) {
+      await revokeSessionByToken(rawToken);
+    }
 
     let user: any = userId ? jsonDb.getUserById(userId) : undefined;
-    if (!user && token) {
-      user = jsonDb.getUsers().find((u: any) => u.sessionToken === token);
+    if (!user && rawToken) {
+      user = jsonDb.getUsers().find((u: any) => u.sessionToken === rawToken);
     }
 
     if (user) {
@@ -2008,13 +3447,16 @@ app.post('/api/auth/logout', (req, res) => {
         status: 'LOGOUT',
         ip: req.ip || '127.0.0.1',
         device: (req.headers['user-agent'] as string) || 'Web Client',
-        details: 'User logged out and session token invalidated',
+        details: 'User logged out and session revoked in Neon PostgreSQL',
       });
     }
 
-    res.json({ success: true, message: 'Logged out successfully' });
+    const { maxAge: _unused, ...clearOptions } = SESSION_COOKIE_OPTIONS;
+    res.clearCookie(SESSION_COOKIE_NAME, clearOptions);
+
+    return res.json({ success: true, message: 'Logged out successfully and session revoked' });
   } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -2040,19 +3482,645 @@ app.post('/api/calls/signal', (req, res) => {
   res.json({ success: true });
 });
 
-app.get('/api/calls/logs', (req, res) => {
-  const { userId } = req.query;
-  if (!userId) return res.status(400).json({ success: false, error: 'userId is required' });
-  const logs = jsonDb.getCallLogs(String(userId));
-  res.json({ success: true, logs });
+// ─── CALL LOGS REST APIS (NEON POSTGRESQL) ──────────────────────────────────
+
+function formatCallLogRow(r: any) {
+  return {
+    id: r.id,
+    callerId: r.caller_id,
+    caller_id: r.caller_id,
+    callerName: r.caller_name,
+    caller_name: r.caller_name,
+    callerRole: r.caller_role,
+    caller_role: r.caller_role,
+    receiverId: r.receiver_id,
+    receiver_id: r.receiver_id,
+    receiverName: r.receiver_name,
+    receiver_name: r.receiver_name,
+    receiverRole: r.receiver_role,
+    receiver_role: r.receiver_role,
+    receiverPhone: r.receiver_phone,
+    receiver_phone: r.receiver_phone,
+    status: r.status,
+    durationSeconds: r.duration_seconds !== null ? parseInt(r.duration_seconds, 10) : 0,
+    duration_seconds: r.duration_seconds !== null ? parseInt(r.duration_seconds, 10) : 0,
+    timestamp: r.timestamp,
+  };
+}
+
+app.get('/api/calls/logs', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const authUser = req.user!;
+    const requestedUserId = req.query.userId ? String(req.query.userId) : authUser.id;
+
+    // Authorization check: non-admins can only see calls where they are caller or receiver
+    if (authUser.role !== 'admin' && requestedUserId !== authUser.id) {
+      return res.status(403).json({ success: false, error: 'Forbidden: You cannot view another user\'s call logs.' });
+    }
+
+    const targetUserId = authUser.role === 'admin' ? requestedUserId : authUser.id;
+
+    const result = await pool.query(`
+      SELECT * FROM call_logs
+      WHERE caller_id = $1 OR receiver_id = $1
+      ORDER BY timestamp DESC
+      LIMIT 100
+    `, [targetUserId]);
+
+    const logs = result.rows.map(formatCallLogRow);
+    return res.json({ success: true, logs });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
 });
 
-app.post('/api/calls/logs', (req, res) => {
+app.post('/api/calls/logs', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
-    const log = jsonDb.addCallLog(req.body);
-    res.status(201).json({ success: true, log });
+    const authUser = req.user!;
+    const {
+      receiverId, receiverName, receiverRole, receiverPhone,
+      status = 'completed', durationSeconds = 0
+    } = req.body;
+
+    // Caller identity derived strictly from authenticated user
+    const callerId = authUser.id;
+    const callerName = authUser.name;
+    const callerRole = authUser.role;
+
+    if (!receiverId || !receiverName || !receiverPhone) {
+      return res.status(400).json({ success: false, error: 'Receiver ID, name, and phone are required.' });
+    }
+
+    const logId = `call-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const ins = await pool.query(`
+      INSERT INTO call_logs (
+        id, caller_id, caller_name, caller_role,
+        receiver_id, receiver_name, receiver_role, receiver_phone,
+        status, duration_seconds, timestamp
+      ) VALUES (
+        $1, $2, $3, $4,
+        $5, $6, $7, $8,
+        $9, $10, NOW()
+      ) RETURNING *
+    `, [
+      logId, callerId, callerName, callerRole,
+      receiverId, receiverName, receiverRole || 'farmer', receiverPhone,
+      status, Number(durationSeconds) || 0
+    ]);
+
+    const formattedLog = formatCallLogRow(ins.rows[0]);
+    return res.status(201).json({ success: true, log: formattedLog });
   } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─── FARMER EXPENSES REST APIS (NEON POSTGRESQL) ────────────────────────────
+
+function formatExpenseRow(r: any) {
+  return {
+    id: r.id,
+    farmerId: r.farmer_id,
+    farmer_id: r.farmer_id,
+    date: r.date instanceof Date ? r.date.toISOString().split('T')[0] : String(r.date).slice(0, 10),
+    type: r.type,
+    category: r.category,
+    description: r.description,
+    descriptionBn: r.description_bn,
+    description_bn: r.description_bn,
+    amountBDT: parseFloat(r.amount_bdt),
+    amount_bdt: parseFloat(r.amount_bdt),
+    cropRelated: r.crop_related,
+    crop_related: r.crop_related,
+    createdAt: r.created_at,
+    created_at: r.created_at,
+    updatedAt: r.updated_at,
+    updated_at: r.updated_at,
+  };
+}
+
+app.get('/api/farmer/expenses', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const authUser = req.user!;
+    const requestedFarmerId = req.query.farmerId ? String(req.query.farmerId) : authUser.id;
+
+    if (authUser.role !== 'admin' && requestedFarmerId !== authUser.id) {
+      return res.status(403).json({ success: false, error: 'Forbidden: You cannot inspect another farmer\'s expense ledger.' });
+    }
+
+    const targetFarmerId = authUser.role === 'admin' ? requestedFarmerId : authUser.id;
+
+    const result = await pool.query(`
+      SELECT * FROM farmer_expenses
+      WHERE farmer_id = $1
+      ORDER BY date DESC, created_at DESC
+    `, [targetFarmerId]);
+
+    const expenses = result.rows.map(formatExpenseRow);
+    const totalExpenses = expenses.filter(e => e.type === 'expense').reduce((s, e) => s + e.amountBDT, 0);
+    const totalIncome = expenses.filter(e => e.type === 'income').reduce((s, e) => s + e.amountBDT, 0);
+    const netProfit = totalIncome - totalExpenses;
+
+    return res.json({
+      success: true,
+      expenses,
+      totalExpenses,
+      totalIncome,
+      netProfit,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/farmer/expenses', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const authUser = req.user!;
+    if (authUser.role !== 'farmer' && authUser.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Forbidden: Only farmers and administrators can log farm expenses.' });
+    }
+
+    const {
+      date = new Date().toISOString().split('T')[0],
+      type = 'expense',
+      category,
+      description,
+      descriptionBn,
+      amountBDT,
+      cropRelated
+    } = req.body;
+
+    const parsedAmount = Number(amountBDT);
+    if (!category || !description || isNaN(parsedAmount) || parsedAmount <= 0) {
+      return res.status(400).json({ success: false, error: 'Category, description, and positive amount are required.' });
+    }
+
+    const farmerId = authUser.id;
+    const expenseId = `exp-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
+    const ins = await pool.query(`
+      INSERT INTO farmer_expenses (
+        id, farmer_id, date, type, category, description, description_bn,
+        amount_bdt, crop_related, created_at, updated_at
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7,
+        $8, $9, NOW(), NOW()
+      ) RETURNING *
+    `, [
+      expenseId,
+      farmerId,
+      date,
+      type === 'income' ? 'income' : 'expense',
+      category,
+      description,
+      descriptionBn || null,
+      parsedAmount,
+      cropRelated || null
+    ]);
+
+    return res.status(201).json({ success: true, expense: formatExpenseRow(ins.rows[0]) });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Safe, Authenticated, Idempotent Batch Migration for Historical LocalStorage Farmer Expenses
+app.post('/api/farmer/expenses/sync', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const authUser = req.user!;
+    if (authUser.role !== 'farmer' && authUser.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Forbidden: Only farmers and administrators can sync farm expenses.' });
+    }
+
+    const { entries } = req.body;
+    if (!Array.isArray(entries) || entries.length === 0) {
+      return res.json({ success: true, synced: 0, skipped: 0, total: 0, message: 'No entries to sync.' });
+    }
+
+    let synced = 0;
+    let skipped = 0;
+
+    for (const item of entries) {
+      const parsedAmount = Number(item.amountBDT || item.amount_bdt);
+      if (!item.category || !item.description || isNaN(parsedAmount) || parsedAmount <= 0) {
+        skipped++;
+        continue;
+      }
+
+      const id = item.id || `exp-sync-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      const date = item.date ? (typeof item.date === 'string' ? item.date.slice(0, 10) : new Date(item.date).toISOString().split('T')[0]) : new Date().toISOString().split('T')[0];
+      const type = item.type === 'income' ? 'income' : 'expense';
+      const category = item.category;
+      const description = item.description;
+      const descriptionBn = item.descriptionBn || item.description_bn || null;
+      const cropRelated = item.cropRelated || item.crop_related || null;
+
+      // Idempotency check 1: by id
+      const existingById = await pool.query('SELECT id FROM farmer_expenses WHERE id = $1', [id]);
+      if (existingById.rows.length > 0) {
+        skipped++;
+        continue;
+      }
+
+      // Idempotency check 2: by composite key (farmer_id, date, amount_bdt, description)
+      const existingByKey = await pool.query(
+        'SELECT id FROM farmer_expenses WHERE farmer_id = $1 AND date = $2 AND amount_bdt = $3 AND description = $4',
+        [authUser.id, date, parsedAmount, description]
+      );
+      if (existingByKey.rows.length > 0) {
+        skipped++;
+        continue;
+      }
+
+      await pool.query(`
+        INSERT INTO farmer_expenses (
+          id, farmer_id, date, type, category, description, description_bn,
+          amount_bdt, crop_related, created_at, updated_at
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW()
+        )
+      `, [id, authUser.id, date, type, category, description, descriptionBn, parsedAmount, cropRelated]);
+
+      synced++;
+    }
+
+    return res.json({
+      success: true,
+      synced,
+      skipped,
+      total: entries.length,
+      message: `Successfully synchronized ${synced} entries (${skipped} duplicates/invalid skipped).`
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.put('/api/farmer/expenses/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const authUser = req.user!;
+    const expRes = await pool.query('SELECT * FROM farmer_expenses WHERE id = $1', [req.params.id]);
+    if (expRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Expense record not found.' });
+    }
+
+    const existing = expRes.rows[0];
+    if (existing.farmer_id !== authUser.id && authUser.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Forbidden: You cannot modify another farmer\'s ledger.' });
+    }
+
+    const { date, type, category, description, descriptionBn, amountBDT, cropRelated } = req.body;
+
+    const upd = await pool.query(`
+      UPDATE farmer_expenses
+      SET date = COALESCE($1, date),
+          type = COALESCE($2, type),
+          category = COALESCE($3, category),
+          description = COALESCE($4, description),
+          description_bn = COALESCE($5, description_bn),
+          amount_bdt = COALESCE($6, amount_bdt),
+          crop_related = COALESCE($7, crop_related),
+          updated_at = NOW()
+      WHERE id = $8
+      RETURNING *
+    `, [
+      date || null,
+      type || null,
+      category || null,
+      description || null,
+      descriptionBn || null,
+      amountBDT !== undefined ? Number(amountBDT) : null,
+      cropRelated || null,
+      req.params.id
+    ]);
+
+    return res.json({ success: true, expense: formatExpenseRow(upd.rows[0]) });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.delete('/api/farmer/expenses/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const authUser = req.user!;
+    const expRes = await pool.query('SELECT * FROM farmer_expenses WHERE id = $1', [req.params.id]);
+    if (expRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Expense record not found.' });
+    }
+
+    const existing = expRes.rows[0];
+    if (existing.farmer_id !== authUser.id && authUser.role !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Forbidden: You cannot delete another farmer\'s ledger.' });
+    }
+
+    await pool.query('DELETE FROM farmer_expenses WHERE id = $1', [req.params.id]);
+    return res.json({ success: true, message: 'Expense record deleted successfully.' });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─── NEGOTIATIONS REST APIS (NEON POSTGRESQL) ───────────────────────────────
+
+function formatNegotiationRow(r: any) {
+  return {
+    id: r.id,
+    listingId: r.listing_id,
+    listing_id: r.listing_id,
+    demandId: r.demand_id,
+    demand_id: r.demand_id,
+    buyerId: r.buyer_id,
+    buyer_id: r.buyer_id,
+    buyerName: r.buyer_name,
+    buyer_name: r.buyer_name,
+    buyerPhone: r.buyer_phone,
+    buyer_phone: r.buyer_phone,
+    offeredPricePerKg: parseFloat(r.offered_price_per_kg),
+    offered_price_per_kg: parseFloat(r.offered_price_per_kg),
+    quantityKg: parseFloat(r.quantity_kg),
+    quantity_kg: parseFloat(r.quantity_kg),
+    message: r.message,
+    status: r.status,
+    counterPrice: r.counter_price !== null ? parseFloat(r.counter_price) : null,
+    counter_price: r.counter_price !== null ? parseFloat(r.counter_price) : null,
+    createdAt: r.created_at,
+    created_at: r.created_at,
+    updatedAt: r.updated_at,
+    updated_at: r.updated_at,
+    cropName: r.crop_name,
+    crop_name: r.crop_name,
+    banglaName: r.bangla_name,
+    bangla_name: r.bangla_name,
+    sellerId: r.seller_id,
+    seller_id: r.seller_id,
+    sellerName: r.seller_name,
+    seller_name: r.seller_name,
+  };
+}
+
+app.get('/api/negotiations', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const authUser = req.user!;
+    const { listingId } = req.query;
+
+    if (listingId) {
+      // Check listing existence
+      const prodRes = await pool.query('SELECT id, seller_id FROM products WHERE id = $1', [String(listingId)]);
+      if (prodRes.rows.length === 0) {
+        return res.status(404).json({ success: false, error: 'Product listing not found.' });
+      }
+      const product = prodRes.rows[0];
+
+      // Query negotiations for this listing
+      const result = await pool.query(`
+        SELECT n.*, p.crop_name, p.bangla_name, p.seller_id, p.seller_name
+        FROM negotiations n
+        JOIN products p ON n.listing_id = p.id
+        WHERE n.listing_id = $1
+        ORDER BY n.created_at DESC
+      `, [String(listingId)]);
+
+      // If caller is not seller or admin, they can only view negotiations where they are the buyer
+      let filtered = result.rows;
+      if (product.seller_id !== authUser.id && authUser.role !== 'admin') {
+        filtered = filtered.filter((r: any) => r.buyer_id === authUser.id);
+      }
+
+      return res.json({ success: true, negotiations: filtered.map(formatNegotiationRow) });
+    }
+
+    // No listingId provided: return user's active negotiations (as buyer or seller)
+    const result = await pool.query(`
+      SELECT n.*, p.crop_name, p.bangla_name, p.seller_id, p.seller_name
+      FROM negotiations n
+      JOIN products p ON n.listing_id = p.id
+      WHERE n.buyer_id = $1 OR p.seller_id = $1
+      ORDER BY n.created_at DESC
+    `, [authUser.id]);
+
+    return res.json({ success: true, negotiations: result.rows.map(formatNegotiationRow) });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/negotiations', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const authUser = req.user!;
+    const { listingId, demandId, offeredPricePerKg, quantityKg, message } = req.body;
+
+    if (!listingId || !offeredPricePerKg || !quantityKg || !message || !message.trim()) {
+      return res.status(400).json({ success: false, error: 'Listing ID, offered price, quantity, and message are required.' });
+    }
+
+    const price = Number(offeredPricePerKg);
+    const qty = Number(quantityKg);
+    if (isNaN(price) || price <= 0 || isNaN(qty) || qty <= 0) {
+      return res.status(400).json({ success: false, error: 'Price and quantity must be positive numbers.' });
+    }
+
+    // Verify product exists in Neon products
+    const prodRes = await pool.query('SELECT id, seller_id, crop_name, unit_price FROM products WHERE id = $1', [listingId]);
+    if (prodRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Product listing not found.' });
+    }
+    const product = prodRes.rows[0];
+
+    // Prevent seller from negotiating with self
+    if (product.seller_id === authUser.id) {
+      return res.status(400).json({ success: false, error: 'Cannot negotiate with your own listing.' });
+    }
+
+    // Buyer identity derived from authenticated session
+    const buyerId = authUser.id;
+    const buyerName = authUser.name;
+    const buyerPhone = authUser.phone || '';
+
+    const negId = `neg-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const ins = await pool.query(`
+      INSERT INTO negotiations (
+        id, listing_id, demand_id, buyer_id, buyer_name, buyer_phone,
+        offered_price_per_kg, quantity_kg, message, status, counter_price, created_at, updated_at
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6,
+        $7, $8, $9, 'Pending', null, NOW(), NOW()
+      ) RETURNING *
+    `, [
+      negId,
+      listingId,
+      demandId || null,
+      buyerId,
+      buyerName,
+      buyerPhone,
+      price,
+      qty,
+      message.trim()
+    ]);
+
+    const formattedNeg = formatNegotiationRow({
+      ...ins.rows[0],
+      crop_name: product.crop_name,
+      seller_id: product.seller_id
+    });
+
+    // Notify seller in Neon
+    await createNeonNotification(
+      product.seller_id,
+      'Price Negotiation Offer',
+      `${buyerName} offered ৳${price}/kg for ${qty}kg of ${product.crop_name}.`,
+      'negotiation',
+      `/products/${listingId}`
+    );
+
+    return res.status(201).json({ success: true, negotiation: formattedNeg });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Safe, Authenticated, Idempotent Batch Migration for Historical LocalStorage Negotiations
+app.post('/api/negotiations/sync', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const authUser = req.user!;
+    const { offers } = req.body;
+    if (!Array.isArray(offers) || offers.length === 0) {
+      return res.json({ success: true, synced: 0, skipped: 0, total: 0, message: 'No offers to sync.' });
+    }
+
+    let synced = 0;
+    let skipped = 0;
+
+    for (const item of offers) {
+      const listingId = item.listingId || item.listing_id;
+      const price = Number(item.offeredPricePerKg || item.offered_price_per_kg);
+      const qty = Number(item.quantityKg || item.quantity_kg);
+      const msg = item.message || '';
+
+      if (!listingId || isNaN(price) || price <= 0 || isNaN(qty) || qty <= 0 || !msg.trim()) {
+        skipped++;
+        continue;
+      }
+
+      // Verify product exists in Neon
+      const prodRes = await pool.query('SELECT id, seller_id FROM products WHERE id = $1', [listingId]);
+      if (prodRes.rows.length === 0 || prodRes.rows[0].seller_id === authUser.id) {
+        skipped++; // Invalid product or self-negotiation
+        continue;
+      }
+
+      const id = item.id || `neg-sync-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      // Idempotency check:
+      const existing = await pool.query('SELECT id FROM negotiations WHERE id = $1', [id]);
+      if (existing.rows.length > 0) {
+        skipped++;
+        continue;
+      }
+
+      await pool.query(`
+        INSERT INTO negotiations (
+          id, listing_id, demand_id, buyer_id, buyer_name, buyer_phone,
+          offered_price_per_kg, quantity_kg, message, status, counter_price, created_at, updated_at
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW()
+        )
+      `, [
+        id, listingId, item.demandId || null, authUser.id, authUser.name, authUser.phone || '',
+        price, qty, msg.trim(), item.status || 'Pending', item.counterPrice || null
+      ]);
+
+      synced++;
+    }
+
+    return res.json({
+      success: true,
+      synced,
+      skipped,
+      total: offers.length,
+      message: `Successfully synchronized ${synced} negotiations (${skipped} duplicates/invalid skipped).`
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.put('/api/negotiations/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const authUser = req.user!;
+    const { status, counterPrice } = req.body;
+
+    const validStatuses = ['Accepted', 'Rejected', 'Countered'];
+    if (!status || !validStatuses.includes(status)) {
+      return res.status(400).json({ success: false, error: 'Valid status (Accepted, Rejected, Countered) is required.' });
+    }
+
+    const negRes = await pool.query(`
+      SELECT n.*, p.seller_id, p.crop_name
+      FROM negotiations n
+      JOIN products p ON n.listing_id = p.id
+      WHERE n.id = $1
+    `, [req.params.id]);
+
+    if (negRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Negotiation offer not found.' });
+    }
+    const negotiation = negRes.rows[0];
+
+    // Participant authorization:
+    // Seller can Accept, Counter, or Reject
+    // Buyer can Accept if it was Countered
+    const isSeller = negotiation.seller_id === authUser.id;
+    const isBuyer = negotiation.buyer_id === authUser.id;
+    const isAdmin = authUser.role === 'admin';
+
+    if (!isSeller && !isBuyer && !isAdmin) {
+      return res.status(403).json({ success: false, error: 'Forbidden: You are not a participant in this negotiation.' });
+    }
+
+    if (!isSeller && !isAdmin) {
+      // Buyer attempting transition: only allowed if status is 'Accepted' and existing status was 'Countered'
+      if (status !== 'Accepted' || negotiation.status !== 'Countered') {
+        return res.status(403).json({ success: false, error: 'Forbidden: Only the seller can alter this negotiation state.' });
+      }
+    }
+
+    let parsedCounterPrice = null;
+    if (status === 'Countered') {
+      parsedCounterPrice = Number(counterPrice);
+      if (isNaN(parsedCounterPrice) || parsedCounterPrice <= 0) {
+        return res.status(400).json({ success: false, error: 'Valid positive counter price is required when countering.' });
+      }
+    }
+
+    const upd = await pool.query(`
+      UPDATE negotiations
+      SET status = $1,
+          counter_price = COALESCE($2, counter_price),
+          updated_at = NOW()
+      WHERE id = $3
+      RETURNING *
+    `, [status, parsedCounterPrice, req.params.id]);
+
+    const formattedNeg = formatNegotiationRow({
+      ...upd.rows[0],
+      crop_name: negotiation.crop_name,
+      seller_id: negotiation.seller_id
+    });
+
+    // Notify the other party
+    const notifyTarget = isSeller ? negotiation.buyer_id : negotiation.seller_id;
+    if (notifyTarget) {
+      await createNeonNotification(
+        notifyTarget,
+        `Negotiation ${status}`,
+        `Your negotiation for ${negotiation.crop_name} was marked ${status}${parsedCounterPrice ? ` at ৳${parsedCounterPrice}/kg` : ''}.`,
+        'negotiation',
+        `/products/${negotiation.listing_id}`
+      );
+    }
+
+    return res.json({ success: true, negotiation: formattedNeg });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -2605,50 +4673,12 @@ Return JSON only:
 });
 
 // ─── ADMIN DATABASE INSPECTION ENDPOINTS ─────────────────────────────────────
-// Protected: only admin session tokens can access these endpoints.
-
-function requireAdmin(req: any, res: any): boolean {
-  if (req.method === 'OPTIONS') {
-    return true;
-  }
-
-  const authHeader = req.headers['authorization'] || req.headers['x-admin-token'] || (req.query?.token as string) || '';
-  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
-  if (!token) {
-    res.status(401).json({ error: 'Admin authentication required.' });
-    return false;
-  }
-
-  // Fast-track known admin session tokens and identifiers
-  if (
-    token.startsWith('nb_admin_token_') ||
-    token === 'NativeBazarSJS' ||
-    token === 'admin-authorized-root' ||
-    token === 'admin-root' ||
-    token === 'admin' ||
-    token === '01700000000' ||
-    (process.env.ADMIN_USER && token === process.env.ADMIN_USER)
-  ) {
-    return true;
-  }
-
-
-  // Validate the token belongs to an admin user in SQLite
-  const user = db.prepare('SELECT id, role FROM users WHERE id = ? OR phone = ?').get(token, token) as any;
-  // Also check session tokens stored in JSON db (for admin-root)
-  const jsonUser = jsonDb.getUsers().find(u => u.sessionToken === token || u.phone === token || u.id === token);
-  const isAdmin = (user && user.role === 'admin') || (jsonUser && jsonUser.role === 'admin');
-  if (!isAdmin) {
-    res.status(403).json({ error: 'Access denied. Admin role required.' });
-    return false;
-  }
-  return true;
-}
+// Protected: only authentic admin session tokens can access these endpoints.
 
 /** GET /api/admin/db/all — Complete live snapshot of SQLite and JSON databases */
-app.get(['/api/admin/db/all', '/api/admin/db/dump'], (req, res) => {
+app.get(['/api/admin/db/all', '/api/admin/db/dump'], async (req, res) => {
   try {
-    if (!requireAdmin(req, res)) return;
+    if (!await requireAdmin(req, res)) return;
 
     const fullData: { sqlite: Record<string, any[]>; json: Record<string, any[]> } = {
       sqlite: {},
@@ -2683,9 +4713,9 @@ app.get(['/api/admin/db/all', '/api/admin/db/dump'], (req, res) => {
 });
 
 /** GET /api/admin/db/stats — Summary statistics from both databases */
-app.get('/api/admin/db/stats', (req, res) => {
+app.get('/api/admin/db/stats', async (req, res) => {
   try {
-    if (!requireAdmin(req, res)) return;
+    if (!await requireAdmin(req, res)) return;
 
     // SQLite stats
     const sqliteStats: Record<string, number> = {};
@@ -2715,9 +4745,9 @@ app.get('/api/admin/db/stats', (req, res) => {
 });
 
 /** GET /api/admin/db/tables — List all SQLite table names and record counts */
-app.get('/api/admin/db/tables', (req, res) => {
+app.get('/api/admin/db/tables', async (req, res) => {
   try {
-    if (!requireAdmin(req, res)) return;
+    if (!await requireAdmin(req, res)) return;
 
     const tables = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name`).all() as Array<{ name: string }>;
     const result = tables.map(({ name }) => {
@@ -2746,9 +4776,9 @@ app.get('/api/admin/db/tables', (req, res) => {
 });
 
 /** GET /api/admin/db/table/:name?page=1&limit=50 — Paginated records from a table */
-app.get('/api/admin/db/table/:name', (req, res) => {
+app.get('/api/admin/db/table/:name', async (req, res) => {
   try {
-    if (!requireAdmin(req, res)) return;
+    if (!await requireAdmin(req, res)) return;
 
     const { name } = req.params;
     const page = Math.max(1, parseInt(String(req.query.page)) || 1);
@@ -2801,9 +4831,9 @@ app.get('/api/admin/db/table/:name', (req, res) => {
 });
 
 /** PUT /api/admin/db/record/:table/:id — Direct inline editing and saving of records */
-const handleAdminRecordUpdate = (req: any, res: any) => {
+const handleAdminRecordUpdate = async (req: any, res: any) => {
   try {
-    if (!requireAdmin(req, res)) return;
+    if (!await requireAdmin(req, res)) return;
 
     const { table, id } = req.params;
     const rawUpdates = req.body || {};
@@ -2965,9 +4995,9 @@ app.put('/api/admin/db/record/:table/:id', handleAdminRecordUpdate);
 app.put('/api/admin/db/table/:table/:id', handleAdminRecordUpdate);
 
 /** POST /api/admin/db/record/:table — Insert a new record into SQLite or JSON storage */
-const handleAdminRecordInsert = (req: any, res: any) => {
+const handleAdminRecordInsert = async (req: any, res: any) => {
   try {
-    if (!requireAdmin(req, res)) return;
+    if (!await requireAdmin(req, res)) return;
 
     const { table } = req.params;
     const body = req.body || {};
@@ -3004,7 +5034,7 @@ const handleAdminRecordInsert = (req: any, res: any) => {
             record.nameBn || null,
             record.phone || `017${Date.now().toString().slice(-8)}`,
             record.email || null,
-            record.passwordHash || hashPassword('12345678'),
+            record.passwordHash || hashPasswordSync('12345678'),
             record.district || 'Bogura',
             record.upazila || null,
             record.verified ? 1 : 0,
@@ -3092,7 +5122,7 @@ const handleAdminRecordInsert = (req: any, res: any) => {
       record.updated_at = nowIso;
     }
     if (cols.includes('password_hash') && !record.password_hash) {
-      record.password_hash = hashPassword('12345678');
+      record.password_hash = hashPasswordSync('12345678');
     }
     if (cols.includes('available_kg') && record.quantity_kg !== undefined && record.available_kg === undefined) {
       record.available_kg = record.quantity_kg;
@@ -3209,9 +5239,9 @@ app.post('/api/admin/db/record/:table', handleAdminRecordInsert);
 app.post('/api/admin/db/table/:table', handleAdminRecordInsert);
 
 /** DELETE /api/admin/db/record/:table/:id — Delete a record from SQLite and JSON storage */
-const handleAdminRecordDelete = (req: any, res: any) => {
+const handleAdminRecordDelete = async (req: any, res: any) => {
   try {
-    if (!requireAdmin(req, res)) return;
+    if (!await requireAdmin(req, res)) return;
 
     const { table, id } = req.params;
 
@@ -3278,9 +5308,9 @@ app.post('/api/admin/db/records/:table', handleAdminRecordInsert);
 app.patch('/api/admin/db/record/:table/:id', handleAdminRecordUpdate);
 app.patch('/api/admin/db/table/:table/:id', handleAdminRecordUpdate);
 
-app.get('/api/admin/db/record/:table/:id', (req, res) => {
+app.get('/api/admin/db/record/:table/:id', async (req, res) => {
   try {
-    if (!requireAdmin(req, res)) return;
+    if (!await requireAdmin(req, res)) return;
     const { table, id } = req.params;
     if (table.startsWith('json:')) {
       const collection = table.replace('json:', '');

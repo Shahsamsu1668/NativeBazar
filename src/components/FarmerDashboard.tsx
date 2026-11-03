@@ -9,6 +9,7 @@ import {
   ExpenseLedgerEntry,
 } from '../types';
 import { intelligenceApi, productApi, orderApi } from '../services/api';
+import { apiService } from '../services/apiService';
 import { ExpenseStore, NotificationStore } from '../data/store';
 import {
   Sprout,
@@ -286,7 +287,29 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
     }
   };
 
-  // Load Wholesale Orders received from Wholesalers
+  // Load Farmer Expenses / Financial Ledger
+  const loadFarmerExpenses = async () => {
+    const localEntries = ExpenseStore.getAll().filter((e) => e.farmerId === currentUser.id);
+    try {
+      // 1. Authenticated, idempotent sync of unmigrated local expenses
+      if (localEntries.length > 0) {
+        await apiService.syncFarmerExpenses(localEntries).catch(() => {});
+      }
+      // 2. Fetch authoritative state from Neon
+      const res = await apiService.getFarmerExpenses();
+      if (res && res.success && Array.isArray(res.expenses)) {
+        setLedgerEntries(res.expenses);
+        ExpenseStore.syncWithServer(res.expenses);
+      } else {
+        setLedgerEntries(localEntries);
+      }
+    } catch (err) {
+      console.warn('Failed to load farmer expenses from server; utilizing local offline ledger entries', err);
+      // Bounded offline fallback: preserve existing local entries without repeating network requests
+      setLedgerEntries(localEntries);
+    }
+  };
+
   const loadReceivedOrders = async () => {
     setOrdersLoading(true);
     try {
@@ -307,6 +330,7 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
     loadMyProducts();
     loadReceivedOrders();
     setLedgerEntries(ExpenseStore.getAll().filter((e) => e.farmerId === currentUser.id));
+    loadFarmerExpenses();
   }, [currentUser.id, selectedDistrict]);
 
   // Listen for direct AI action to open crop modal

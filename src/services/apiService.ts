@@ -56,6 +56,7 @@ export const apiService = {
     try {
       const res = await fetch(`${BASE_URL}/auth/register`, {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
@@ -70,6 +71,7 @@ export const apiService = {
     try {
       const res = await fetch(`${BASE_URL}/auth/login`, {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
@@ -85,7 +87,7 @@ export const apiService = {
       const headers: Record<string, string> = {};
       if (token) headers['Authorization'] = `Bearer ${token}`;
       const query = phone ? `?phone=${encodeURIComponent(phone)}` : '';
-      const res = await fetch(`${BASE_URL}/auth/me${query}`, { headers });
+      const res = await fetch(`${BASE_URL}/auth/me${query}`, { headers, credentials: 'include' });
       return await res.json();
     } catch (err: any) {
       return { success: false, error: err.message };
@@ -253,7 +255,11 @@ export const apiService = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(orderData),
       });
-      return await res.json();
+      const data = await res.json();
+      if (!res.ok) {
+        return { success: false, error: data.error || data.message || 'Failed to place order' };
+      }
+      return data;
     } catch (err: any) {
       return { success: false, error: err.message };
     }
@@ -266,7 +272,11 @@ export const apiService = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status, deliveredDate }),
       });
-      return await res.json();
+      const data = await res.json();
+      if (!res.ok) {
+        return { success: false, error: data.error || data.message || 'Failed to update order status' };
+      }
+      return data;
     } catch (err: any) {
       return { success: false, error: err.message };
     }
@@ -276,6 +286,7 @@ export const apiService = {
   async submitReview(orderId: string, rating: number, comment: string): Promise<ApiResponse> {
     try {
       const res = await fetch(`${BASE_URL}/orders/${orderId}/review`, {
+        credentials: 'include',
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rating, comment }),
@@ -289,7 +300,7 @@ export const apiService = {
   async getReviews(productId?: string): Promise<any[]> {
     try {
       const url = productId ? `${BASE_URL}/reviews?productId=${productId}` : `${BASE_URL}/reviews`;
-      const res = await fetch(url);
+      const res = await fetch(url, { credentials: 'include' });
       const data = await res.json();
       return data.reviews || [];
     } catch {
@@ -321,7 +332,7 @@ export const apiService = {
       if (query && query.trim()) params.append('query', query.trim());
       params.append('page', String(page));
       params.append('limit', String(limit));
-      const res = await fetch(`${BASE_URL}/catalog?${params.toString()}`);
+      const res = await fetch(`${BASE_URL}/catalog?${params.toString()}`, { credentials: 'include' });
       const data = await res.json();
       return {
         products: data.products || [],
@@ -336,7 +347,7 @@ export const apiService = {
 
   async getCatalogProductById(id: string): Promise<CatalogProduct | null> {
     try {
-      const res = await fetch(`${BASE_URL}/catalog/${id}`);
+      const res = await fetch(`${BASE_URL}/catalog/${id}`, { credentials: 'include' });
       const data = await res.json();
       return data.product || null;
     } catch {
@@ -347,7 +358,7 @@ export const apiService = {
   // ── Direct Messaging ─────────────────────────────────────────────────
   async getMessages(userA: string, userB: string): Promise<DirectMessage[]> {
     try {
-      const res = await fetch(`${BASE_URL}/messages?userA=${encodeURIComponent(userA)}&userB=${encodeURIComponent(userB)}`);
+      const res = await fetch(`${BASE_URL}/messages?userA=${encodeURIComponent(userA)}&userB=${encodeURIComponent(userB)}`, { credentials: 'include' });
       const data = await res.json();
       return data.messages || [];
     } catch {
@@ -360,6 +371,7 @@ export const apiService = {
       const res = await fetch(`${BASE_URL}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(payload),
       });
       return await res.json();
@@ -373,6 +385,7 @@ export const apiService = {
       const res = await fetch(`${BASE_URL}/messages/read`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ recipientId, senderId }),
       });
       return await res.json();
@@ -384,7 +397,7 @@ export const apiService = {
   // ── Connections ──────────────────────────────────────────────────────
   async getConnections(userId: string): Promise<UserConnection[]> {
     try {
-      const res = await fetch(`${BASE_URL}/connections?userId=${encodeURIComponent(userId)}`);
+      const res = await fetch(`${BASE_URL}/connections?userId=${encodeURIComponent(userId)}`, { credentials: 'include' });
       const data = await res.json();
       return data.connections || [];
     } catch {
@@ -397,6 +410,7 @@ export const apiService = {
       const res = await fetch(`${BASE_URL}/connections`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ requesterId, recipientId }),
       });
       return await res.json();
@@ -410,6 +424,7 @@ export const apiService = {
       const res = await fetch(`${BASE_URL}/connections/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ status }),
       });
       return await res.json();
@@ -420,7 +435,7 @@ export const apiService = {
 
   async deleteConnection(id: string): Promise<ApiResponse> {
     try {
-      const res = await fetch(`${BASE_URL}/connections/${id}`, { method: 'DELETE' });
+      const res = await fetch(`${BASE_URL}/connections/${id}`, { method: 'DELETE', credentials: 'include' });
       return await res.json();
     } catch (err: any) {
       return { success: false, error: err.message };
@@ -430,7 +445,7 @@ export const apiService = {
   // ── Notifications ────────────────────────────────────────────────────
   async getNotifications(userId: string): Promise<Notification[]> {
     try {
-      const res = await fetch(`${BASE_URL}/notifications?userId=${encodeURIComponent(userId)}`);
+      const res = await fetch(`${BASE_URL}/notifications?userId=${encodeURIComponent(userId)}`, { credentials: 'include' });
       const data = await res.json();
       return data.notifications || [];
     } catch {
@@ -440,7 +455,7 @@ export const apiService = {
 
   async markNotificationRead(id: string): Promise<ApiResponse> {
     try {
-      const res = await fetch(`${BASE_URL}/notifications/${id}/read`, { method: 'PUT' });
+      const res = await fetch(`${BASE_URL}/notifications/${id}/read`, { method: 'PUT', credentials: 'include' });
       return await res.json();
     } catch (err: any) {
       return { success: false, error: err.message };
@@ -452,6 +467,7 @@ export const apiService = {
       const res = await fetch(`${BASE_URL}/notifications/read-all`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ userId }),
       });
       return await res.json();
@@ -460,11 +476,116 @@ export const apiService = {
     }
   },
 
+  // ── Farmer Expense Ledger (Neon PostgreSQL) ──────────────────────────
+  async getFarmerExpenses(farmerId?: string): Promise<{ success: boolean; expenses: any[]; totalExpenses: number; totalIncome: number; netProfit: number }> {
+    try {
+      const qs = farmerId ? `?farmerId=${encodeURIComponent(farmerId)}` : '';
+      const res = await fetch(`${BASE_URL}/farmer/expenses${qs}`, { credentials: 'include' });
+      return await res.json();
+    } catch {
+      return { success: false, expenses: [], totalExpenses: 0, totalIncome: 0, netProfit: 0 };
+    }
+  },
+
+  async addFarmerExpense(payload: any): Promise<ApiResponse> {
+    try {
+      const res = await fetch(`${BASE_URL}/farmer/expenses`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(payload),
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  },
+
+  async deleteFarmerExpense(id: string): Promise<ApiResponse> {
+    try {
+      const res = await fetch(`${BASE_URL}/farmer/expenses/${id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  },
+
+  async syncFarmerExpenses(entries: any[]): Promise<{ success: boolean; synced: number; skipped: number; total: number; message: string }> {
+    try {
+      const res = await fetch(`${BASE_URL}/farmer/expenses/sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ entries }),
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, synced: 0, skipped: 0, total: entries.length, message: err.message };
+    }
+  },
+
+  // ── Price Negotiations (Neon PostgreSQL) ──────────────────────────────
+  async getNegotiations(listingId?: string): Promise<{ success: boolean; negotiations: any[] }> {
+    try {
+      const qs = listingId ? `?listingId=${encodeURIComponent(listingId)}` : '';
+      const res = await fetch(`${BASE_URL}/negotiations${qs}`, { credentials: 'include' });
+      return await res.json();
+    } catch {
+      return { success: false, negotiations: [] };
+    }
+  },
+
+  async createNegotiation(payload: any): Promise<ApiResponse> {
+    try {
+      const res = await fetch(`${BASE_URL}/negotiations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(payload),
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  },
+
+  async updateNegotiation(id: string, updates: any): Promise<ApiResponse> {
+    try {
+      const res = await fetch(`${BASE_URL}/negotiations/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(updates),
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  },
+
+  async syncNegotiations(offers: any[]): Promise<{ success: boolean; synced: number; skipped: number; total: number; message: string }> {
+    try {
+      const res = await fetch(`${BASE_URL}/negotiations/sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ offers }),
+      });
+      return await res.json();
+    } catch (err: any) {
+      return { success: false, synced: 0, skipped: 0, total: offers.length, message: err.message };
+    }
+  },
+
   // ── Logout ───────────────────────────────────────────────────────────
   async logout(userId?: string, token?: string): Promise<ApiResponse> {
     try {
       const res = await fetch(`${BASE_URL}/auth/logout`, {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -502,7 +623,7 @@ export const apiService = {
 
   async getCallLogs(userId: string): Promise<CallLog[]> {
     try {
-      const res = await fetch(`${BASE_URL}/calls/logs?userId=${encodeURIComponent(userId)}`);
+      const res = await fetch(`${BASE_URL}/calls/logs?userId=${encodeURIComponent(userId)}`, { credentials: 'include' });
       const data = await res.json();
       return data.logs || [];
     } catch {
@@ -513,6 +634,7 @@ export const apiService = {
   async createCallLog(log: Omit<CallLog, 'id' | 'timestamp'>): Promise<ApiResponse<CallLog>> {
     try {
       const res = await fetch(`${BASE_URL}/calls/logs`, {
+        credentials: 'include',
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(log),

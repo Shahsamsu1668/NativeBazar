@@ -1,9 +1,41 @@
+# Dependencies
 node_modules/
+
+# Production build artifacts
 dist/
+
+# Environment files and credentials
 .env
 .env.*
+.env.local
+*.env
+**/*.env
+server_data/*.env
+server_data/**/*.env
 !.env.example
+
+# Local backups and database dumps
+server_data/backups/
+*.bak
+**/*.bak
+
+# Database files
 *.db
 *.db-journal
 *.db-wal
-*.db-shm
+*.db-shm
+.neon
+.neon/
+
+# Test browser profiles and temp data
+server_data/chrome_*
+server_data/chrome_*/**
+
+# Certificates and keys
+*.pem
+*.key
+*.cert
+
+# Nested historical prototype directory
+NativeBazar/
+

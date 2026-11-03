@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Language, User } from '../types';
 import { AuthStore } from '../data/store';
+import { authApi } from '../services/api';
 import { ShieldCheck, Mail, Lock, Eye, EyeOff, X, AlertTriangle, KeyRound } from 'lucide-react';
 
 interface AdminVerificationModalProps {
@@ -26,7 +27,7 @@ export const AdminVerificationModal: React.FC<AdminVerificationModalProps> = ({
 
   const t = (en: string, bn: string) => (language === 'bn' ? bn : en);
 
-  const handleVerify = (e: React.FormEvent) => {
+  const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -40,11 +41,15 @@ export const AdminVerificationModal: React.FC<AdminVerificationModalProps> = ({
     }
 
     setLoading(true);
-    setTimeout(() => {
-      const result = AuthStore.verifyAdminCredentials(email, password);
+    try {
+      const result = await authApi.adminLogin({
+        username: email.trim(),
+        password,
+      });
       setLoading(false);
 
       if (result.success && result.user) {
+        AuthStore.setCurrentUser(result.user);
         onSuccess(result.user);
         onClose();
         setEmail('');
@@ -52,14 +57,22 @@ export const AdminVerificationModal: React.FC<AdminVerificationModalProps> = ({
         setError('');
       } else {
         setError(
-          result.message ||
-            t(
-              'Invalid administrator email or password. Access denied.',
-              'ভুল অ্যাডমিন ইমেইল বা পাসওয়ার্ড। প্রবেশাধিকার প্রত্যাখ্যাত।'
-            )
+          t(
+            'Invalid administrator email or password. Access denied.',
+            'ভুল অ্যাডমিন ইমেইল বা পাসওয়ার্ড। প্রবেশাধিকার প্রত্যাখ্যাত।'
+          )
         );
       }
-    }, 400);
+    } catch (err: any) {
+      setLoading(false);
+      setError(
+        err?.message ||
+          t(
+            'Invalid administrator email or password. Access denied.',
+            'ভুল অ্যাডমিন ইমেইল বা পাসওয়ার্ড। প্রবেশাধিকার প্রত্যাখ্যাত।'
+          )
+      );
+    }
   };
 
   return (

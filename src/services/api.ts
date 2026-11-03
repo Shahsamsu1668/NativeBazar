@@ -9,6 +9,7 @@ const BASE_URL = '';
 
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE_URL}${url}`, {
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       ...options?.headers,
@@ -72,6 +73,18 @@ export const authApi = {
     return fetchJson('/api/auth/admin-login', {
       method: 'POST',
       body: JSON.stringify(adminCredentials),
+    });
+  },
+
+  async getMe(): Promise<{ success: boolean; user: User }> {
+    return fetchJson('/api/auth/me', {
+      method: 'GET',
+    });
+  },
+
+  async logout(): Promise<{ success: boolean }> {
+    return fetchJson('/api/auth/logout', {
+      method: 'POST',
     });
   },
 };
