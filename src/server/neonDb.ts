@@ -3,8 +3,8 @@ import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
 
-// Prefer isolated test branch when present (enforces safety rule #1)
-if (fs.existsSync(path.resolve(process.cwd(), 'server_data/test_branch.env'))) {
+// Prefer isolated test branch in non-production environments
+if (process.env.NODE_ENV !== 'production' && fs.existsSync(path.resolve(process.cwd(), 'server_data/test_branch.env'))) {
   dotenv.config({ path: path.resolve(process.cwd(), 'server_data/test_branch.env'), override: true });
 }
 dotenv.config({ path: '.env.local' });
@@ -12,7 +12,9 @@ dotenv.config();
 
 const { Pool } = pg;
 
-const activeConnectionString = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
+const activeConnectionString = (process.env.NODE_ENV === 'production'
+  ? (process.env.DATABASE_URL || process.env.DATABASE_URL_UNPOOLED)
+  : (process.env.TEST_DATABASE_URL || process.env.DATABASE_URL)) || process.env.DATABASE_URL;
 
 export const pool = new Pool({
   connectionString: activeConnectionString,
