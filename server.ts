@@ -254,6 +254,54 @@ if (process.env.NODE_ENV !== 'production') {
 // Initialize Neon Cloud PostgreSQL
 try {
   await initNeonDatabase();
+
+  // Seed the administrator into Neon PostgreSQL if it does not exist yet.
+  // Password and security PIN are stored only as bcrypt hashes.
+  const seedAdminUser = process.env.ADMIN_USER;
+  const seedAdminPassword = process.env.ADMIN_PASSWORD;
+  const seedAdminPin = process.env.ADMIN_PIN;
+  if (seedAdminUser && seedAdminPassword && seedAdminPin) {
+    const existingAdmin = await pool.query(
+      "SELECT id FROM users WHERE role = 'admin' AND (phone = $1 OR email = $1) LIMIT 1",
+      [seedAdminUser]
+    );
+    if (existingAdmin.rows.length === 0) {
+      const adminPwHash = await hashPassword(seedAdminPassword);
+      const adminPinHash = await hashPassword(seedAdminPin);
+      await pool.query(
+        `INSERT INTO users (id, role, name, name_bn, phone, email, password_hash, password_algo, district, upazila, verified, two_factor_enabled, security_pin, created_at)
+         VALUES ('admin-root', 'admin', 'Central Platform Administrator', 'কেন্দ্রীয় প্ল্যাটফর্ম প্রশাসক', $1, 'admin@nativebazar.gov.bd', $2, 'bcrypt', 'Bogura', 'Bogura Sadar', true, true, $3, NOW())
+         ON CONFLICT (id) DO UPDATE SET role = 'admin', phone = EXCLUDED.phone, password_hash = EXCLUDED.password_hash,
+           password_algo = 'bcrypt', two_factor_enabled = true, security_pin = EXCLUDED.security_pin`,
+        [seedAdminUser, adminPwHash, adminPinHash]
+      );
+      console.log('[Neon] Administrator account seeded.');
+    } else {
+      // Repair admin records created by older builds (e.g. placeholder password hash
+      // or missing PIN) so the configured credentials always work.
+      const adminRow = await pool.query(
+        'SELECT id, password_hash, security_pin FROM users WHERE id = $1',
+        [existingAdmin.rows[0].id]
+      );
+      const row = adminRow.rows[0];
+      let pwOk = false;
+      let pinOk = false;
+      try { pwOk = (await verifyPassword(seedAdminPassword, row.password_hash)).valid; } catch { pwOk = false; }
+      try { pinOk = !!row.security_pin && (await verifyPassword(seedAdminPin, row.security_pin)).valid; } catch { pinOk = false; }
+      if (!pwOk || !pinOk) {
+        const adminPwHash = await hashPassword(seedAdminPassword);
+        const adminPinHash = await hashPassword(seedAdminPin);
+        await pool.query(
+          "UPDATE users SET password_hash = $1, password_algo = 'bcrypt', security_pin = $2, two_factor_enabled = true WHERE id = $3",
+          [adminPwHash, adminPinHash, row.id]
+        );
+        console.log('[Neon] Administrator credentials re-synced from environment.');
+      }
+    }
+  } else {
+    console.warn('[Neon] ADMIN_USER / ADMIN_PASSWORD / ADMIN_PIN not set; admin seeding skipped.');
+  }
+
   // Safe gate: Never automatically sync or overwrite legacy SQLite users in production.
   // Production user records in Neon PostgreSQL are the authoritative source of truth.
   // Legacy user sync is only executed in development when explicitly requested via env var.
@@ -912,51 +960,25 @@ app.post('/api/auth/admin-login', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Username and password are required.' });
     }
 
-    const envUser = process.env.ADMIN_USER;
-    const envPass = process.env.ADMIN_PASSWORD;
-    const envPin = process.env.ADMIN_PIN;
+    // Authenticate strictly against the administrator stored in Neon PostgreSQL.
+    let adminRecord: any = null;
+    const q = await pool.query(
+      "SELECT * FROM users WHERE (phone = $1 OR email = $1) AND role = 'admin' LIMIT 1",
+      [username]
+    );
+    if (q.rows.length > 0) adminRecord = q.rows[0];
 
     let isAuthorized = false;
-    let adminRecord: any = null;
-
-    // 1. If explicit environment admin credentials are configured, check them safely
-    if (envUser && envPass) {
-      if (safeCompare(username, envUser) && safeCompare(password, envPass)) {
-        if (!envPin || safeCompare(securityPin, envPin)) {
-          isAuthorized = true;
-        }
-      }
-    }
-
-    // 2. Also allow authenticating against the registered admin in the database
-    if (!isAuthorized) {
-      try {
-        const q = await pool.query(
-          "SELECT * FROM users WHERE (email = $1 OR phone = $2) AND role = 'admin' LIMIT 1",
-          [username, username]
-        );
-        if (q.rows.length > 0) adminRecord = q.rows[0];
-      } catch (err) {
-        console.warn('[Neon] admin lookup fallback to SQLite:', err);
-      }
-      if (!adminRecord) {
-        adminRecord = db.prepare(
-          "SELECT * FROM users WHERE (email = ? OR phone = ?) AND role = 'admin' LIMIT 1"
-        ).get(username, username) as any;
-      }
-
-      if (adminRecord) {
-        const { valid, needsRehash } = await verifyPassword(password, adminRecord.password_hash || adminRecord.passwordHash);
-        if (valid) {
-          if (needsRehash) {
-            const modernHash = await hashPassword(password);
-            try {
-              await pool.query("UPDATE users SET password_hash = $1, password_algo = 'bcrypt' WHERE id = $2", [modernHash, adminRecord.id]);
-            } catch {}
-            try {
-              db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(modernHash, adminRecord.id);
-            } catch {}
+    if (adminRecord) {
+      const { valid } = await verifyPassword(password, adminRecord.password_hash);
+      if (valid) {
+        if (adminRecord.security_pin) {
+          if (!securityPin) {
+            return res.status(401).json({ success: false, error: 'Access Denied: Security PIN is required.' });
           }
+          const pinCheck = await verifyPassword(String(securityPin), adminRecord.security_pin);
+          isAuthorized = pinCheck.valid;
+        } else {
           isAuthorized = true;
         }
       }
@@ -966,19 +988,10 @@ app.post('/api/auth/admin-login', async (req, res) => {
       return res.status(401).json({ success: false, error: 'Access Denied: Invalid administrator credentials.' });
     }
 
+    await pool.query('UPDATE users SET last_login_at = NOW() WHERE id = $1', [adminRecord.id]);
+
     const adminId = adminRecord ? adminRecord.id : 'admin-root';
     const nowIso = new Date().toISOString();
-
-    // Ensure admin user exists in Neon
-    try {
-      await pool.query(`
-        INSERT INTO users (id, role, name, name_bn, phone, email, password_hash, password_algo, district, upazila, verified, created_at, last_login_at)
-        VALUES ($1, 'admin', 'Central Platform Administrator', 'কেন্দ্রীয় প্ল্যাটফর্ম প্রশাসক', 'NativeBazarSJS', 'admin@nativebazar.gov.bd', 'sha256_admin_protected', 'bcrypt', 'Bogura', 'Bogura Sadar', true, NOW(), NOW())
-        ON CONFLICT (id) DO UPDATE SET last_login_at = NOW()
-      `, [adminId]);
-    } catch (adminUpsertErr) {
-      console.warn('[Neon] Admin user record sync note:', adminUpsertErr);
-    }
 
     const { rawToken } = await createSession(adminId, 'admin', req);
     res.cookie(SESSION_COOKIE_NAME, rawToken, SESSION_COOKIE_OPTIONS);

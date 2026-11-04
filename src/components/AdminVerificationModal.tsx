@@ -19,6 +19,7 @@ export const AdminVerificationModal: React.FC<AdminVerificationModalProps> = ({
 }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [securityPin, setSecurityPin] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -45,6 +46,7 @@ export const AdminVerificationModal: React.FC<AdminVerificationModalProps> = ({
       const result = await authApi.adminLogin({
         username: email.trim(),
         password,
+        securityPin,
       });
       setLoading(false);
 
@@ -54,6 +56,7 @@ export const AdminVerificationModal: React.FC<AdminVerificationModalProps> = ({
         onClose();
         setEmail('');
         setPassword('');
+        setSecurityPin('');
         setError('');
       } else {
         setError(
@@ -155,6 +158,25 @@ export const AdminVerificationModal: React.FC<AdminVerificationModalProps> = ({
               >
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
+            </div>
+          </div>
+
+          <div>
+            <label className="block font-semibold text-stone-700 mb-1">
+              {t('Security PIN', 'নিরাপত্তা পিন')}
+            </label>
+            <div className="relative">
+              <KeyRound className="w-4 h-4 text-stone-400 absolute left-3 top-2.5 pointer-events-none" />
+              <input
+                type="password"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                value={securityPin}
+                onChange={(e) => setSecurityPin(e.target.value)}
+                placeholder="••••••••"
+                className="w-full pl-9 pr-3 py-2 bg-stone-50 border border-stone-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
+                required
+              />
             </div>
           </div>
 
