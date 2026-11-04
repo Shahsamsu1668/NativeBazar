@@ -301,13 +301,29 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
   const loadConversation = useCallback(async (otherUser: User) => {
     setChatLoading(true);
     try {
+      // 1. Immediately display any cached messages so UI is never blank
+      const cached = MessageStore.getConversation(currentUser.id, otherUser.id);
+      if (cached.length > 0) {
+        setChatMessages(cached);
+      }
+
+      // 2. Fetch authoritative messages from Neon PostgreSQL
       const msgs = await apiService.getMessages(currentUser.id, otherUser.id);
-      // Persist backend messages locally and render the merged, persistent view
-      MessageStore.upsertMany(msgs);
-      setChatMessages(MessageStore.getConversation(currentUser.id, otherUser.id));
-      await apiService.markMessagesRead(currentUser.id, otherUser.id);
+      if (Array.isArray(msgs) && msgs.length > 0) {
+        MessageStore.upsertMany(msgs);
+        setChatMessages((prev) => {
+          const map = new Map<string, DirectMessage>();
+          prev.forEach((m) => map.set(m.id, m));
+          msgs.forEach((m) => map.set(m.id, m));
+          return Array.from(map.values()).sort(
+            (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+          );
+        });
+      }
+      // If msgs is empty or failed, NEVER wipe out existing on-screen messages!
+      await apiService.markMessagesRead(currentUser.id, otherUser.id).catch(() => {});
     } catch {
-      setChatMessages(MessageStore.getConversation(currentUser.id, otherUser.id));
+      // Keep existing on-screen messages intact
     } finally {
       setChatLoading(false);
     }
@@ -331,16 +347,23 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
   useEffect(() => {
     if (!currentUser.id) return;
     if (sseRef.current) sseRef.current.close();
-    const es = new EventSource(`/api/realtime?userId=${encodeURIComponent(currentUser.id)}`);
+    const tokenParam = currentUser.sessionToken ? `&token=${encodeURIComponent(currentUser.sessionToken)}` : '';
+    const es = new EventSource(`/api/realtime?userId=${encodeURIComponent(currentUser.id)}${tokenParam}`, { withCredentials: true });
     sseRef.current = es;
 
     es.addEventListener('new_message', (e: MessageEvent) => {
       try {
         const { message } = JSON.parse(e.data) as { message: DirectMessage };
+        if (!message || !message.id) return;
         MessageStore.upsert(message);
         if (activeChatUserRef.current &&
           (message.senderId === activeChatUserRef.current.id || message.recipientId === activeChatUserRef.current.id)) {
-          setChatMessages(MessageStore.getConversation(currentUser.id, activeChatUserRef.current.id));
+          setChatMessages((prev) => {
+            if (prev.some((m) => m.id === message.id)) return prev;
+            return [...prev, message].sort(
+              (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+            );
+          });
           apiService.markMessagesRead(currentUser.id, activeChatUserRef.current.id).catch(() => {});
           MessageStore.markRead(currentUser.id, activeChatUserRef.current.id);
           setUnreadCount(MessageStore.getUnreadCount(currentUser.id));
@@ -354,10 +377,16 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
     es.addEventListener('message_sent', (e: MessageEvent) => {
       try {
         const { message } = JSON.parse(e.data) as { message: DirectMessage };
+        if (!message || !message.id) return;
         MessageStore.upsert(message);
         if (activeChatUserRef.current &&
           (message.recipientId === activeChatUserRef.current.id || message.senderId === activeChatUserRef.current.id)) {
-          setChatMessages(MessageStore.getConversation(currentUser.id, activeChatUserRef.current.id));
+          setChatMessages((prev) => {
+            if (prev.some((m) => m.id === message.id)) return prev;
+            return [...prev, message].sort(
+              (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+            );
+          });
         }
       } catch { /* ignore */ }
     });
@@ -472,19 +501,45 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
   useEffect(() => {
     if (!activeChatUser) return;
     const interval = setInterval(async () => {
-      // Pull the authoritative conversation from the backend so received messages persist
+      // Pull authoritative messages from Neon PostgreSQL
       try {
         const server = await apiService.getMessages(currentUser.id, activeChatUser.id);
-        MessageStore.upsertMany(server);
-      } catch { /* keep local view */ }
-      const msgs = MessageStore.getConversation(currentUser.id, activeChatUser.id);
-      setChatMessages((prev) => {
-        if (msgs.length !== prev.length || (msgs.length > 0 && prev.length > 0 && msgs[msgs.length - 1].id !== prev[prev.length - 1].id)) {
-          return msgs;
+        if (Array.isArray(server) && server.length > 0) {
+          MessageStore.upsertMany(server);
+          setChatMessages((prev) => {
+            const map = new Map<string, DirectMessage>();
+            prev.forEach((m) => map.set(m.id, m));
+            server.forEach((m) => map.set(m.id, m));
+            const merged = Array.from(map.values()).sort(
+              (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+            );
+            if (merged.length !== prev.length || (merged.length > 0 && merged[merged.length - 1].id !== prev[prev.length - 1].id)) {
+              return merged;
+            }
+            return prev;
+          });
         }
-        return prev;
-      });
-      const hasUnread = msgs.some((m) => m.senderId === activeChatUser.id && !m.read);
+      } catch { /* Keep current messages */ }
+
+      // Also ensure local storage messages are reflected without wiping
+      const localMsgs = MessageStore.getConversation(currentUser.id, activeChatUser.id);
+      if (localMsgs.length > 0) {
+        setChatMessages((prev) => {
+          if (prev.length === 0) return localMsgs;
+          const map = new Map<string, DirectMessage>();
+          prev.forEach((m) => map.set(m.id, m));
+          localMsgs.forEach((m) => map.set(m.id, m));
+          const merged = Array.from(map.values()).sort(
+            (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+          );
+          if (merged.length !== prev.length || (merged.length > 0 && merged[merged.length - 1].id !== prev[prev.length - 1].id)) {
+            return merged;
+          }
+          return prev;
+        });
+      }
+
+      const hasUnread = localMsgs.some((m) => m.senderId === activeChatUser.id && !m.read);
       if (hasUnread) {
         apiService.markMessagesRead(currentUser.id, activeChatUser.id).catch(() => {});
         MessageStore.markRead(currentUser.id, activeChatUser.id);

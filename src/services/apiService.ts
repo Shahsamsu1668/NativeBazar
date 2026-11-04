@@ -355,12 +355,30 @@ export const apiService = {
     }
   },
 
+  // ── Helper to resolve Bearer Authorization Header ───────────────────
+  getAuthHeaders(): Record<string, string> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    try {
+      const raw = typeof window !== 'undefined' ? localStorage.getItem('nb_auth_user') : null;
+      if (raw) {
+        const u = JSON.parse(raw);
+        if (u && u.sessionToken) {
+          headers['Authorization'] = `Bearer ${u.sessionToken}`;
+        }
+      }
+    } catch {}
+    return headers;
+  },
+
   // ── Direct Messaging ─────────────────────────────────────────────────
   async getMessages(userA: string, userB: string): Promise<DirectMessage[]> {
     try {
-      const res = await fetch(`${BASE_URL}/messages?userA=${encodeURIComponent(userA)}&userB=${encodeURIComponent(userB)}`, { credentials: 'include' });
+      const res = await fetch(`${BASE_URL}/messages?userA=${encodeURIComponent(userA)}&userB=${encodeURIComponent(userB)}`, {
+        credentials: 'include',
+        headers: this.getAuthHeaders(),
+      });
       const data = await res.json();
-      return data.messages || [];
+      return Array.isArray(data.messages) ? data.messages : [];
     } catch {
       return [];
     }
@@ -370,7 +388,7 @@ export const apiService = {
     try {
       const res = await fetch(`${BASE_URL}/messages`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: this.getAuthHeaders(),
         credentials: 'include',
         body: JSON.stringify(payload),
       });
@@ -384,7 +402,7 @@ export const apiService = {
     try {
       const res = await fetch(`${BASE_URL}/messages/read`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: this.getAuthHeaders(),
         credentials: 'include',
         body: JSON.stringify({ recipientId, senderId }),
       });
@@ -445,9 +463,12 @@ export const apiService = {
   // ── Notifications ────────────────────────────────────────────────────
   async getNotifications(userId: string): Promise<Notification[]> {
     try {
-      const res = await fetch(`${BASE_URL}/notifications?userId=${encodeURIComponent(userId)}`, { credentials: 'include' });
+      const res = await fetch(`${BASE_URL}/notifications?userId=${encodeURIComponent(userId)}`, {
+        credentials: 'include',
+        headers: this.getAuthHeaders(),
+      });
       const data = await res.json();
-      return data.notifications || [];
+      return Array.isArray(data.notifications) ? data.notifications : [];
     } catch {
       return [];
     }
@@ -455,7 +476,11 @@ export const apiService = {
 
   async markNotificationRead(id: string): Promise<ApiResponse> {
     try {
-      const res = await fetch(`${BASE_URL}/notifications/${id}/read`, { method: 'PUT', credentials: 'include' });
+      const res = await fetch(`${BASE_URL}/notifications/${id}/read`, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: this.getAuthHeaders(),
+      });
       return await res.json();
     } catch (err: any) {
       return { success: false, error: err.message };
@@ -466,7 +491,7 @@ export const apiService = {
     try {
       const res = await fetch(`${BASE_URL}/notifications/read-all`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: this.getAuthHeaders(),
         credentials: 'include',
         body: JSON.stringify({ userId }),
       });

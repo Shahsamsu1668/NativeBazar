@@ -8,10 +8,22 @@ import { MarketplaceProduct, SupplyChainOrder, WholesalerOffer, User, MarketRate
 const BASE_URL = '';
 
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
+  const authHeaders: Record<string, string> = {};
+  try {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem('nb_auth_user') : null;
+    if (raw) {
+      const u = JSON.parse(raw);
+      if (u?.sessionToken) {
+        authHeaders['Authorization'] = `Bearer ${u.sessionToken}`;
+      }
+    }
+  } catch {}
+
   const res = await fetch(`${BASE_URL}${url}`, {
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
+      ...authHeaders,
       ...options?.headers,
     },
     ...options,

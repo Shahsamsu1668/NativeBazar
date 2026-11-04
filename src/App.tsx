@@ -183,7 +183,8 @@ export default function App() {
 
     let es: EventSource | null = null;
     try {
-      es = new EventSource(`/api/realtime?userId=` + encodeURIComponent(currentUser.id));
+      const tokenParam = currentUser.sessionToken ? `&token=${encodeURIComponent(currentUser.sessionToken)}` : '';
+      es = new EventSource(`/api/realtime?userId=${encodeURIComponent(currentUser.id)}${tokenParam}`, { withCredentials: true });
 
       // Persist incoming direct messages globally so badges update on any screen
       es.addEventListener('new_message', (e: MessageEvent) => {

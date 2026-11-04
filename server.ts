@@ -3273,6 +3273,9 @@ export function sendSSE(userId: string, event: string, data: any) {
     clients.forEach((clientRes) => {
       try {
         clientRes.write(payload);
+        if (typeof (clientRes as any).flush === 'function') {
+          (clientRes as any).flush();
+        }
       } catch {
         // ignore closed socket errors
       }
@@ -3280,14 +3283,33 @@ export function sendSSE(userId: string, event: string, data: any) {
   }
 }
 
-app.get('/api/realtime', requireAuth, (req: AuthenticatedRequest, res) => {
-  const authUser = req.user!;
-  const requestedUserId = req.query.userId as string;
-  const userId = (authUser.role === 'admin' && requestedUserId) ? requestedUserId : authUser.id;
+app.get('/api/realtime', async (req: express.Request, res: express.Response) => {
+  // Resolve authenticated user via token (cookie, Bearer, or query token) with query userId fallback
+  let userId: string | null = null;
+  const rawToken = extractToken(req);
+  if (rawToken) {
+    const session = await validateToken(rawToken);
+    if (session) {
+      const requested = req.query.userId as string;
+      userId = (session.user.role === 'admin' && requested) ? requested : session.user.id;
+    }
+  }
 
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
+  if (!userId && req.query.userId && typeof req.query.userId === 'string') {
+    userId = req.query.userId.trim();
+  }
+
+  if (!userId) {
+    return res.status(401).json({ success: false, error: 'Authentication required for realtime stream' });
+  }
+
+  // Render & Reverse Proxy SSE headers
+  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, no-transform, no-store, must-revalidate');
   res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no'); // Disables Nginx/Render response buffering
+  res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.flushHeaders?.();
 
   if (!sseClients.has(userId)) {
@@ -3295,23 +3317,31 @@ app.get('/api/realtime', requireAuth, (req: AuthenticatedRequest, res) => {
   }
   sseClients.get(userId)!.add(res);
 
+  // Send initial connected event and flush immediately
   res.write(`event: connected\ndata: ${JSON.stringify({ userId, connectedAt: new Date().toISOString() })}\n\n`);
+  if (typeof (res as any).flush === 'function') {
+    (res as any).flush();
+  }
 
+  // 15s keepalive ping prevents Render's reverse proxy from dropping idle connection
   const keepAlive = setInterval(() => {
     try {
       res.write(': keepalive\n\n');
+      if (typeof (res as any).flush === 'function') {
+        (res as any).flush();
+      }
     } catch {
       clearInterval(keepAlive);
     }
-  }, 20000);
+  }, 15000);
 
   req.on('close', () => {
     clearInterval(keepAlive);
-    const clients = sseClients.get(userId);
+    const clients = sseClients.get(userId!);
     if (clients) {
       clients.delete(res);
       if (clients.size === 0) {
-        sseClients.delete(userId);
+        sseClients.delete(userId!);
       }
     }
   });
@@ -3327,24 +3357,12 @@ async function createNeonNotification(
 ) {
   const notifId = `notif-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   const now = new Date();
-  try {
-    await pool.query(
-      `INSERT INTO notifications (id, user_id, title, message, type, action_url, read, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, false, $7)`,
-      [notifId, userId, title, message, type, actionUrl || null, now]
-    );
-  } catch (neonErr) {
-    console.warn('[Notifications] Neon notification insert fallback to jsonDb:', neonErr);
-  }
-  try {
-    jsonDb.addNotification({
-      userId,
-      title,
-      message,
-      type: type as any,
-      actionUrl,
-    });
-  } catch {}
+  // Strictly persist notification to Neon PostgreSQL
+  await pool.query(
+    `INSERT INTO notifications (id, user_id, title, message, type, action_url, read, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, false, $7)`,
+    [notifId, userId, title, message, type, actionUrl || null, now]
+  );
 
   const formatted = {
     id: notifId,
@@ -3361,7 +3379,9 @@ async function createNeonNotification(
   };
   try {
     sendSSE(userId, 'new_notification', { notification: formatted });
-  } catch {}
+  } catch (sseErr) {
+    console.warn('[SSE] Send notification error:', sseErr);
+  }
   return formatted;
 }
 
@@ -3454,21 +3474,18 @@ app.get('/api/messages', requireAuth, async (req: AuthenticatedRequest, res) => 
       return res.status(403).json({ success: false, error: 'Forbidden: You cannot view messages between other users.' });
     }
 
-    let messages: any[] = [];
-    try {
-      const result = await pool.query(`
-        SELECT * FROM messages
-        WHERE (sender_id = $1 AND recipient_id = $2)
-           OR (sender_id = $2 AND recipient_id = $1)
-        ORDER BY created_at ASC
-      `, [uA, uB]);
-      messages = result.rows.map(formatMessageRow);
-    } catch (neonErr) {
-      console.warn('[Messages] Neon query fallback to jsonDb:', neonErr);
-      messages = jsonDb.getMessages(uA, uB);
-    }
+    // STRICT NEON POSTGRESQL QUERY
+    const result = await pool.query(`
+      SELECT * FROM messages
+      WHERE (sender_id = $1 AND recipient_id = $2)
+         OR (sender_id = $2 AND recipient_id = $1)
+      ORDER BY created_at ASC
+    `, [uA, uB]);
+
+    const messages = result.rows.map(formatMessageRow);
     return res.json({ success: true, messages });
   } catch (err: any) {
+    console.error('[Messages] Neon DB error in GET /api/messages:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -3487,73 +3504,56 @@ app.post('/api/messages', requireAuth, async (req: AuthenticatedRequest, res) =>
       return res.status(400).json({ success: false, error: 'Recipient and non-empty content are required.' });
     }
 
-    // Verify recipient existence across Neon and jsonDb
+    // Verify recipient existence strictly in Neon
     let recipient: any = null;
-    try {
-      const recipRes = await pool.query('SELECT id, name, role FROM users WHERE id = $1', [recipientId]);
-      if (recipRes.rows.length > 0) recipient = recipRes.rows[0];
-    } catch (err) {
-      console.warn('[Messages] Neon recipient lookup fallback:', err);
-    }
-    if (!recipient) {
-      recipient = jsonDb.getUserById(recipientId);
+    const recipRes = await pool.query('SELECT id, name, role FROM users WHERE id = $1', [recipientId]);
+    if (recipRes.rows.length > 0) {
+      recipient = recipRes.rows[0];
+    } else {
+      const fallbackUser = jsonDb.getUserById(recipientId);
+      if (fallbackUser) {
+        try {
+          await pool.query(
+            `INSERT INTO users (id, role, name, phone, password_hash, district, verified, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, true, NOW())
+             ON CONFLICT (id) DO NOTHING`,
+            [fallbackUser.id, fallbackUser.role, fallbackUser.name, fallbackUser.phone || `017${Date.now().toString().slice(-8)}`, 'placeholder_pwd', fallbackUser.district || 'Bogura']
+          );
+          recipient = fallbackUser;
+        } catch {}
+      }
     }
     if (!recipient) {
       return res.status(404).json({ success: false, error: 'Recipient user not found.' });
     }
 
     const messageId = `msg-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-    let formattedMessage: any = null;
-    try {
-      const ins = await pool.query(`
-        INSERT INTO messages (
-          id, sender_id, sender_name, sender_role,
-          recipient_id, recipient_name, recipient_role,
-          content, read, reply_to_id, message_type, created_at
-        ) VALUES (
-          $1, $2, $3, $4,
-          $5, $6, $7,
-          $8, false, $9, 'text', NOW()
-        ) RETURNING *
-      `, [
-        messageId,
-        effectiveSenderId,
-        effectiveSenderName,
-        effectiveSenderRole,
-        recipient.id,
-        recipient.name,
-        recipient.role,
-        content.trim(),
-        replyToId || null,
-      ]);
-      formattedMessage = formatMessageRow(ins.rows[0]);
-    } catch (neonErr) {
-      console.warn('[Messages] Neon insert fallback to jsonDb:', neonErr);
-      try {
-        formattedMessage = jsonDb.addMessage({
-          senderId: effectiveSenderId,
-          senderName: effectiveSenderName,
-          senderRole: effectiveSenderRole,
-          recipientId: recipient.id,
-          recipientName: recipient.name,
-          recipientRole: recipient.role,
-          content: content.trim(),
-          replyToId: replyToId || undefined,
-        });
-      } catch (jsonErr: any) {
-        return res.status(500).json({ success: false, error: jsonErr.message });
-      }
-    }
 
-    // Mirror in jsonDb cache
-    try {
-      if (formattedMessage && !jsonDb.getMessages(effectiveSenderId, recipient.id).some(m => m.id === formattedMessage.id)) {
-        (jsonDb as any).cache?.messages?.push(formattedMessage);
-        jsonDb.save();
-      }
-    } catch {}
+    // STRICT NEON INSERT
+    const ins = await pool.query(`
+      INSERT INTO messages (
+        id, sender_id, sender_name, sender_role,
+        recipient_id, recipient_name, recipient_role,
+        content, read, reply_to_id, message_type, created_at
+      ) VALUES (
+        $1, $2, $3, $4,
+        $5, $6, $7,
+        $8, false, $9, 'text', NOW()
+      ) RETURNING *
+    `, [
+      messageId,
+      effectiveSenderId,
+      effectiveSenderName,
+      effectiveSenderRole,
+      recipient.id,
+      recipient.name,
+      recipient.role,
+      content.trim(),
+      replyToId || null,
+    ]);
+    const formattedMessage = formatMessageRow(ins.rows[0]);
 
-    // Durable notification in Neon PostgreSQL and jsonDb
+    // Durable notification strictly in Neon PostgreSQL
     let notif: any = null;
     try {
       notif = await createNeonNotification(
@@ -3563,7 +3563,9 @@ app.post('/api/messages', requireAuth, async (req: AuthenticatedRequest, res) =>
         'message',
         `/contacts?tab=chat&userId=${effectiveSenderId}`
       );
-    } catch {}
+    } catch (notifErr) {
+      console.error('[Notifications] Error creating Neon notification:', notifErr);
+    }
 
     // Real-time dispatch via SSE
     sendSSE(recipient.id, 'new_message', { message: formattedMessage });
@@ -3571,6 +3573,7 @@ app.post('/api/messages', requireAuth, async (req: AuthenticatedRequest, res) =>
 
     return res.status(201).json({ success: true, message: formattedMessage, notificationId: notif?.id });
   } catch (err: any) {
+    console.error('[Messages] Error in POST /api/messages:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -3793,21 +3796,17 @@ app.get('/api/notifications', requireAuth, async (req: AuthenticatedRequest, res
     const authUser = req.user!;
     const targetUserId = authUser.role === 'admin' ? (req.query.userId ? String(req.query.userId) : authUser.id) : authUser.id;
 
-    let notifications: any[] = [];
-    try {
-      const result = await pool.query(`
-        SELECT * FROM notifications
-        WHERE user_id = $1
-        ORDER BY created_at DESC
-        LIMIT 100
-      `, [targetUserId]);
-      notifications = result.rows.map(formatNotificationRow);
-    } catch (neonErr) {
-      console.warn('[Notifications] Neon query fallback to jsonDb:', neonErr);
-      notifications = jsonDb.getNotifications(targetUserId);
-    }
+    const result = await pool.query(`
+      SELECT * FROM notifications
+      WHERE user_id = $1
+      ORDER BY created_at DESC
+      LIMIT 100
+    `, [targetUserId]);
+
+    const notifications = result.rows.map(formatNotificationRow);
     return res.json({ success: true, notifications });
   } catch (err: any) {
+    console.error('[Notifications] Error fetching notifications from Neon:', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });

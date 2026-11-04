@@ -230,6 +230,10 @@ export function extractToken(req: Request): string | null {
   if (authHeader && authHeader.startsWith('Bearer ')) {
     return authHeader.substring(7).trim();
   }
+  // 3. Try query parameter (essential for EventSource/SSE and environments where cookies are partitioned)
+  if (req.query && typeof req.query.token === 'string' && req.query.token.trim()) {
+    return req.query.token.trim();
+  }
   return null;
 }
 
