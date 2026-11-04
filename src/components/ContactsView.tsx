@@ -302,7 +302,9 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
     setChatLoading(true);
     try {
       const msgs = await apiService.getMessages(currentUser.id, otherUser.id);
-      setChatMessages(msgs);
+      // Persist backend messages locally and render the merged, persistent view
+      MessageStore.upsertMany(msgs);
+      setChatMessages(MessageStore.getConversation(currentUser.id, otherUser.id));
       await apiService.markMessagesRead(currentUser.id, otherUser.id);
     } catch {
       setChatMessages(MessageStore.getConversation(currentUser.id, otherUser.id));
@@ -335,9 +337,10 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
     es.addEventListener('new_message', (e: MessageEvent) => {
       try {
         const { message } = JSON.parse(e.data) as { message: DirectMessage };
+        MessageStore.upsert(message);
         if (activeChatUserRef.current &&
           (message.senderId === activeChatUserRef.current.id || message.recipientId === activeChatUserRef.current.id)) {
-          setChatMessages((prev) => prev.some((m) => m.id === message.id) ? prev : [...prev, message]);
+          setChatMessages(MessageStore.getConversation(currentUser.id, activeChatUserRef.current.id));
           apiService.markMessagesRead(currentUser.id, activeChatUserRef.current.id).catch(() => {});
           MessageStore.markRead(currentUser.id, activeChatUserRef.current.id);
           setUnreadCount(MessageStore.getUnreadCount(currentUser.id));
@@ -351,7 +354,11 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
     es.addEventListener('message_sent', (e: MessageEvent) => {
       try {
         const { message } = JSON.parse(e.data) as { message: DirectMessage };
-        setChatMessages((prev) => prev.some((m) => m.id === message.id) ? prev : [...prev, message]);
+        MessageStore.upsert(message);
+        if (activeChatUserRef.current &&
+          (message.recipientId === activeChatUserRef.current.id || message.senderId === activeChatUserRef.current.id)) {
+          setChatMessages(MessageStore.getConversation(currentUser.id, activeChatUserRef.current.id));
+        }
       } catch { /* ignore */ }
     });
 
@@ -464,7 +471,12 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
   // Live polling for conversation while chat window is active
   useEffect(() => {
     if (!activeChatUser) return;
-    const interval = setInterval(() => {
+    const interval = setInterval(async () => {
+      // Pull the authoritative conversation from the backend so received messages persist
+      try {
+        const server = await apiService.getMessages(currentUser.id, activeChatUser.id);
+        MessageStore.upsertMany(server);
+      } catch { /* keep local view */ }
       const msgs = MessageStore.getConversation(currentUser.id, activeChatUser.id);
       setChatMessages((prev) => {
         if (msgs.length !== prev.length || (msgs.length > 0 && prev.length > 0 && msgs[msgs.length - 1].id !== prev[prev.length - 1].id)) {
@@ -474,11 +486,12 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
       });
       const hasUnread = msgs.some((m) => m.senderId === activeChatUser.id && !m.read);
       if (hasUnread) {
+        apiService.markMessagesRead(currentUser.id, activeChatUser.id).catch(() => {});
         MessageStore.markRead(currentUser.id, activeChatUser.id);
         setUnreadCount(MessageStore.getUnreadCount(currentUser.id));
       }
       refreshLocalData();
-    }, 1500);
+    }, 2500);
     return () => clearInterval(interval);
   }, [currentUser.id, activeChatUser?.id, refreshLocalData]);
 
@@ -538,13 +551,13 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
       recipientName: activeChatUser.name,
       recipientRole: activeChatUser.role,
       content,
-    });
+    }, { notify: false });
     setChatMessages((prev) => (prev.some((m) => m.id === localMsg.id) ? prev : [...prev, localMsg]));
     fetchChatPartners();
 
-    // Also sync via backend API and dispatch SSE
+    // Also sync via backend API (creates the recipient notification + SSE push)
     try {
-      await apiService.sendMessage({
+      const resp = await apiService.sendMessage({
         senderId: currentUser.id,
         senderName: currentUser.name,
         senderRole: currentUser.role,
@@ -553,8 +566,15 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
         recipientRole: activeChatUser.role,
         content,
       });
+      if (resp && resp.success && resp.message) {
+        MessageStore.remove(localMsg.id);
+        MessageStore.upsert(resp.message);
+        setChatMessages(MessageStore.getConversation(currentUser.id, activeChatUser.id));
+      } else {
+        NotificationStore.addSystemNotif(activeChatUser.id, `নতুন বার্তা: ${currentUser.name}`, content.slice(0, 60), 'info', `/contacts?tab=chat&userId=${currentUser.id}`);
+      }
     } catch {
-      // Offline / network fallback: already stored and notified locally
+      // Offline / network fallback: already stored locally
     } finally {
       setSendingMessage(false);
     }
@@ -571,12 +591,12 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
       recipientName: activeChatUser.name,
       recipientRole: activeChatUser.role,
       content: text,
-    });
+    }, { notify: false });
     setChatMessages((prev) => (prev.some((m) => m.id === localMsg.id) ? prev : [...prev, localMsg]));
     fetchChatPartners();
 
     try {
-      await apiService.sendMessage({
+      const resp = await apiService.sendMessage({
         senderId: currentUser.id,
         senderName: currentUser.name,
         senderRole: currentUser.role,
@@ -585,6 +605,13 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
         recipientRole: activeChatUser.role,
         content: text,
       });
+      if (resp && resp.success && resp.message) {
+        MessageStore.remove(localMsg.id);
+        MessageStore.upsert(resp.message);
+        setChatMessages(MessageStore.getConversation(currentUser.id, activeChatUser.id));
+      } else {
+        NotificationStore.addSystemNotif(activeChatUser.id, `নতুন বার্তা: ${currentUser.name}`, text.slice(0, 60), 'info', `/contacts?tab=chat&userId=${currentUser.id}`);
+      }
     } catch {} finally {
       setSendingMessage(false);
     }

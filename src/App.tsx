@@ -24,6 +24,7 @@ import {
   ThemeStore,
   NotificationStore,
   CallStore,
+  MessageStore,
 } from './data/store';
 import { apiService } from './services/apiService';
 import { authApi } from './services/api';
@@ -142,6 +143,31 @@ export default function App() {
     setCallingUser(target);
   };
 
+  // Pull notifications/messages that arrived while the user was offline
+  useEffect(() => {
+    if (!currentUser) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await apiService.getNotifications(currentUser.id);
+        if (cancelled) return;
+        list.filter((n: any) => !n.read).forEach((n: any) => {
+          NotificationStore.addIfMissing({
+            id: n.id,
+            userId: currentUser.id,
+            title: n.title,
+            message: n.message,
+            type: n.type === 'message' ? 'info' : (n.type || 'info'),
+            read: false,
+            createdAt: n.createdAt || n.created_at || new Date().toISOString(),
+            actionUrl: n.actionUrl || n.action_url || undefined,
+          });
+        });
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, [currentUser?.id]);
+
   // Real-time incoming call listener
   useEffect(() => {
     if (!currentUser) return;
@@ -158,6 +184,36 @@ export default function App() {
     let es: EventSource | null = null;
     try {
       es = new EventSource(`/api/realtime?userId=` + encodeURIComponent(currentUser.id));
+
+      // Persist incoming direct messages globally so badges update on any screen
+      es.addEventListener('new_message', (e: MessageEvent) => {
+        try {
+          const { message } = JSON.parse(e.data);
+          if (message && message.recipientId === currentUser.id) MessageStore.upsert(message);
+        } catch {}
+      });
+
+      // Server-created notifications (messages, connections, orders...) for this user
+      es.addEventListener('new_notification', (e: MessageEvent) => {
+        try {
+          const { notification: n } = JSON.parse(e.data);
+          if (!n || (n.userId || n.user_id) !== currentUser.id) return;
+          const added = NotificationStore.addIfMissing({
+            id: n.id,
+            userId: currentUser.id,
+            title: n.title,
+            message: n.message,
+            type: n.type === 'message' ? 'info' : (n.type || 'info'),
+            read: false,
+            createdAt: n.createdAt || n.created_at || new Date().toISOString(),
+            actionUrl: n.actionUrl || n.action_url || undefined,
+          });
+          if (added) {
+            setToastMessage(`${n.title}: ${n.message}`);
+            setTimeout(() => setToastMessage(null), 3500);
+          }
+        } catch {}
+      });
       es.addEventListener('call_signal', (e: MessageEvent) => {
         try {
           const data = JSON.parse(e.data);

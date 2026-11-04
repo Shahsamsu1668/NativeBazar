@@ -1220,6 +1220,17 @@ export const NotificationStore = {
     return NotificationStore.getAll().filter(n => n.userId === userId);
   },
 
+  // Adds a server-originated notification once; ignores ids already seen (even if dismissed).
+  addIfMissing(notif: Notification): boolean {
+    const SEEN_KEY = 'nb_seen_notif_ids';
+    let seen: string[] = [];
+    try { seen = JSON.parse(localStorage.getItem(SEEN_KEY) || '[]'); } catch { seen = []; }
+    if (seen.includes(notif.id) || this.getAll().some(n => n.id === notif.id)) return false;
+    try { localStorage.setItem(SEEN_KEY, JSON.stringify([notif.id, ...seen].slice(0, 300))); } catch {}
+    this.add(notif);
+    return true;
+  },
+
   add(notif: Notification): void {
     setItem(KEYS.NOTIFICATIONS, [notif, ...this.getAll()].slice(0, 100));
     try {
@@ -1392,7 +1403,38 @@ export const MessageStore = {
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
   },
 
-  sendMessage: (data: Omit<DirectMessage, 'id' | 'createdAt' | 'read'>): DirectMessage => {
+  // Insert or replace messages (by id) coming from the backend. Never creates notifications.
+  upsertMany: (incoming: DirectMessage[]): void => {
+    if (!incoming || incoming.length === 0) return;
+    const map = new Map<string, DirectMessage>();
+    MessageStore.getAll().forEach((m) => map.set(m.id, m));
+    let changed = false;
+    incoming.forEach((m) => {
+      const prev = map.get(m.id);
+      if (!prev || prev.read !== m.read || prev.content !== m.content) {
+        // Preserve a locally-set read flag so seen messages don't turn unread again
+        map.set(m.id, prev && prev.read && !m.read ? { ...m, read: true } : m);
+        changed = true;
+      }
+    });
+    if (!changed) return;
+    setItem(KEYS.MESSAGES, Array.from(map.values()));
+    try {
+      window.dispatchEvent(new CustomEvent('nb_messages_updated'));
+      window.dispatchEvent(new CustomEvent('nb_unread_updated'));
+    } catch {}
+  },
+
+  upsert: (m: DirectMessage): void => MessageStore.upsertMany([m]),
+
+  remove: (id: string): void => {
+    setItem(KEYS.MESSAGES, MessageStore.getAll().filter((m) => m.id !== id));
+  },
+
+  sendMessage: (
+    data: Omit<DirectMessage, 'id' | 'createdAt' | 'read'>,
+    opts: { notify?: boolean } = {}
+  ): DirectMessage => {
     const messages = MessageStore.getAll();
     const newMsg: DirectMessage = {
       ...data,
@@ -1402,14 +1444,16 @@ export const MessageStore = {
     };
     setItem(KEYS.MESSAGES, [...messages, newMsg]);
 
-    // Live notification for recipient
-    NotificationStore.addSystemNotif(
-      data.recipientId,
-      `নতুন বার্তা: ${data.senderName}`,
-      data.content.length > 60 ? `${data.content.slice(0, 60)}…` : data.content,
-      'info',
-      `/contacts?tab=chat&userId=${data.senderId}`
-    );
+    // Local-only notification fallback (the backend creates the real one for the recipient)
+    if (opts.notify !== false) {
+      NotificationStore.addSystemNotif(
+        data.recipientId,
+        `নতুন বার্তা: ${data.senderName}`,
+        data.content.length > 60 ? `${data.content.slice(0, 60)}…` : data.content,
+        'info',
+        `/contacts?tab=chat&userId=${data.senderId}`
+      );
+    }
 
     return newMsg;
   },

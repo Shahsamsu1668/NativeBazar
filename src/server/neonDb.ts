@@ -101,6 +101,62 @@ export async function initNeonDatabase(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON login_audit_logs(created_at);
     `);
 
+    // 4. Direct Messages table in Neon PostgreSQL
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS messages (
+        id TEXT PRIMARY KEY,
+        sender_id TEXT NOT NULL,
+        sender_name TEXT,
+        sender_role TEXT,
+        recipient_id TEXT NOT NULL,
+        recipient_name TEXT,
+        recipient_role TEXT,
+        content TEXT NOT NULL,
+        read BOOLEAN DEFAULT FALSE,
+        reply_to_id TEXT,
+        message_type TEXT DEFAULT 'text',
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_messages_sender ON messages(sender_id);
+      CREATE INDEX IF NOT EXISTS idx_messages_recipient ON messages(recipient_id);
+      CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at);
+    `);
+
+    // 5. Notifications table in Neon PostgreSQL
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS notifications (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        message TEXT NOT NULL,
+        type TEXT DEFAULT 'info',
+        action_url TEXT,
+        read BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
+      CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at);
+    `);
+
+    // 6. User Connections table in Neon PostgreSQL
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS connections (
+        id TEXT PRIMARY KEY,
+        requester_id TEXT NOT NULL,
+        requester_name TEXT,
+        requester_role TEXT,
+        recipient_id TEXT NOT NULL,
+        recipient_name TEXT,
+        recipient_role TEXT,
+        status TEXT DEFAULT 'pending',
+        message TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ
+      );
+      CREATE INDEX IF NOT EXISTS idx_connections_requester ON connections(requester_id);
+      CREATE INDEX IF NOT EXISTS idx_connections_recipient ON connections(recipient_id);
+    `);
+
     await client.query('COMMIT');
     console.log('Neon PostgreSQL Authentication tables initialized successfully.');
   } catch (err) {

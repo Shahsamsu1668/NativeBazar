@@ -405,6 +405,65 @@
       "verified": true,
       "createdAt": "2026-11-01T05:21:59.909Z",
       "sessionToken": "nb_token_1793510519912_vf348w4"
+    },
+    {
+      "id": "usr-farmer-1793167770835",
+      "role": "farmer",
+      "name": "Shakib",
+      "phone": "01711111111",
+      "passwordHash": "sha256_6145ee87ba5997d41e909fce3f8d93c1390702c1f28bb8f742e9c2682d3991a5",
+      "district": "Dhaka",
+      "upazila": "Mirpur",
+      "verified": true,
+      "createdAt": "2026-10-28T06:09:30.836Z",
+      "lastLoginAt": "2026-10-28T07:09:58.411Z",
+      "farmSizeAcres": 3,
+      "primaryCrops": [
+        "Potato",
+        "Tomato",
+        "Onion",
+        "Chili"
+      ]
+    },
+    {
+      "id": "user-supplier-meghna",
+      "role": "retailer",
+      "name": "Meghna Agro Depot Manager",
+      "nameBn": "মেঘনা সার ও বীজ বিতান",
+      "phone": "01715889900",
+      "email": "meghna.depot@nativebazar.com",
+      "passwordHash": "sha256_4a4f011d_21",
+      "district": "Bogura",
+      "upazila": "Shibganj",
+      "verified": true,
+      "createdAt": "2026-10-18T07:20:00.000Z",
+      "shopName": "যমুনা ও মেঘনা সার বিতান",
+      "licenseNumber": "BCIC-BGR-2026-889"
+    },
+    {
+      "id": "usr_1792731363361_eawr",
+      "role": "consumer",
+      "name": "Sakib",
+      "phone": "01999999999",
+      "email": "sakib@gmail.com",
+      "passwordHash": "sha256_034afd86_6",
+      "district": "Dhaka",
+      "upazila": "Savar",
+      "verified": true,
+      "createdAt": "2026-10-23T04:56:03.361Z"
+    },
+    {
+      "id": "usr-farmer-1793541348810",
+      "role": "farmer",
+      "name": "Akash",
+      "phone": "01727272727",
+      "passwordHash": "sha256_6145ee87ba5997d41e909fce3f8d93c1390702c1f28bb8f742e9c2682d3991a5",
+      "district": "Brahmanbaria",
+      "upazila": "Akhaura",
+      "verified": true,
+      "createdAt": "2026-11-01T13:55:48.827Z",
+      "lastLoginAt": "2026-11-01T16:33:54.652Z",
+      "farmSizeAcres": 3
     }
   ],
   "crops": [
@@ -607,6 +666,66 @@
       "qualityGrade": "A",
       "organicCertified": true,
       "createdAt": "2026-10-31T06:14:22.343Z"
+    },
+    {
+      "id": "prod-far-1793429891427",
+      "farmerId": "user-farmer-rafiq",
+      "farmerName": "Md. Rafiqul Islam",
+      "farmerPhone": "01712458920",
+      "district": "Bogura",
+      "upazila": "Shibganj",
+      "cropName": "banana",
+      "cropBangla": "banana",
+      "variety": "Bogra Deshi",
+      "quantityKg": 100,
+      "availableDate": "In Stock",
+      "expectedPricePerKg": 42,
+      "marketBenchmarkPrice": 48.3,
+      "status": "Ready to Harvest",
+      "imageUrl": "https://images.unsplash.com/photo-1571771894821-ce9b6c11b08e?w=600&auto=format&fit=crop&q=80",
+      "qualityGrade": "A",
+      "organicCertified": true,
+      "createdAt": "2026-10-31T06:58:11.427Z"
+    },
+    {
+      "id": "prod-far-1793428502129",
+      "farmerId": "user-farmer-rafiq",
+      "farmerName": "Md. Rafiqul Islam",
+      "farmerPhone": "01712458920",
+      "district": "Bogura",
+      "upazila": "Shibganj",
+      "cropName": "Pointed Gourd (Patal)",
+      "cropBangla": "দেশি পটল",
+      "variety": "Bogra Deshi",
+      "quantityKg": 300,
+      "availableDate": "In Stock",
+      "expectedPricePerKg": 42,
+      "marketBenchmarkPrice": 48.3,
+      "status": "Ready to Harvest",
+      "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2d/Pointed_gourd.jpg/800px-Pointed_gourd.jpg",
+      "qualityGrade": "A",
+      "organicCertified": false,
+      "createdAt": "2026-10-31T06:35:02.129Z"
+    },
+    {
+      "id": "prod-far-1793541419767",
+      "farmerId": "usr-farmer-1793541348810",
+      "farmerName": "Akash",
+      "farmerPhone": "01727272727",
+      "district": "Brahmanbaria",
+      "upazila": "Akhaura",
+      "cropName": "Guava",
+      "cropBangla": "Guava",
+      "variety": "Diamond Grade A",
+      "quantityKg": 100,
+      "availableDate": "In Stock",
+      "expectedPricePerKg": 42,
+      "marketBenchmarkPrice": 48.3,
+      "status": "Ready to Harvest",
+      "imageUrl": "https://images.unsplash.com/photo-1536511135899-73600f7b1580?w=600&auto=format&fit=crop&q=80",
+      "qualityGrade": "A",
+      "organicCertified": true,
+      "createdAt": "2026-11-01T13:56:59.767Z"
     }
   ],
   "supplierProducts": [
@@ -886,6 +1005,35 @@
       "orderDate": "2026-10-30T16:00:08.800Z",
       "sellerId": "usr-farmer-1793171195763",
       "sellerName": "shumona",
+      "sellerRole": "farmer"
+    },
+    {
+      "id": "ORD-192609-705",
+      "orderType": "farmer_to_wholesaler",
+      "customerId": "user-wholesaler-sumaiya",
+      "customerName": "Islam Agro Wholesale Syndicate",
+      "phone": "01711209934",
+      "items": [
+        {
+          "itemId": "prod-far-1793429891427",
+          "itemName": "banana",
+          "itemBangla": "banana",
+          "unitPrice": 42,
+          "unit": "kg",
+          "quantity": 50,
+          "subtotal": 2100
+        }
+      ],
+      "totalBDT": 2100,
+      "paymentMethod": "Bank Transfer / Arat Escrow",
+      "deliveryAddress": "Bogura Sadar, Bogura Arat Hub",
+      "district": "Bogura",
+      "upazila": "Bogura Sadar",
+      "status": "Confirmed",
+      "trackingCode": "TRK-BOG-457632",
+      "orderDate": "2026-11-02T04:03:12.610Z",
+      "sellerId": "far-shibganj-1",
+      "sellerName": "Md. Rafiqul Islam",
       "sellerRole": "farmer"
     }
   ],

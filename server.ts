@@ -3327,11 +3327,25 @@ async function createNeonNotification(
 ) {
   const notifId = `notif-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   const now = new Date();
-  await pool.query(
-    `INSERT INTO notifications (id, user_id, title, message, type, action_url, read, created_at)
-     VALUES ($1, $2, $3, $4, $5, $6, false, $7)`,
-    [notifId, userId, title, message, type, actionUrl || null, now]
-  );
+  try {
+    await pool.query(
+      `INSERT INTO notifications (id, user_id, title, message, type, action_url, read, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, false, $7)`,
+      [notifId, userId, title, message, type, actionUrl || null, now]
+    );
+  } catch (neonErr) {
+    console.warn('[Notifications] Neon notification insert fallback to jsonDb:', neonErr);
+  }
+  try {
+    jsonDb.addNotification({
+      userId,
+      title,
+      message,
+      type: type as any,
+      actionUrl,
+    });
+  } catch {}
+
   const formatted = {
     id: notifId,
     userId,
@@ -3440,14 +3454,19 @@ app.get('/api/messages', requireAuth, async (req: AuthenticatedRequest, res) => 
       return res.status(403).json({ success: false, error: 'Forbidden: You cannot view messages between other users.' });
     }
 
-    const result = await pool.query(`
-      SELECT * FROM messages
-      WHERE (sender_id = $1 AND recipient_id = $2)
-         OR (sender_id = $2 AND recipient_id = $1)
-      ORDER BY created_at ASC
-    `, [uA, uB]);
-
-    const messages = result.rows.map(formatMessageRow);
+    let messages: any[] = [];
+    try {
+      const result = await pool.query(`
+        SELECT * FROM messages
+        WHERE (sender_id = $1 AND recipient_id = $2)
+           OR (sender_id = $2 AND recipient_id = $1)
+        ORDER BY created_at ASC
+      `, [uA, uB]);
+      messages = result.rows.map(formatMessageRow);
+    } catch (neonErr) {
+      console.warn('[Messages] Neon query fallback to jsonDb:', neonErr);
+      messages = jsonDb.getMessages(uA, uB);
+    }
     return res.json({ success: true, messages });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err.message });
@@ -3468,52 +3487,89 @@ app.post('/api/messages', requireAuth, async (req: AuthenticatedRequest, res) =>
       return res.status(400).json({ success: false, error: 'Recipient and non-empty content are required.' });
     }
 
-    // Verify recipient existence in Neon users
-    const recipRes = await pool.query('SELECT id, name, role FROM users WHERE id = $1', [recipientId]);
-    if (recipRes.rows.length === 0) {
+    // Verify recipient existence across Neon and jsonDb
+    let recipient: any = null;
+    try {
+      const recipRes = await pool.query('SELECT id, name, role FROM users WHERE id = $1', [recipientId]);
+      if (recipRes.rows.length > 0) recipient = recipRes.rows[0];
+    } catch (err) {
+      console.warn('[Messages] Neon recipient lookup fallback:', err);
+    }
+    if (!recipient) {
+      recipient = jsonDb.getUserById(recipientId);
+    }
+    if (!recipient) {
       return res.status(404).json({ success: false, error: 'Recipient user not found.' });
     }
-    const recipient = recipRes.rows[0];
 
     const messageId = `msg-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-    const ins = await pool.query(`
-      INSERT INTO messages (
-        id, sender_id, sender_name, sender_role,
-        recipient_id, recipient_name, recipient_role,
-        content, read, reply_to_id, message_type, created_at
-      ) VALUES (
-        $1, $2, $3, $4,
-        $5, $6, $7,
-        $8, false, $9, 'text', NOW()
-      ) RETURNING *
-    `, [
-      messageId,
-      effectiveSenderId,
-      effectiveSenderName,
-      effectiveSenderRole,
-      recipient.id,
-      recipient.name,
-      recipient.role,
-      content.trim(),
-      replyToId || null,
-    ]);
+    let formattedMessage: any = null;
+    try {
+      const ins = await pool.query(`
+        INSERT INTO messages (
+          id, sender_id, sender_name, sender_role,
+          recipient_id, recipient_name, recipient_role,
+          content, read, reply_to_id, message_type, created_at
+        ) VALUES (
+          $1, $2, $3, $4,
+          $5, $6, $7,
+          $8, false, $9, 'text', NOW()
+        ) RETURNING *
+      `, [
+        messageId,
+        effectiveSenderId,
+        effectiveSenderName,
+        effectiveSenderRole,
+        recipient.id,
+        recipient.name,
+        recipient.role,
+        content.trim(),
+        replyToId || null,
+      ]);
+      formattedMessage = formatMessageRow(ins.rows[0]);
+    } catch (neonErr) {
+      console.warn('[Messages] Neon insert fallback to jsonDb:', neonErr);
+      try {
+        formattedMessage = jsonDb.addMessage({
+          senderId: effectiveSenderId,
+          senderName: effectiveSenderName,
+          senderRole: effectiveSenderRole,
+          recipientId: recipient.id,
+          recipientName: recipient.name,
+          recipientRole: recipient.role,
+          content: content.trim(),
+          replyToId: replyToId || undefined,
+        });
+      } catch (jsonErr: any) {
+        return res.status(500).json({ success: false, error: jsonErr.message });
+      }
+    }
 
-    const formattedMessage = formatMessageRow(ins.rows[0]);
+    // Mirror in jsonDb cache
+    try {
+      if (formattedMessage && !jsonDb.getMessages(effectiveSenderId, recipient.id).some(m => m.id === formattedMessage.id)) {
+        (jsonDb as any).cache?.messages?.push(formattedMessage);
+        jsonDb.save();
+      }
+    } catch {}
 
-    // Durable notification in Neon PostgreSQL
-    const notif = await createNeonNotification(
-      recipient.id,
-      `New message from ${effectiveSenderName}`,
-      content.trim().slice(0, 100),
-      'message',
-      `/contacts?tab=chat&userId=${effectiveSenderId}`
-    );
+    // Durable notification in Neon PostgreSQL and jsonDb
+    let notif: any = null;
+    try {
+      notif = await createNeonNotification(
+        recipient.id,
+        `নতুন বার্তা: ${effectiveSenderName}`,
+        content.trim().slice(0, 100),
+        'message',
+        `/contacts?tab=chat&userId=${effectiveSenderId}`
+      );
+    } catch {}
 
     // Real-time dispatch via SSE
     sendSSE(recipient.id, 'new_message', { message: formattedMessage });
     sendSSE(effectiveSenderId, 'message_sent', { message: formattedMessage });
 
-    return res.status(201).json({ success: true, message: formattedMessage, notificationId: notif.id });
+    return res.status(201).json({ success: true, message: formattedMessage, notificationId: notif?.id });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err.message });
   }
@@ -3530,11 +3586,18 @@ app.put('/api/messages/read', requireAuth, async (req: AuthenticatedRequest, res
     // Non-admins can only mark messages where they are the recipient
     const effectiveRecipientId = authUser.role === 'admin' ? (recipientId || authUser.id) : authUser.id;
 
-    await pool.query(`
-      UPDATE messages
-      SET read = true
-      WHERE recipient_id = $1 AND sender_id = $2 AND read = false
-    `, [effectiveRecipientId, String(senderId)]);
+    try {
+      await pool.query(`
+        UPDATE messages
+        SET read = true
+        WHERE recipient_id = $1 AND sender_id = $2 AND read = false
+      `, [effectiveRecipientId, String(senderId)]);
+    } catch (neonErr) {
+      console.warn('[Messages] Neon read update fallback to jsonDb:', neonErr);
+    }
+    try {
+      jsonDb.markMessagesRead(effectiveRecipientId, String(senderId));
+    } catch {}
 
     sendSSE(String(senderId), 'messages_read', { recipientId: effectiveRecipientId, senderId });
     return res.json({ success: true });
@@ -3730,14 +3793,19 @@ app.get('/api/notifications', requireAuth, async (req: AuthenticatedRequest, res
     const authUser = req.user!;
     const targetUserId = authUser.role === 'admin' ? (req.query.userId ? String(req.query.userId) : authUser.id) : authUser.id;
 
-    const result = await pool.query(`
-      SELECT * FROM notifications
-      WHERE user_id = $1
-      ORDER BY created_at DESC
-      LIMIT 100
-    `, [targetUserId]);
-
-    const notifications = result.rows.map(formatNotificationRow);
+    let notifications: any[] = [];
+    try {
+      const result = await pool.query(`
+        SELECT * FROM notifications
+        WHERE user_id = $1
+        ORDER BY created_at DESC
+        LIMIT 100
+      `, [targetUserId]);
+      notifications = result.rows.map(formatNotificationRow);
+    } catch (neonErr) {
+      console.warn('[Notifications] Neon query fallback to jsonDb:', neonErr);
+      notifications = jsonDb.getNotifications(targetUserId);
+    }
     return res.json({ success: true, notifications });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err.message });
