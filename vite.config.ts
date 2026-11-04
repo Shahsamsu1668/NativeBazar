@@ -6,7 +6,7 @@ import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
-    base: '/NativeBazar/',
+    base: process.env.BASE_URL || '/',
     plugins: [
       react(),
       tailwindcss(),
