@@ -1,0 +1,42 @@
+{
+  "sqliteHashMatch": true,
+  "jsonHashMatch": true,
+  "counts": {
+    "users": 44,
+    "products": 28,
+    "orders": 11,
+    "order_items": 11,
+    "wholesaler_offers": 6,
+    "market_prices": 7,
+    "catalog": 80,
+    "messages": 11,
+    "connections": 4,
+    "notifications": 26,
+    "farmer_expenses": 0,
+    "negotiations": 0,
+    "call_logs": 0,
+    "trade_audit_logs": 32,
+    "login_audit_logs": 24
+  },
+  "quarantinedProducts": [
+    {
+      "id": "sup-meghna-potash",
+      "crop_name": "Muriate of Potash (MOP)",
+      "harvest_status": "Archived",
+      "seller_id": null
+    },
+    {
+      "id": "sup-meghna-tricho",
+      "crop_name": "Trichoderma Bio-Fungicide",
+      "harvest_status": "Archived",
+      "seller_id": null
+    },
+    {
+      "id": "sup-meghna-seed",
+      "crop_name": "Lal Teer Hybrid Tomato Seeds (Bijli Plus)",
+      "harvest_status": "Archived",
+      "seller_id": null
+    }
+  ],
+  "triggersCount": 4
+}

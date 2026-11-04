@@ -1,0 +1,123 @@
+{
+  "timestamp": "2026-11-02T17:28:08.801Z",
+  "allPassed": true,
+  "results": {
+    "Test 1: Wholesaler Offer Creation & Retrieval": {
+      "passed": true,
+      "status": 201,
+      "offerId": "bid-1793640483114-691",
+      "derivedWholesaler": "user-wholesaler-sumaiya",
+      "urgent": true
+    },
+    "Test 2: Unauthorized Offer Modification Rejection": {
+      "passed": true,
+      "rogueEditStatus": 403,
+      "rogueDeleteStatus": 403,
+      "legitEditStatus": 200,
+      "updatedPrice": 45
+    },
+    "Test 3: Market Rates Retrieval & Admin Authorization": {
+      "passed": true,
+      "ratesCount": 4,
+      "unauthorizedStatus": 403,
+      "adminCreateStatus": 201,
+      "adminUpdateStatus": 200,
+      "updatedWholesale": 30
+    },
+    "Test 4: Direct Messaging Identity Derivation": {
+      "passed": true,
+      "status": 201,
+      "derivedSender": "user-wholesaler-sumaiya",
+      "badRecipStatus": 404,
+      "emptyContentStatus": 400
+    },
+    "Test 5: Messaging Privacy & Read State": {
+      "passed": true,
+      "legitConvoStatus": 200,
+      "eavesdropStatus": 403,
+      "markReadStatus": 200,
+      "dbReadStatus": true
+    },
+    "Test 6: Connection Request Creation & Validations": {
+      "passed": true,
+      "selfConnStatus": 400,
+      "badConnStatus": 404,
+      "legitConnStatus": 201,
+      "connStatus": "pending"
+    },
+    "Test 7: Duplicate Connection Prevention": {
+      "passed": true,
+      "status": 400,
+      "errorMsg": "Connection already pending."
+    },
+    "Test 8: Connection State Transition Authorization": {
+      "passed": true,
+      "requesterStatus": 403,
+      "thirdPartyStatus": 403,
+      "legitAcceptStatus": 200,
+      "newStatus": "accepted"
+    },
+    "Test 9: Connection Deletion Authorization": {
+      "passed": true,
+      "rogueDeleteStatus": 403
+    },
+    "Test 10: Automatic Notification Generation": {
+      "passed": true,
+      "hasMsgNotif": true,
+      "hasConnNotif": true,
+      "hasConnAcceptedNotif": true
+    },
+    "Test 11: Notification Isolation & Read Synchronization": {
+      "passed": true,
+      "rogueReadStatus": 403,
+      "legitReadStatus": 200,
+      "readAllStatus": 200,
+      "allMarkedRead": true
+    },
+    "Test 12: Historical Record Preservation": {
+      "passed": true,
+      "preCounts": {
+        "offers": 6,
+        "prices": 7,
+        "messages": 11,
+        "connections": 4,
+        "notifications": 16
+      },
+      "postCounts": {
+        "offers": 7,
+        "prices": 8,
+        "messages": 12,
+        "connections": 5,
+        "notifications": 19
+      }
+    },
+    "Test 13: Source DB Immutability": {
+      "passed": true,
+      "sqliteHashMatches": true,
+      "jsonHashMatches": true,
+      "sqliteHash": "789498e18bae18062dc0a74dcad47ca5436019ee634fe209f9e72b28385e19c9",
+      "jsonHash": "1ab54a39e6961360165e43b116b16e56b230f2c36bafc9156403d116f2cd7a7a"
+    },
+    "Test 14: Products & Orders Regression Check": {
+      "passed": true,
+      "prodStatus": 200,
+      "prodCount": 6,
+      "orderStatus": 200,
+      "orderCount": 1
+    }
+  },
+  "preCounts": {
+    "offers": 6,
+    "prices": 7,
+    "messages": 11,
+    "connections": 4,
+    "notifications": 16
+  },
+  "finalCounts": {
+    "offers": 6,
+    "prices": 7,
+    "messages": 11,
+    "connections": 4,
+    "notifications": 16
+  }
+}

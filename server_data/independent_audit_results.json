@@ -1,0 +1,69 @@
+{
+  "timestamp": "2026-11-02T17:36:12.126Z",
+  "environment": {
+    "sqliteHash": "789498e18bae18062dc0a74dcad47ca5436019ee634fe209f9e72b28385e19c9",
+    "jsonHash": "1ab54a39e6961360165e43b116b16e56b230f2c36bafc9156403d116f2cd7a7a",
+    "sqliteImmutability": true,
+    "jsonImmutability": true
+  },
+  "backendTrace": {},
+  "messagingRealtime": {
+    "sseMultiClientTest": {
+      "farmerClient1Received": false,
+      "farmerClient2Received": false,
+      "wholesalerSenderReceived": false,
+      "passed": false
+    }
+  },
+  "connectionsNotifications": {
+    "connectionsAudit": {
+      "creationStatus": 201,
+      "selfConnRejection": true,
+      "dupConnRejection": true,
+      "unauthorizedAcceptRejection": true,
+      "authorizedAcceptStatus": true,
+      "unauthorizedDeleteRejection": true,
+      "passed": true
+    },
+    "notificationsAudit": {
+      "connReqNotifGenerated": true,
+      "connAcceptedNotifGenerated": true,
+      "rogueMarkReadBlocked": true,
+      "legitMarkReadSucceeded": true,
+      "passed": true
+    }
+  },
+  "regressionIntegrity": {
+    "baselineCounts": {
+      "users": 42,
+      "products": 18,
+      "orders": 7,
+      "order_items": 4,
+      "offers": 6,
+      "prices": 7,
+      "messages": 11,
+      "connections": 4,
+      "notifications": 16
+    },
+    "phase31Regression": {
+      "productsStatus": 200,
+      "productsCount": 6,
+      "ordersStatus": 200,
+      "ordersCount": 1,
+      "adminMetricsStatus": 200,
+      "passed": true
+    },
+    "postCounts": {
+      "users": 42,
+      "products": 18,
+      "orders": 7,
+      "order_items": 4,
+      "offers": 6,
+      "prices": 7,
+      "messages": 11,
+      "connections": 4,
+      "notifications": 16
+    },
+    "countsMatch": true
+  }
+}

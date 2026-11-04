@@ -1,0 +1,14 @@
+const fs = require('fs');
+const content = fs.readFileSync('server.ts', 'utf8');
+const lines = content.split('\n');
+
+const findings = [];
+lines.forEach((line, idx) => {
+  if (line.includes('db.prepare(') && line.includes('${')) {
+    findings.push({ line: idx + 1, text: line.trim() });
+  }
+});
+
+console.log('Template literal interpolations in db.prepare:');
+console.log(findings);
+

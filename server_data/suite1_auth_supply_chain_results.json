@@ -1,0 +1,49 @@
+{
+  "timestamp": "2026-11-02T18:23:31.668Z",
+  "allPassed": true,
+  "results": {
+    "1.1 User Registration": {
+      "passed": true,
+      "status": 201
+    },
+    "1.2 Duplicate Phone Rejection": {
+      "passed": true,
+      "status": 409
+    },
+    "2.1 Wrong Password Rejection": {
+      "passed": true,
+      "status": 401
+    },
+    "2.2 Valid Login & Session Issuance": {
+      "passed": true,
+      "status": 200,
+      "hasCookie": true
+    },
+    "3.1 Authenticated Session Check (/api/auth/me)": {
+      "passed": true,
+      "status": 200
+    },
+    "3.2 Logout Session Revocation": {
+      "passed": true,
+      "status": 401
+    },
+    "5.1 RBAC Protected API Enforcement": {
+      "passed": true,
+      "adminGuard": 403,
+      "farmerGuard": 403,
+      "wholesalerGuard": 403
+    },
+    "6.1 Valid Supply Chain Trades": {
+      "passed": true,
+      "wholesalerFromFarmer": 201,
+      "retailerFromWholesaler": 201,
+      "consumerFromRetailer": 201
+    },
+    "6.2 Prohibited Direct Trade Rejection": {
+      "passed": true,
+      "consumerFromFarmer": 403,
+      "consumerFromWholesaler": 403,
+      "wholesalerFromRetailer": 403
+    }
+  }
+}

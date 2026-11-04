@@ -1,0 +1,205 @@
+{
+  "timestamp": "2026-11-02T18:01:34.343Z",
+  "allPassed": true,
+  "results": {
+    "Test 1: Non-delivered Order Review Rejection": {
+      "passed": true,
+      "status": 400,
+      "msg": "Reviews are reserved exclusively for verified buyers with completed deliveries."
+    },
+    "Test 2: Unauthorized Buyer Review Rejection": {
+      "passed": true,
+      "status": 403,
+      "msg": "Forbidden: Only the customer who placed this order can submit a review."
+    },
+    "Test 3: Invalid Star Rating Rejection": {
+      "passed": true,
+      "status": 400,
+      "msg": "Valid star rating between 1 and 5 is required"
+    },
+    "Test 4: Authorized Verified Order Review Creation": {
+      "passed": true,
+      "status": 201,
+      "reviewId": "rev-1793642487822-758",
+      "verifiedPurchase": true
+    },
+    "Test 5: Duplicate Order Review Rejection": {
+      "passed": true,
+      "status": 400,
+      "msg": "Order has already been reviewed."
+    },
+    "Test 6: Direct Product Review Creation": {
+      "passed": true,
+      "status": 201,
+      "reviewId": "rev-1793642488223-641"
+    },
+    "Test 7: Duplicate Direct Product Review Rejection": {
+      "passed": true,
+      "status": 400,
+      "msg": "You have already reviewed this product."
+    },
+    "Test 8: Query Reviews by Product & Order ID": {
+      "passed": true,
+      "byProductCount": 1,
+      "byOrderCount": 1
+    },
+    "Test 9: Review Deletion Authorization Check": {
+      "passed": true,
+      "unauthorizedStatus": 403,
+      "authorizedStatus": 200
+    },
+    "Test 10: Master Catalog Baseline Integrity (80 items)": {
+      "passed": true,
+      "status": 200,
+      "itemCount": 80
+    },
+    "Test 11: Catalog Pagination, Filtering & Search": {
+      "passed": true,
+      "paginatedCount": 10,
+      "vegCount": 20,
+      "searchCount": 1
+    },
+    "Test 12: Catalog Single Item Retrieval": {
+      "passed": true,
+      "status": 200,
+      "id": "cat-oth-01"
+    },
+    "Test 13: Non-Admin Catalog Creation Rejection": {
+      "passed": true,
+      "status": 403,
+      "msg": "Forbidden: Admin access required to manage catalog."
+    },
+    "Test 14: Admin Catalog CRUD Lifecycle": {
+      "passed": true,
+      "createStatus": 201,
+      "updateStatus": 200,
+      "deleteStatus": 200
+    },
+    "Test 15: Secure Call Log Creation": {
+      "passed": true,
+      "status": 201,
+      "callerId": "user-wholesaler-sumaiya",
+      "logId": "call-1793642490215-335"
+    },
+    "Test 16: Call Log Privacy Check (HTTP 403)": {
+      "passed": true,
+      "status": 403,
+      "msg": "Forbidden: You cannot view another user's call logs."
+    },
+    "Test 17: Participant Call Log Retrieval": {
+      "passed": true,
+      "callerLogsCount": 1,
+      "receiverLogsCount": 1
+    },
+    "Test 18: Admin Call Log Inspection": {
+      "passed": true,
+      "status": 200,
+      "logsCount": 1
+    },
+    "Test 19: Non-Farmer Expense Logging Rejection": {
+      "passed": true,
+      "status": 403,
+      "msg": "Forbidden: Only farmers and administrators can log farm expenses."
+    },
+    "Test 20: Invalid Expense Validation Rejection": {
+      "passed": true,
+      "status": 400,
+      "msg": "Category, description, and positive amount are required."
+    },
+    "Test 21: Farmer Expense and Income Creation": {
+      "passed": true,
+      "expenseId": "exp-1793642490823-99",
+      "incomeId": "exp-1793642491190-567"
+    },
+    "Test 22: Farmer Expense Ledger Privacy & Aggregations": {
+      "passed": true,
+      "privacyBlocked": true,
+      "totalExpenses": 1350,
+      "totalIncome": 3800,
+      "netProfit": 2450
+    },
+    "Test 23: Farmer Expense Update & Deletion": {
+      "passed": true,
+      "updateStatus": 200,
+      "deleteStatus": 200
+    },
+    "Test 24: Seller Self-Negotiation Rejection": {
+      "passed": true,
+      "status": 400,
+      "msg": "Cannot negotiate with your own listing."
+    },
+    "Test 25: Buyer Negotiation Offer Creation & Seller Notification": {
+      "passed": true,
+      "status": 201,
+      "negId": "neg-1793642491956-483",
+      "notificationSent": true
+    },
+    "Test 26: Negotiation Participant Privacy Isolation": {
+      "passed": true,
+      "status": 200,
+      "nonParticipantExposed": false
+    },
+    "Test 27: Seller Counter-Offer Transition": {
+      "passed": true,
+      "status": 200,
+      "newStatus": "Countered",
+      "counterPrice": 36
+    },
+    "Test 28: Buyer Accept Counter-Offer Transition": {
+      "passed": true,
+      "status": 200,
+      "finalStatus": "Accepted"
+    },
+    "Test 29: Unauthorized Negotiation Modification Rejection": {
+      "passed": true,
+      "status": 403,
+      "msg": "Forbidden: You are not a participant in this negotiation."
+    },
+    "Test 30: Previous Domains Regression Check": {
+      "passed": true,
+      "products": 200,
+      "orders": 200,
+      "wholesalerOffers": 200,
+      "marketPrices": 200,
+      "messages": 200,
+      "connections": 200,
+      "notifications": 200
+    },
+    "Test 31: Database State Restoration & Clean Row Counts": {
+      "passed": true,
+      "preCounts": {
+        "catalog": 80,
+        "reviews": 0,
+        "callLogs": 0,
+        "farmerExpenses": 0,
+        "negotiations": 0
+      },
+      "finalCounts": {
+        "catalog": 80,
+        "reviews": 0,
+        "callLogs": 0,
+        "farmerExpenses": 0,
+        "negotiations": 0
+      }
+    },
+    "Test 32: SQLite & JSON Database Immutability Check": {
+      "passed": true,
+      "sqliteHash": "789498e18bae18062dc0a74dcad47ca5436019ee634fe209f9e72b28385e19c9",
+      "jsonHash": "1ab54a39e6961360165e43b116b16e56b230f2c36bafc9156403d116f2cd7a7a"
+    }
+  },
+  "preCounts": {
+    "catalog": 80,
+    "reviews": 0,
+    "callLogs": 0,
+    "farmerExpenses": 0,
+    "negotiations": 0
+  },
+  "finalCounts": {
+    "catalog": 80,
+    "reviews": 0,
+    "callLogs": 0,
+    "farmerExpenses": 0,
+    "negotiations": 0
+  }
+}

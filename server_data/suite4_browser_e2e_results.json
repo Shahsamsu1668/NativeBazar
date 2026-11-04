@@ -1,0 +1,41 @@
+{
+  "timestamp": "2026-11-03T04:44:06.489Z",
+  "allPassed": true,
+  "results": {
+    "1. DOM Hydration & Brand Rendering": {
+      "passed": true,
+      "docTitle": "আমার হাট (Amar Haat) - AI-Powered Local Agriculture Platform",
+      "rootHtmlLength": 37853,
+      "visibleTextLength": 3569,
+      "containsAppBrand": true
+    },
+    "2. Console Errors & Secrets Security": {
+      "passed": true,
+      "uncaughtErrorsCount": 0,
+      "consoleErrorsCount": 0,
+      "noLeaks": true
+    },
+    "3. Responsive Viewports": {
+      "passed": true,
+      "desktopWidth": 1440,
+      "mobileWidth": 390
+    },
+    "4. Interactive UI Buttons & Inputs": {
+      "passed": true,
+      "buttonCount": 15,
+      "sampleButtons": [
+        "আমার হাট\n\nডিজিটাল কৃষি প্ল্যাটফর্ম • বাংলাদেশ",
+        "বাং",
+        "লগইন / নিবন্ধন",
+        "নিবন্ধন করুন / শুরু করুন",
+        "লগইন করুন (Sign In)",
+        "বিনামূল্যে অ্যাকাউন্ট তৈরি করুন",
+        "কৃষক হিসেবে শুরু করুন",
+        "পাইকার হিসেবে শুরু করুন",
+        "খুচরা বিক্রেতা হিসেবে শুরু",
+        "ভোক্তা হিসেবে শুরু করুন"
+      ],
+      "inputCount": 0
+    }
+  }
+}
