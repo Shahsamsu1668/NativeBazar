@@ -135,10 +135,16 @@ export interface MarketRate {
   marketNameBn: string;
   cropName: string;
   banglaName: string;
-  category: 'Vegetables' | 'Tubers' | 'Grains' | 'Spices' | 'Fruits';
-  wholesalePrice: number; // Local district wholesale
-  wholesaleDhaka: number; // Dhaka capital wholesale
-  retailPrice: number;    // Local retail
+  category: 'Vegetables' | 'Tubers' | 'Grains' | 'Spices' | 'Fruits' | string;
+  wholesalePrice: number; // Local district wholesale average
+  minWholesalePrice?: number;
+  maxWholesalePrice?: number;
+  wholesaleDhaka: number; // Dhaka capital wholesale average
+  minWholesaleDhaka?: number;
+  maxWholesaleDhaka?: number;
+  retailPrice: number;    // Local retail average
+  minRetailPrice?: number;
+  maxRetailPrice?: number;
   unit: string;           // 'kg' | 'maund' | 'piece' | 'crate'
   change24h: number;
   trend: 'up' | 'down' | 'stable';

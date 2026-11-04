@@ -215,6 +215,37 @@ export async function initNeonDatabase(): Promise<void> {
       console.warn('[Neon] orders table init warning:', err.message);
     }
 
+    // 8. Official Department of Agricultural Marketing (DAM) market_prices table
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS market_prices (
+          id TEXT PRIMARY KEY,
+          district TEXT NOT NULL,
+          upazila TEXT,
+          market_name TEXT NOT NULL,
+          market_name_bn TEXT NOT NULL,
+          crop_name TEXT NOT NULL,
+          bangla_name TEXT NOT NULL,
+          category TEXT NOT NULL,
+          wholesale_price NUMERIC NOT NULL,
+          wholesale_dhaka NUMERIC NOT NULL,
+          retail_price NUMERIC NOT NULL,
+          min_wholesale NUMERIC,
+          max_wholesale NUMERIC,
+          min_retail NUMERIC,
+          max_retail NUMERIC,
+          unit TEXT DEFAULT 'kg',
+          change_24h NUMERIC DEFAULT 0,
+          trend TEXT DEFAULT 'stable',
+          source TEXT DEFAULT 'Department of Agricultural Marketing (DAM)',
+          last_updated TIMESTAMPTZ DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_market_prices_district ON market_prices(district);
+      `);
+    } catch (err: any) {
+      console.warn('[Neon] market_prices table init warning:', err.message);
+    }
+
     console.log('Neon PostgreSQL tables verified and active for production.');
   } finally {
     client.release();

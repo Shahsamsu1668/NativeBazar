@@ -1608,6 +1608,15 @@ function formatWholesalerOfferRow(r: any) {
 }
 
 function formatMarketPriceRow(r: any) {
+  const wp = parseFloat(r.wholesale_price);
+  const rp = parseFloat(r.retail_price);
+  const wd = parseFloat(r.wholesale_dhaka);
+  const unitStr = r.unit || 'kg';
+  const isMaund = unitStr.includes('maund') || unitStr.includes('মন');
+  const spreadW = isMaund ? Math.max(20, Math.round((wp * 0.08) / 10) * 10) : Math.max(2, Math.round(wp * 0.1));
+  const spreadR = isMaund ? Math.max(20, Math.round((rp * 0.08) / 10) * 10) : Math.max(2, Math.round(rp * 0.1));
+  const spreadD = isMaund ? Math.max(20, Math.round((wd * 0.08) / 10) * 10) : Math.max(2, Math.round(wd * 0.1));
+
   return {
     id: r.id,
     district: r.district,
@@ -1621,13 +1630,19 @@ function formatMarketPriceRow(r: any) {
     banglaName: r.bangla_name,
     bangla_name: r.bangla_name,
     category: r.category,
-    wholesalePrice: parseFloat(r.wholesale_price),
-    wholesale_price: parseFloat(r.wholesale_price),
-    wholesaleDhaka: parseFloat(r.wholesale_dhaka),
-    wholesale_dhaka: parseFloat(r.wholesale_dhaka),
-    retailPrice: parseFloat(r.retail_price),
-    retail_price: parseFloat(r.retail_price),
-    unit: r.unit || 'kg',
+    wholesalePrice: wp,
+    wholesale_price: wp,
+    minWholesalePrice: r.min_wholesale ? parseFloat(r.min_wholesale) : Math.max(1, wp - spreadW),
+    maxWholesalePrice: r.max_wholesale ? parseFloat(r.max_wholesale) : wp + spreadW,
+    wholesaleDhaka: wd,
+    wholesale_dhaka: wd,
+    minWholesaleDhaka: Math.max(1, wd - spreadD),
+    maxWholesaleDhaka: wd + spreadD,
+    retailPrice: rp,
+    retail_price: rp,
+    minRetailPrice: r.min_retail ? parseFloat(r.min_retail) : Math.max(1, rp - spreadR),
+    maxRetailPrice: r.max_retail ? parseFloat(r.max_retail) : rp + spreadR,
+    unit: unitStr,
     change24h: r.change_24h !== null ? parseFloat(r.change_24h) : 0,
     change_24h: r.change_24h !== null ? parseFloat(r.change_24h) : 0,
     trend: r.trend || 'stable',
@@ -1814,18 +1829,51 @@ app.delete('/api/wholesaler-offers/:id', requireAuth, async (req: AuthenticatedR
 app.get(['/api/market-prices', '/api/market-rates'], async (req, res) => {
   try {
     const { district } = req.query as any;
-    let query = 'SELECT * FROM market_prices';
-    const params: any[] = [];
+    let rates: any[] = [];
 
-    if (district && district !== 'All') {
-      query += ' WHERE district = $1';
-      params.push(district);
+    // 1. Try Neon PostgreSQL
+    try {
+      let query = 'SELECT * FROM market_prices';
+      const params: any[] = [];
+      if (district && district !== 'All') {
+        query += ' WHERE LOWER(district) = LOWER($1)';
+        params.push(district);
+      }
+      query += ' ORDER BY crop_name ASC';
+      const result = await pool.query(query, params);
+      if (result.rows && result.rows.length > 0) {
+        rates = result.rows.map(formatMarketPriceRow);
+      }
+    } catch (neonErr: any) {
+      console.warn('[DAM Market Prices] Neon query fallback:', neonErr.message);
     }
-    query += ' ORDER BY crop_name ASC';
 
-    const result = await pool.query(query, params);
-    const rates = result.rows.map(formatMarketPriceRow);
-    return res.json({ rates, source: 'Department of Agricultural Marketing (DAM)' });
+    // 2. Fallback to SQLite if Neon returned empty or encountered an error
+    if (rates.length === 0) {
+      try {
+        let sql = 'SELECT * FROM market_prices';
+        const params: any[] = [];
+        if (district && district !== 'All') {
+          sql += ' WHERE LOWER(district) = LOWER(?)';
+          params.push(district);
+        }
+        sql += ' ORDER BY crop_name ASC';
+        const sqliteRows = db.prepare(sql).all(...params) as any[];
+        if (sqliteRows && sqliteRows.length > 0) {
+          rates = sqliteRows.map(formatMarketPriceRow);
+        }
+      } catch (sqlErr: any) {
+        console.warn('[DAM Market Prices] SQLite query fallback:', sqlErr.message);
+      }
+    }
+
+    return res.json({
+      success: true,
+      rates,
+      total: rates.length,
+      source: 'Department of Agricultural Marketing (DAM)',
+      disclaimer: 'সতর্কবার্তা: এখানে প্রদর্শিত দামগুলো গড় মূল্য। ফসলের মান ও স্থানীয় হাটের ওপর ভিত্তি করে প্রকৃত দামে সামান্য তারতম্য হতে পারে।'
+    });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
