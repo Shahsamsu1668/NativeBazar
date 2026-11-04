@@ -3,7 +3,7 @@
  * Persistent database-backed REST communications with the backend Express / SQLite server.
  */
 
-import { MarketplaceProduct, SupplyChainOrder, WholesalerOffer, User, MarketRate } from '../types';
+import { MarketplaceProduct, SupplyChainOrder, WholesalerOffer, User, MarketRate, OrderLifecycleStatus } from '../types';
 
 const BASE_URL = '';
 
@@ -202,10 +202,10 @@ export const orderApi = {
 
   async updateStatus(
     orderId: string,
-    status: 'Confirmed' | 'Processing' | 'Dispatched' | 'Delivered' | 'Cancelled',
+    status: OrderLifecycleStatus | string,
     actorName = 'User',
     actorRole = 'seller'
-  ): Promise<{ success: boolean; message: string }> {
+  ): Promise<{ success: boolean; message: string; orderId?: string; orderStatus?: string }> {
     return fetchJson(`/api/orders/${orderId}/status`, {
       method: 'PUT',
       body: JSON.stringify({ status, actorName, actorRole }),

@@ -205,6 +205,19 @@ export interface WholesalerOffer {
 }
 
 // ─── STRICT SUPPLY CHAIN ORDER ──────────────────────────────────────────
+export type OrderLifecycleStatus =
+  | 'pending'
+  | 'accepted'
+  | 'rejected'
+  | 'shipped'
+  | 'completed'
+  | 'Confirmed'
+  | 'Processing'
+  | 'Dispatched'
+  | 'Delivered'
+  | 'Cancelled'
+  | 'Pending';
+
 export interface SupplyChainOrder {
   id: string;
   orderType: 'farmer_to_wholesaler' | 'wholesaler_to_retailer' | 'retailer_to_consumer';
@@ -224,12 +237,15 @@ export interface SupplyChainOrder {
     quantityKg: number;
     unitPrice: number;
     subtotal: number;
+    unit?: string;
+    quantityDozen?: number;
   }>;
   totalBDT: number;
-  paymentMethod: 'bKash' | 'Nagad' | 'Cash on Delivery' | 'Escrow Guarantee' | 'Bank Transfer';
-  paymentStatus: 'Pending' | 'Escrow Held' | 'Paid' | 'Refunded';
-  deliveryStatus: 'Confirmed' | 'Processing' | 'Dispatched' | 'Delivered' | 'Cancelled';
-  status?: 'Confirmed' | 'Processing' | 'Dispatched' | 'Delivered' | 'Cancelled' | 'Pending';
+  paymentMethod: 'bKash' | 'Nagad' | 'Cash on Delivery' | 'Escrow Guarantee' | 'Bank Transfer' | string;
+  paymentStatus: 'Pending' | 'Escrow Held' | 'Paid' | 'Refunded' | string;
+  deliveryStatus: string;
+  orderStatus?: OrderLifecycleStatus;
+  status?: OrderLifecycleStatus;
   deliveryAddress: string;
   district: string;
   trackingCode: string;

@@ -7,6 +7,7 @@ import {
   MarketplaceProduct,
   SupplyChainOrder,
   ExpenseLedgerEntry,
+  OrderLifecycleStatus,
 } from '../types';
 import { intelligenceApi, productApi, orderApi } from '../services/api';
 import { apiService } from '../services/apiService';
@@ -17,6 +18,7 @@ import {
   TrendingUp,
   TrendingDown,
   CheckCircle2,
+  XCircle,
   AlertCircle,
   Calendar,
   Sparkles,
@@ -333,6 +335,17 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
     loadFarmerExpenses();
   }, [currentUser.id, selectedDistrict]);
 
+  // Reactive listener for real-time order updates without page reload
+  useEffect(() => {
+    const handleOrderEvent = () => {
+      loadReceivedOrders();
+    };
+    window.addEventListener('nb_order_updated', handleOrderEvent);
+    return () => {
+      window.removeEventListener('nb_order_updated', handleOrderEvent);
+    };
+  }, []);
+
   // Listen for direct AI action to open crop modal
   useEffect(() => {
     const handleOpenAddCrop = () => {
@@ -463,23 +476,34 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
     });
   };
 
-  // Update Order Delivery Status
+  // Update Order Delivery / Lifecycle Status
   const handleUpdateOrderStatus = async (
     orderId: string,
-    status: 'Confirmed' | 'Processing' | 'Dispatched' | 'Delivered'
+    status: OrderLifecycleStatus | string
   ) => {
     try {
       await orderApi.updateStatus(orderId, status, currentUser?.name || 'Farmer', 'farmer');
-      loadReceivedOrders();
+      await loadReceivedOrders();
+      const statusLabel = status === 'accepted' ? (language === 'bn' ? 'গৃহীত (Accepted)' : 'Accepted')
+        : status === 'rejected' ? (language === 'bn' ? 'প্রত্যাখ্যাত (Rejected)' : 'Rejected')
+        : status === 'shipped' ? (language === 'bn' ? 'ডেলিভারি পাঠানো হয়েছে (Shipped)' : 'Shipped')
+        : status;
       NotificationStore.addSystemNotif(
         currentUser?.id || 'usr-farmer',
         t('Order Updated', 'অর্ডারের অবস্থা পরিবর্তিত'),
-        t(`Order #${orderId} marked as ${status}`, `অর্ডার #${orderId} এখন ${status}`),
-        'info'
+        t(`Order status updated to ${statusLabel}`, `অর্ডারের অবস্থা: ${statusLabel}`),
+        status === 'rejected' ? 'warning' : 'success'
       );
-      showToast(t(`Order #${orderId} marked as ${status}`, `অর্ডার #${orderId} এখন ${status}`), 'success');
-    } catch (e: any) {
-      showToast(e.message || 'Failed to update order status', 'error');
+      showToast(
+        status === 'accepted' ? t('Order Accepted!', 'অর্ডার গ্রহণ করা হয়েছে!')
+        : status === 'rejected' ? t('Order Rejected & Stock Restored', 'অর্ডার বাতিল ও স্টক পুনর্বহাল করা হয়েছে')
+        : status === 'shipped' ? t('Order marked as Delivered / Shipped!', 'পণ্য ডেলিভারি হিসেবে মার্ক করা হয়েছে!')
+        : t(`Order status updated to ${statusLabel}`, `অর্ডারের অবস্থা: ${statusLabel}`),
+        status === 'rejected' ? 'error' : 'success'
+      );
+    } catch (err: any) {
+      console.error('Failed to update order status', err);
+      showToast(err.message || 'Failed to update order status', 'error');
     }
   };
 
@@ -798,62 +822,117 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
           )}
 
           <div className="space-y-3">
-            {receivedOrders.map((order) => (
-              <div
-                key={order.id}
-                className="p-4 bg-stone-50 rounded-2xl border border-stone-200 flex flex-col md:flex-row md:items-center justify-between gap-4 text-xs"
-              >
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono font-bold text-stone-900 text-sm">{order.id}</span>
-                    <span
-                      className={`badge text-[10px] ${
-                        (order.status || order.deliveryStatus) === 'Delivered'
-                          ? 'badge-success'
-                          : (order.status || order.deliveryStatus) === 'Dispatched'
-                          ? 'badge-purple'
-                          : 'badge-warning'
-                      }`}
-                    >
-                      {order.status || order.deliveryStatus}
-                    </span>
-                  </div>
-                  <div className="text-stone-700 font-semibold">
-                    Wholesaler: <strong className="text-stone-900">{order.buyerName}</strong> (
-                    {order.buyerPhone})
-                  </div>
-                  <div className="text-[11px] text-stone-500">
-                    Delivery Hub: {order.deliveryAddress} • Payment: {order.paymentMethod}
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <div className="text-right">
-                    <span className="text-stone-500 text-[11px] block">Order Total</span>
-                    <span className="font-black text-emerald-700 text-base">৳{order.totalBDT}</span>
-                  </div>
-
-                  <div className="flex items-center gap-1.5">
-                    {((order.status || order.deliveryStatus) === 'Confirmed') && (
-                      <button
-                        onClick={() => handleUpdateOrderStatus(order.id, 'Dispatched')}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-xl text-xs"
+            {receivedOrders.map((order) => {
+              const currentStatus = (order.orderStatus || order.status || order.deliveryStatus || 'pending').toLowerCase();
+              return (
+                <div
+                  key={order.id}
+                  className="p-4 bg-stone-50 rounded-2xl border border-stone-200 flex flex-col md:flex-row md:items-center justify-between gap-4 text-xs"
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-bold text-stone-900 text-sm">#{order.id}</span>
+                      <span
+                        className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
+                          currentStatus === 'completed' || currentStatus === 'delivered'
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                            : currentStatus === 'shipped' || currentStatus === 'dispatched'
+                            ? 'bg-purple-100 text-purple-800 border border-purple-300'
+                            : currentStatus === 'accepted'
+                            ? 'bg-blue-100 text-blue-800 border border-blue-300'
+                            : currentStatus === 'rejected' || currentStatus === 'cancelled'
+                            ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                            : 'bg-amber-100 text-amber-800 border border-amber-300'
+                        }`}
                       >
-                        {t('Mark Dispatched', 'মাল পাঠান')}
-                      </button>
-                    )}
-                    {((order.status || order.deliveryStatus) === 'Dispatched') && (
-                      <button
-                        onClick={() => handleUpdateOrderStatus(order.id, 'Delivered')}
-                        className="bg-stone-900 hover:bg-stone-800 text-white font-bold px-3 py-1.5 rounded-xl text-xs"
-                      >
-                        {t('Mark Delivered', 'ডেলিভারি সম্পন্ন')}
-                      </button>
+                        {currentStatus === 'completed' || currentStatus === 'delivered'
+                          ? t('Completed / Delivered', 'ডেলিভারি সম্পন্ন হয়েছে')
+                          : currentStatus === 'shipped' || currentStatus === 'dispatched'
+                          ? t('Shipped (Pending Confirmation)', 'ডেলিভারি করা হয়েছে (অপেক্ষমান)')
+                          : currentStatus === 'accepted'
+                          ? t('Accepted (Ready to Deliver)', 'গৃহীত (ডেলিভারি করতে প্রস্তুত)')
+                          : currentStatus === 'rejected' || currentStatus === 'cancelled'
+                          ? t('Rejected / Cancelled', 'প্রত্যাখ্যাত / বাতিল')
+                          : t('Pending Approval', 'অনুমোদনের অপেক্ষায়')}
+                      </span>
+                    </div>
+                    <div className="text-stone-700 font-semibold">
+                      {t('Wholesaler', 'পাইকার')}: <strong className="text-stone-900">{order.buyerName}</strong> ({order.buyerPhone})
+                    </div>
+                    <div className="text-[11px] text-stone-500">
+                      {t('Delivery Destination', 'ডেলিভারি ঠিকানা')}: {order.deliveryAddress} • {t('Payment', 'পেমেন্ট')}: {order.paymentMethod}
+                    </div>
+                    {order.items && order.items.length > 0 && (
+                      <div className="text-[11px] text-stone-600 font-medium">
+                        {t('Items', 'পণ্য')}: {order.items.map(it => `${language === 'bn' ? it.banglaName || it.cropName : it.cropName} (${it.quantityKg} কেজি)`).join(', ')}
+                      </div>
                     )}
                   </div>
+
+                  <div className="flex items-center gap-3">
+                    <div className="text-right">
+                      <span className="text-stone-500 text-[11px] block">{t('Order Total', 'মোট মূল্য')}</span>
+                      <span className="font-black text-emerald-700 text-base">৳{order.totalBDT}</span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {/* Pending state: Accept / Reject buttons */}
+                      {currentStatus === 'pending' && (
+                        <>
+                          <button
+                            onClick={() => handleUpdateOrderStatus(order.id, 'accepted')}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1 shadow-xs cursor-pointer"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>{t('Accept', 'এক্সেপ্ট')}</span>
+                          </button>
+                          <button
+                            onClick={() => handleUpdateOrderStatus(order.id, 'rejected')}
+                            className="bg-rose-600 hover:bg-rose-700 text-white font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1 shadow-xs cursor-pointer"
+                          >
+                            <XCircle className="w-3.5 h-3.5" />
+                            <span>{t('Reject', 'রিজেক্ট')}</span>
+                          </button>
+                        </>
+                      )}
+
+                      {/* Accepted state: Mark as Delivered button */}
+                      {currentStatus === 'accepted' && (
+                        <button
+                          onClick={() => handleUpdateOrderStatus(order.id, 'shipped')}
+                          className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1 shadow-xs cursor-pointer"
+                        >
+                          <Truck className="w-3.5 h-3.5" />
+                          <span>{t('Mark as Delivered', 'ডেলিভারি করা হয়েছে')}</span>
+                        </button>
+                      )}
+
+                      {/* Shipped state: waiting for wholesaler confirmation */}
+                      {(currentStatus === 'shipped' || currentStatus === 'dispatched') && (
+                        <span className="text-xs text-purple-700 font-medium bg-purple-50 px-2.5 py-1 rounded-lg border border-purple-200">
+                          {t('Waiting for wholesaler confirmation', 'পাইকারের স্বীকৃতির অপেক্ষায়')}
+                        </span>
+                      )}
+
+                      {/* Completed state */}
+                      {(currentStatus === 'completed' || currentStatus === 'delivered') && (
+                        <span className="text-xs text-emerald-700 font-bold bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 flex items-center gap-1">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>{t('Completed', 'ডেলিভারি সম্পন্ন হয়েছে')}</span>
+                        </span>
+                      )}
+
+                      {/* Rejected state */}
+                      {(currentStatus === 'rejected' || currentStatus === 'cancelled') && (
+                        <span className="text-xs text-rose-700 font-semibold bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-200">
+                          {t('Order Rejected / Cancelled', 'অর্ডার বাতিল')}
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

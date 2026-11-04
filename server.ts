@@ -1295,9 +1295,28 @@ app.post('/api/orders', requireAuth, async (req: AuthenticatedRequest, res) => {
       notes,
     }, pool);
 
+    // Real-time notification & SSE to Farmer (order receiver)
+    if (result.sellerId) {
+      try {
+        await createNeonNotification(
+          result.sellerId,
+          `নতুন ক্রয়াদেশ / New Order Request`,
+          `${effectiveBuyerName} (${effectiveBuyerRole === 'wholesaler' ? 'পাইকার' : effectiveBuyerRole}) আপনার ফসলের জন্য ৳${result.totalBdt} টাকার নতুন অর্ডার দিয়েছেন। এক্সেপ্ট করতে ক্লিক করুন।`,
+          'order',
+          `/orders`
+        );
+      } catch (notifErr) {
+        console.warn('[Orders] Realtime notification warning:', notifErr);
+      }
+      sendSSE(result.sellerId, 'order_created', { orderId: result.orderId, order: result });
+    }
+    if (effectiveBuyerId) {
+      sendSSE(effectiveBuyerId, 'order_created', { orderId: result.orderId, order: result });
+    }
+
     return res.status(201).json({
       success: true,
-      message: 'Order confirmed successfully via Neon PostgreSQL!',
+      message: 'Order placed successfully! Awaiting farmer acceptance.',
       order: result,
     });
   } catch (err: any) {
@@ -1377,31 +1396,35 @@ app.get('/api/orders', requireAuth, async (req: AuthenticatedRequest, res) => {
       });
     }
 
-    const fullOrders = orderRows.map((o) => ({
-      id: o.id,
-      orderType: o.order_type,
-      buyerId: o.buyer_id,
-      buyerName: o.buyer_name,
-      buyerPhone: o.buyer_phone,
-      buyerEmail: o.buyer_email,
-      buyerRole: o.buyer_role,
-      sellerId: o.seller_id,
-      sellerName: o.seller_name,
-      sellerPhone: o.seller_phone,
-      sellerRole: o.seller_role,
-      totalBDT: parseFloat(o.total_bdt),
-      paymentMethod: o.payment_method,
-      paymentStatus: o.payment_status,
-      deliveryStatus: o.delivery_status,
-      status: o.delivery_status,
-      deliveryAddress: o.delivery_address,
-      district: o.district,
-      trackingCode: o.tracking_code,
-      notes: o.notes,
-      createdAt: o.created_at,
-      updatedAt: o.updated_at,
-      items: itemsByOrderId.get(o.id) || [],
-    }));
+    const fullOrders = orderRows.map((o) => {
+      const canonicalStatus = (o.order_status || o.delivery_status || 'pending').toLowerCase();
+      return {
+        id: o.id,
+        orderType: o.order_type,
+        buyerId: o.buyer_id,
+        buyerName: o.buyer_name,
+        buyerPhone: o.buyer_phone,
+        buyerEmail: o.buyer_email,
+        buyerRole: o.buyer_role,
+        sellerId: o.seller_id,
+        sellerName: o.seller_name,
+        sellerPhone: o.seller_phone,
+        sellerRole: o.seller_role,
+        totalBDT: parseFloat(o.total_bdt),
+        paymentMethod: o.payment_method,
+        paymentStatus: o.payment_status,
+        deliveryStatus: canonicalStatus,
+        orderStatus: canonicalStatus,
+        status: canonicalStatus,
+        deliveryAddress: o.delivery_address,
+        district: o.district,
+        trackingCode: o.tracking_code,
+        notes: o.notes,
+        createdAt: o.created_at,
+        updatedAt: o.updated_at,
+        items: itemsByOrderId.get(o.id) || [],
+      };
+    });
 
     return res.json({ success: true, orders: fullOrders, total: fullOrders.length });
   } catch (err: any) {
@@ -1410,7 +1433,8 @@ app.get('/api/orders', requireAuth, async (req: AuthenticatedRequest, res) => {
   }
 });
 
-// Update order status in Neon (or cancel with stock restoration)
+// Update order lifecycle status in Neon PostgreSQL
+// Valid states: pending, accepted, rejected, shipped, completed
 app.put('/api/orders/:id/status', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
     const { id } = req.params;
@@ -1429,7 +1453,17 @@ app.put('/api/orders/:id/status', requireAuth, async (req: AuthenticatedRequest,
       return res.status(403).json({ error: 'Forbidden: You are not authorized to update this order.' });
     }
 
-    if (status === 'Cancelled') {
+    // Normalize lifecycle status
+    const raw = String(status || '').trim().toLowerCase();
+    let targetStatus = 'pending';
+    if (raw === 'accepted') targetStatus = 'accepted';
+    else if (raw === 'rejected' || raw === 'cancelled') targetStatus = 'rejected';
+    else if (raw === 'shipped' || raw === 'dispatched' || raw === 'pending_delivery') targetStatus = 'shipped';
+    else if (raw === 'completed' || raw === 'delivered' || raw === 'received') targetStatus = 'completed';
+    else targetStatus = raw;
+
+    // Handle inventory restoration if order is rejected/cancelled
+    if (targetStatus === 'rejected') {
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
@@ -1441,33 +1475,99 @@ app.put('/api/orders/:id/status', requireAuth, async (req: AuthenticatedRequest,
           );
         }
         await client.query(
-          "UPDATE orders SET delivery_status = 'Cancelled', updated_at = NOW() WHERE id = $1",
+          "UPDATE orders SET delivery_status = 'rejected', order_status = 'rejected', updated_at = NOW() WHERE id = $1",
           [id]
         );
         await client.query(`
           INSERT INTO trade_audit_logs (id, order_id, type, amount, actor_role, actor_name, description, created_at)
-          VALUES ($1, $2, 'ORDER_CANCELLED', $3, $4, $5, $6, NOW())
+          VALUES ($1, $2, 'ORDER_REJECTED', $3, $4, $5, $6, NOW())
         `, [
-          `aud-cancel-${Date.now()}`, id, order.total_bdt, authUser.role, authUser.name,
-          `Order ${id} cancelled by ${authUser.name} (${authUser.role}). Stock restored.`
+          `aud-rej-${Date.now()}`, id, order.total_bdt, authUser.role, authUser.name,
+          `Order ${id} rejected by ${authUser.name} (${authUser.role}). Stock restored.`
         ]);
         await client.query('COMMIT');
-        return res.json({ success: true, message: `Order ${id} cancelled and inventory restored.` });
-      } catch (cancelErr: any) {
+      } catch (err: any) {
         await client.query('ROLLBACK');
-        throw cancelErr;
+        throw err;
       } finally {
         client.release();
       }
+    } else {
+      await pool.query(
+        'UPDATE orders SET delivery_status = $1, order_status = $1, updated_at = NOW() WHERE id = $2',
+        [targetStatus, id]
+      );
     }
 
-    await pool.query(
-      'UPDATE orders SET delivery_status = $1, updated_at = NOW() WHERE id = $2',
-      [status, id]
-    );
+    // ─── Real-Time Notifications for Lifecycle Events ──────────────────────────
+    try {
+      if (targetStatus === 'accepted') {
+        // Farmer accepted -> notify Wholesaler (Buyer)
+        await createNeonNotification(
+          order.buyer_id,
+          `অর্ডার অনুমোদিত / Order Accepted`,
+          `কৃষক ${order.seller_name} আপনার #${id} অর্ডারটি গ্রহণ করেছেন। মাল প্রস্তুত করা হচ্ছে।`,
+          'order',
+          `/orders`
+        );
+      } else if (targetStatus === 'rejected') {
+        // Farmer rejected -> notify Wholesaler (Buyer)
+        await createNeonNotification(
+          order.buyer_id,
+          `অর্ডার প্রত্যাখ্যাত / Order Rejected`,
+          `কৃষক ${order.seller_name} আপনার #${id} অর্ডারটি গ্রহণ করেননি (প্রত্যাখ্যাত)। স্টক মুক্ত করা হয়েছে।`,
+          'warning',
+          `/orders`
+        );
+      } else if (targetStatus === 'shipped') {
+        // Farmer marked as delivered -> notify Wholesaler (Buyer)
+        await createNeonNotification(
+          order.buyer_id,
+          `ডেলিভারি পাঠানো হয়েছে / Order Shipped`,
+          `কৃষক ${order.seller_name} #${id} অর্ডারের পণ্য ডেলিভারির জন্য পাঠিয়েছেন। পৌঁছালে 'ডেলিভারি গ্রহণ করেছি' ক্লিক করুন।`,
+          'order',
+          `/orders`
+        );
+      } else if (targetStatus === 'completed') {
+        // Wholesaler marked as received -> notify Farmer (Seller)
+        await createNeonNotification(
+          order.seller_id,
+          `ডেলিভারি সম্পন্ন / Order Received & Completed`,
+          `পাইকার ${order.buyer_name} #${id} অর্ডারের পণ্য গ্রহণ করেছেন। লেনদেন সফলভাবে সম্পন্ন হয়েছে।`,
+          'success',
+          `/orders`
+        );
+      }
+    } catch (notifErr) {
+      console.warn('[Orders] Realtime notification warning:', notifErr);
+    }
 
-    return res.json({ success: true, message: `Order status updated to ${status}.` });
+    // Real-time dispatch via SSE to both Buyer and Seller
+    sendSSE(order.buyer_id, 'order_updated', {
+      orderId: id,
+      orderStatus: targetStatus,
+      status: targetStatus,
+      deliveryStatus: targetStatus,
+      updatedBy: authUser.name,
+      updatedRole: authUser.role,
+    });
+    sendSSE(order.seller_id, 'order_updated', {
+      orderId: id,
+      orderStatus: targetStatus,
+      status: targetStatus,
+      deliveryStatus: targetStatus,
+      updatedBy: authUser.name,
+      updatedRole: authUser.role,
+    });
+
+    return res.json({
+      success: true,
+      message: `Order status successfully updated to ${targetStatus}.`,
+      orderId: id,
+      orderStatus: targetStatus,
+    });
   } catch (err: any) {
+    console.error('[Orders] Error in PUT /api/orders/:id/status:', err);
     return res.status(500).json({ error: err.message });
   }
 });

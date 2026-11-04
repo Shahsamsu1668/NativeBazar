@@ -82,7 +82,8 @@ export function initDatabase() {
       total_bdt REAL NOT NULL,
       payment_method TEXT NOT NULL,
       payment_status TEXT DEFAULT 'Pending',
-      delivery_status TEXT DEFAULT 'Confirmed',
+      delivery_status TEXT DEFAULT 'pending',
+      order_status TEXT DEFAULT 'pending',
       delivery_address TEXT NOT NULL,
       district TEXT NOT NULL,
       tracking_code TEXT NOT NULL,
@@ -90,6 +91,9 @@ export function initDatabase() {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+    try {
+      db.prepare("ALTER TABLE orders ADD COLUMN order_status TEXT DEFAULT 'pending'").run();
+    } catch {}
 
     CREATE TABLE IF NOT EXISTS order_items (
       id TEXT PRIMARY KEY,

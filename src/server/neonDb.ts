@@ -179,6 +179,42 @@ export async function initNeonDatabase(): Promise<void> {
       console.warn('[Neon] connections table init warning:', err.message);
     }
 
+    // 7. Orders & Order Items tables in Neon PostgreSQL with order_status column
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS orders (
+          id TEXT PRIMARY KEY,
+          order_type TEXT NOT NULL,
+          buyer_id TEXT,
+          buyer_name TEXT NOT NULL,
+          buyer_phone TEXT NOT NULL,
+          buyer_email TEXT,
+          buyer_role TEXT NOT NULL,
+          seller_id TEXT NOT NULL,
+          seller_name TEXT NOT NULL,
+          seller_phone TEXT,
+          seller_role TEXT NOT NULL,
+          total_bdt NUMERIC NOT NULL,
+          payment_method TEXT NOT NULL,
+          payment_status TEXT DEFAULT 'Pending',
+          delivery_status TEXT DEFAULT 'pending',
+          order_status TEXT DEFAULT 'pending',
+          delivery_address TEXT NOT NULL,
+          district TEXT NOT NULL,
+          tracking_code TEXT NOT NULL,
+          notes TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_status TEXT DEFAULT 'pending';
+        CREATE INDEX IF NOT EXISTS idx_orders_buyer ON orders(buyer_id);
+        CREATE INDEX IF NOT EXISTS idx_orders_seller ON orders(seller_id);
+        CREATE INDEX IF NOT EXISTS idx_orders_order_status ON orders(order_status);
+      `);
+    } catch (err: any) {
+      console.warn('[Neon] orders table init warning:', err.message);
+    }
+
     console.log('Neon PostgreSQL tables verified and active for production.');
   } finally {
     client.release();
@@ -414,11 +450,11 @@ export async function executeNeonOrderTransaction(params: NeonOrderParams, clien
       INSERT INTO orders (
         id, order_type, buyer_id, buyer_name, buyer_phone, buyer_email, buyer_role,
         seller_id, seller_name, seller_phone, seller_role, total_bdt, payment_method,
-        payment_status, delivery_status, delivery_address, district, tracking_code, notes,
+        payment_status, delivery_status, order_status, delivery_address, district, tracking_code, notes,
         created_at, updated_at
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
-        $14, 'Confirmed', $15, $16, $17, $18, NOW(), NOW()
+        $14, 'pending', 'pending', $15, $16, $17, $18, NOW(), NOW()
       )
     `, [
       orderId, orderType, params.buyerId || null, params.buyerName, params.buyerPhone,
@@ -453,8 +489,15 @@ export async function executeNeonOrderTransaction(params: NeonOrderParams, clien
     return {
       success: true,
       orderId,
+      id: orderId,
+      orderStatus: 'pending',
+      status: 'pending',
+      deliveryStatus: 'pending',
       trackingCode,
       totalBdt: grandTotal,
+      totalBDT: grandTotal,
+      buyerId: params.buyerId,
+      buyerName: params.buyerName,
       sellerId: verifiedSellerId,
       sellerName: verifiedSellerName,
       itemsCount: orderItemsToInsert.length,

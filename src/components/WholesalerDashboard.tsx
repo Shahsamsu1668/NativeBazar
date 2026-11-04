@@ -5,6 +5,7 @@ import {
   MarketplaceProduct,
   SupplyChainOrder,
   WholesalerOffer,
+  OrderLifecycleStatus,
 } from '../types';
 import { productApi, orderApi, intelligenceApi } from '../services/api';
 import { NotificationStore } from '../data/store';
@@ -35,7 +36,7 @@ interface WholesalerDashboardProps {
   language: Language;
 }
 
-type WholesalerTabId = 'procure_crops' | 'my_inventory' | 'retailer_orders' | 'post_tender';
+type WholesalerTabId = 'procure_crops' | 'farmer_orders' | 'my_inventory' | 'retailer_orders' | 'post_tender';
 
 export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
   currentUser,
@@ -75,9 +76,13 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
     description: 'Bulk wholesale lot procured directly from verified Bogura farm gates.',
   });
 
-  // Tab 3: Orders received from Retailers
+  // Tab: Orders received from Retailers
   const [retailerOrders, setRetailerOrders] = useState<SupplyChainOrder[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
+
+  // Tab: Purchases / Orders placed to Farmers
+  const [farmerOrders, setFarmerOrders] = useState<SupplyChainOrder[]>([]);
+  const [farmerOrdersLoading, setFarmerOrdersLoading] = useState(false);
 
   const [tenderForm, setTenderForm] = useState({
     cropName: 'Hybrid Tomatoes',
@@ -160,11 +165,40 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
     }
   };
 
+  // Load Purchases placed to Farmers
+  const loadFarmerOrders = async () => {
+    setFarmerOrdersLoading(true);
+    try {
+      const res = await orderApi.getOrders({
+        buyerId: currentUser.id,
+        role: 'wholesaler',
+      });
+      setFarmerOrders(res.orders || []);
+    } catch (e) {
+      console.error('Failed to load farmer orders', e);
+    } finally {
+      setFarmerOrdersLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadFarmerCrops();
     loadMyListings();
     loadRetailerOrders();
+    loadFarmerOrders();
   }, [currentUser.id, selectedDistrict]);
+
+  // Reactive listener for real-time order updates without page reload
+  useEffect(() => {
+    const handleOrderEvent = () => {
+      loadFarmerOrders();
+      loadRetailerOrders();
+    };
+    window.addEventListener('nb_order_updated', handleOrderEvent);
+    return () => {
+      window.removeEventListener('nb_order_updated', handleOrderEvent);
+    };
+  }, []);
 
   // Execute Wholesale Purchase from Farmer (Farmer -> Wholesaler)
   const handleExecuteFarmerPurchase = async (e: React.FormEvent) => {
@@ -318,12 +352,31 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
   // Update Retailer Order Status
   const handleUpdateRetailerOrderStatus = async (
     orderId: string,
-    status: 'Confirmed' | 'Processing' | 'Dispatched' | 'Delivered'
+    status: 'Confirmed' | 'Processing' | 'Dispatched' | 'Delivered' | string
   ) => {
     try {
       await orderApi.updateStatus(orderId, status, currentUser?.name || 'Wholesaler', 'wholesaler');
       showToast(t(`Order status updated to ${status}!`, `অর্ডার স্ট্যাটাস ${status}-এ পরিবর্তিত হয়েছে!`), 'success');
       loadRetailerOrders();
+    } catch (e: any) {
+      showToast(e.message || 'Failed to update order status', 'error');
+    }
+  };
+
+  // Update Farmer Order Status (e.g. mark as received/completed)
+  const handleUpdateFarmerOrderStatus = async (
+    orderId: string,
+    status: OrderLifecycleStatus | string
+  ) => {
+    try {
+      await orderApi.updateStatus(orderId, status, currentUser?.businessName || currentUser?.name || 'Wholesaler', 'wholesaler');
+      showToast(
+        status === 'completed'
+          ? t('Delivery confirmed and marked as received!', 'ডেলিভারি গ্রহণ সফলভাবে সম্পন্ন হয়েছে!')
+          : t(`Order status updated to ${status}!`, `অর্ডারের স্থিতি ${status} করা হয়েছে!`),
+        'success'
+      );
+      loadFarmerOrders();
     } catch (e: any) {
       showToast(e.message || 'Failed to update order status', 'error');
     }
@@ -442,6 +495,23 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
           <span className="bg-stone-900 text-white text-[10px] px-1.5 py-0.2 rounded-full">
             {farmerCrops.length}
           </span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('farmer_orders')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all ${
+            activeTab === 'farmer_orders'
+              ? 'bg-amber-600 text-white shadow-sm'
+              : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'
+          }`}
+        >
+          <ShoppingBag className="w-4 h-4" />
+          <span>{t('Farmer Purchases & Deliveries', 'কৃষকদের কাছে ক্রয়াদেশ ও ডেলিভারি')}</span>
+          {farmerOrders.length > 0 && (
+            <span className="bg-amber-700 text-white text-[10px] px-1.5 py-0.2 rounded-full">
+              {farmerOrders.length}
+            </span>
+          )}
         </button>
 
         <button
@@ -712,6 +782,155 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* ─── TAB: FARMER ORDERS & DELIVERIES (Wholesaler as Buyer) ─── */}
+      {activeTab === 'farmer_orders' && (
+        <div className="bg-white rounded-3xl border border-stone-200 p-5 sm:p-6 shadow-xs space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-stone-100">
+            <div>
+              <h3 className="font-extrabold text-stone-900 text-base">
+                {t('Crops Purchased from Farmers', 'কৃষকদের কাছ থেকে ক্রয়কৃত ফসলাদি')}
+              </h3>
+              <p className="text-xs text-stone-500">
+                {t(
+                  'Track order acceptance and click "Mark as Received" once farmer delivers the goods.',
+                  'কৃষকের অর্ডার গ্রহণ পর্যবেক্ষণ করুন এবং পণ্য পৌঁছালে "ডেলিভারি গ্রহণ করেছি" ক্লিক করুন।'
+                )}
+              </p>
+            </div>
+            <button
+              onClick={loadFarmerOrders}
+              className="p-2 text-stone-500 hover:text-stone-800 hover:bg-stone-100 rounded-xl transition"
+              title="Refresh"
+            >
+              <RefreshCw className={`w-4 h-4 ${farmerOrdersLoading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+
+          {farmerOrdersLoading && (
+            <div className="text-center py-10">
+              <RefreshCw className="w-6 h-6 mx-auto text-amber-600 animate-spin" />
+            </div>
+          )}
+
+          {!farmerOrdersLoading && farmerOrders.length === 0 && (
+            <div className="text-center py-12 text-stone-400 space-y-2">
+              <ShoppingBag className="w-10 h-10 mx-auto text-stone-300" />
+              <p className="text-xs font-semibold text-stone-600">
+                {t('No farmer purchase orders found', 'কৃষকদের কাছে কোনো ক্রয়াদেশ পাওয়া যায়নি')}
+              </p>
+              <p className="text-[11px] text-stone-400">
+                {t('Buy crops directly from farmers via the Procure Crops tab.', 'ফসল সংগ্রহ ট্যাব থেকে সরাসরি কৃষকদের পণ্য ক্রয় করুন।')}
+              </p>
+            </div>
+          )}
+
+          <div className="space-y-3">
+            {farmerOrders.map((order) => {
+              const currentStatus = (order.orderStatus || order.status || order.deliveryStatus || 'pending').toLowerCase();
+              return (
+                <div
+                  key={order.id}
+                  className="p-4 bg-stone-50 rounded-2xl border border-stone-200 flex flex-col md:flex-row md:items-center justify-between gap-4 text-xs"
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-bold text-stone-900 text-sm">#{order.id}</span>
+                      <span
+                        className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
+                          currentStatus === 'completed' || currentStatus === 'delivered'
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                            : currentStatus === 'shipped' || currentStatus === 'dispatched'
+                            ? 'bg-purple-100 text-purple-800 border border-purple-300'
+                            : currentStatus === 'accepted'
+                            ? 'bg-blue-100 text-blue-800 border border-blue-300'
+                            : currentStatus === 'rejected' || currentStatus === 'cancelled'
+                            ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                            : 'bg-amber-100 text-amber-800 border border-amber-300'
+                        }`}
+                      >
+                        {currentStatus === 'completed' || currentStatus === 'delivered'
+                          ? t('Completed / Delivered', 'ডেলিভারি সম্পন্ন হয়েছে')
+                          : currentStatus === 'shipped' || currentStatus === 'dispatched'
+                          ? t('Shipped (Action Required)', 'ডেলিভারি করা হয়েছে')
+                          : currentStatus === 'accepted'
+                          ? t('Accepted by Farmer', 'গৃহীত (কৃষক প্রস্তুত করছেন)')
+                          : currentStatus === 'rejected' || currentStatus === 'cancelled'
+                          ? t('Rejected / Cancelled', 'প্রত্যাখ্যাত / বাতিল')
+                          : t('Awaiting Farmer Acceptance', 'কৃষকের সম্মতির অপেক্ষায়')}
+                      </span>
+                    </div>
+
+                    <div className="text-stone-700 font-semibold">
+                      {t('Farmer / Seller', 'কৃষক / বিক্রেতা')}: <strong className="text-stone-900">{order.sellerName}</strong>{' '}
+                      {order.sellerPhone && `(${order.sellerPhone})`}
+                    </div>
+
+                    <div className="text-[11px] text-stone-500">
+                      {t('Delivery Destination', 'গন্তব্য')}: {order.deliveryAddress} • {t('Payment', 'পেমেন্ট')}: {order.paymentMethod}
+                    </div>
+
+                    {order.items && order.items.length > 0 && (
+                      <div className="text-[11px] text-stone-600 font-medium">
+                        {t('Items', 'পণ্য')}: {order.items.map(it => `${language === 'bn' ? it.banglaName || it.cropName : it.cropName} (${it.quantityKg} কেজি)`).join(', ')}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <div className="text-right">
+                      <span className="text-stone-500 text-[11px] block">{t('Total Amount', 'মোট মূল্য')}</span>
+                      <span className="font-black text-emerald-700 text-base">৳{order.totalBDT}</span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {/* Pending: Show status only, no action buttons */}
+                      {currentStatus === 'pending' && (
+                        <span className="text-xs text-amber-700 font-semibold bg-amber-50 px-3 py-1.5 rounded-xl border border-amber-200">
+                          ⏳ {t('Pending Farmer Acceptance', 'কৃষক অনুমোদনের অপেক্ষায়')}
+                        </span>
+                      )}
+
+                      {/* Accepted: Show status only, no action buttons */}
+                      {currentStatus === 'accepted' && (
+                        <span className="text-xs text-blue-700 font-semibold bg-blue-50 px-3 py-1.5 rounded-xl border border-blue-200">
+                          📦 {t('Accepted - Farmer Preparing Goods', 'গৃহীত - কৃষক পণ্য প্রস্তুত করছেন')}
+                        </span>
+                      )}
+
+                      {/* Shipped: Wholesaler clicks 'Mark as Received' */}
+                      {(currentStatus === 'shipped' || currentStatus === 'dispatched') && (
+                        <button
+                          onClick={() => handleUpdateFarmerOrderStatus(order.id, 'completed')}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 shadow-sm cursor-pointer"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>{t('Mark as Received', 'ডেলিভারি গ্রহণ করেছি')}</span>
+                        </button>
+                      )}
+
+                      {/* Completed */}
+                      {(currentStatus === 'completed' || currentStatus === 'delivered') && (
+                        <span className="text-xs text-emerald-700 font-bold bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 flex items-center gap-1">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>{t('Completed', 'ডেলিভারি সম্পন্ন হয়েছে')}</span>
+                        </span>
+                      )}
+
+                      {/* Rejected */}
+                      {(currentStatus === 'rejected' || currentStatus === 'cancelled') && (
+                        <span className="text-xs text-rose-700 font-semibold bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-200">
+                          ❌ {t('Order Rejected', 'অর্ডার বাতিল')}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

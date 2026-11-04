@@ -215,6 +215,30 @@ export default function App() {
           }
         } catch {}
       });
+
+      // Order created / updated real-time events
+      es.addEventListener('order_created', (e: MessageEvent) => {
+        try {
+          const data = JSON.parse(e.data);
+          window.dispatchEvent(new CustomEvent('nb_order_updated', { detail: data }));
+          setToastMessage(language === 'bn' ? '🔔 নতুন অর্ডার পাওয়া গেছে!' : '🔔 New order received!');
+          setTimeout(() => setToastMessage(null), 4000);
+        } catch {}
+      });
+
+      es.addEventListener('order_updated', (e: MessageEvent) => {
+        try {
+          const data = JSON.parse(e.data);
+          window.dispatchEvent(new CustomEvent('nb_order_updated', { detail: data }));
+          const statusText = data.orderStatus === 'accepted' ? (language === 'bn' ? 'অর্ডার গ্রহণ করা হয়েছে' : 'Order accepted')
+            : data.orderStatus === 'shipped' ? (language === 'bn' ? 'পণ্য ডেলিভারি পাঠানো হয়েছে' : 'Order dispatched / shipped')
+            : data.orderStatus === 'completed' ? (language === 'bn' ? 'অর্ডার ডেলিভারি সম্পন্ন হয়েছে' : 'Order delivered and completed')
+            : data.orderStatus === 'rejected' ? (language === 'bn' ? 'অর্ডার বাতিল বা প্রত্যাখ্যাত হয়েছে' : 'Order rejected')
+            : (data.orderStatus || 'updated');
+          setToastMessage(language === 'bn' ? `🔔 অর্ডারের স্থিতি আপডেট: ${statusText}` : `🔔 Order update: ${statusText}`);
+          setTimeout(() => setToastMessage(null), 4000);
+        } catch {}
+      });
       es.addEventListener('call_signal', (e: MessageEvent) => {
         try {
           const data = JSON.parse(e.data);
