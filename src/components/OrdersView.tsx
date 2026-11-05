@@ -37,6 +37,7 @@ type OrderTabId = 'wholesaler_to_retailer' | 'retailer_to_consumer' | 'farmer_to
 export const OrdersView: React.FC<OrdersViewProps> = ({ currentUser, language }) => {
   const isRetailer = currentUser?.role === 'retailer';
   const isConsumer = currentUser?.role === 'consumer';
+  const isWholesaler = currentUser?.role === 'wholesaler';
   const isAdmin = currentUser?.role === 'admin';
 
   // Set default tab based on user role
@@ -161,11 +162,29 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ currentUser, language })
       return false;
     }
 
-    // 3. OTHER ROLES (Farmer, Wholesaler, Admin):
+    // 3. WHOLESALER ROLE: Purchases from Farmers & Sales to Retailers
+    if (isWholesaler) {
+      if (activeTab === 'wholesaler_to_retailer') {
+        return (
+          (sRole === 'wholesaler' && bRole === 'retailer') ||
+          ot === 'wholesaler_to_retailer' ||
+          o.sellerId === currentUser?.id
+        );
+      }
+      return (
+        ot === 'farmer_to_wholesaler' ||
+        ot === '1st_tier' ||
+        (sRole === 'farmer' && bRole === 'wholesaler') ||
+        o.buyerId === currentUser?.id
+      );
+    }
+
+    // 4. FARMER ROLE: Direct trades with Wholesalers
     return (
       ot === 'farmer_to_wholesaler' ||
       ot === '1st_tier' ||
-      (sRole === 'farmer' && bRole === 'wholesaler')
+      (sRole === 'farmer' && bRole === 'wholesaler') ||
+      o.sellerId === currentUser?.id
     );
   };
 
@@ -181,6 +200,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ currentUser, language })
           `অর্ডার ${language === 'bn' ? toBanglaNumber(orderId) : orderId} স্ট্যাটাস ${status} এ পরিবর্তিত হয়েছে।`
         )
       );
+      window.dispatchEvent(new CustomEvent('nb_order_updated', { detail: { orderId, status } }));
       loadOrders();
     } catch (e: any) {
       showToast(e.message || t('Status update failed', 'স্ট্যাটাস আপডেট ব্যর্থ হয়েছে'));
@@ -390,8 +410,41 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ currentUser, language })
               </span>
             </button>
           </>
+        ) : isWholesaler ? (
+          /* 3. WHOLESALER ROLE: Farmer Purchases & Retailer Sales */
+          <>
+            <button
+              onClick={() => setActiveTab('farmer_to_wholesaler')}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all cursor-pointer ${
+                activeTab === 'farmer_to_wholesaler'
+                  ? 'bg-amber-600 text-white shadow-sm'
+                  : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'
+              }`}
+            >
+              <Sprout className="w-4 h-4" />
+              <span>{t('Farmer Purchases', 'কৃষকের কাছ থেকে ক্রয়')}</span>
+              <span className="bg-stone-900 text-white text-[10px] px-1.5 py-0.2 rounded-full">
+                {formatNum(orders.filter(o => (o.orderType || '').toLowerCase() === 'farmer_to_wholesaler' || (o.sellerRole || '').toLowerCase() === 'farmer').length)}
+              </span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('wholesaler_to_retailer')}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all cursor-pointer ${
+                activeTab === 'wholesaler_to_retailer'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-200'
+              }`}
+            >
+              <Truck className="w-4 h-4" />
+              <span>{t('Retailer Orders & Sales', 'খুচরা বিক্রেতার কাছে বিক্রয়')}</span>
+              <span className="bg-stone-900 text-white text-[10px] px-1.5 py-0.2 rounded-full">
+                {formatNum(orders.filter(o => (o.orderType || '').toLowerCase() === 'wholesaler_to_retailer' || (o.buyerRole || '').toLowerCase() === 'retailer').length)}
+              </span>
+            </button>
+          </>
         ) : (
-          /* 3. NON-RETAILER / NON-CONSUMER ROLES: Farmer-Wholesaler Trade */
+          /* 4. FARMER ROLE: Farmer-Wholesaler Trade */
           <button
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all bg-emerald-600 text-white shadow-sm cursor-default"
           >
@@ -572,41 +625,50 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ currentUser, language })
                     </div>
                   )}
 
-                  {/* Status update controls for Farmer-Wholesaler lifecycle and Retailer dispatch (hidden for admin) */}
-                  {!isConsumer && !isAdmin && (
+                  {/* Status update controls across all 3 supply chain tiers (hidden for admin) */}
+                  {!isAdmin && (
                     <div className="flex items-center gap-1.5 self-end sm:self-auto flex-wrap">
-                      {/* Farmer -> Wholesaler Lifecycle Controls */}
-                      {activeTab === 'farmer_to_wholesaler' && (() => {
-                        const isFarmerSeller = currentUser?.id === order.sellerId || currentUser?.role === 'farmer';
-                        const isWholesalerBuyer = currentUser?.id === order.buyerId || currentUser?.role === 'wholesaler';
+                      {(() => {
+                        const isSeller = currentUser && (
+                          currentUser.id === order.sellerId ||
+                          (currentUser.phone && order.sellerPhone && currentUser.phone === order.sellerPhone) ||
+                          currentUser.role === order.sellerRole
+                        );
+                        const isBuyer = currentUser && (
+                          currentUser.id === order.buyerId ||
+                          (currentUser.phone && order.buyerPhone && currentUser.phone === order.buyerPhone) ||
+                          currentUser.role === order.buyerRole
+                        );
                         const cStat = (order.orderStatus || order.status || order.deliveryStatus || 'pending').toLowerCase();
 
-                        if (isFarmerSeller) {
+                        // ── 1. ORDER RECEIVER (SELLER) CONTROLS ──
+                        // Farmer in Tier 1, Wholesaler in Tier 2, Retailer in Tier 3
+                        if (isSeller) {
                           if (cStat === 'pending') {
                             return (
-                              <>
+                              <div className="flex items-center gap-1.5">
                                 <button
                                   onClick={() => handleUpdateStatus(order.id, 'accepted')}
-                                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1 cursor-pointer"
+                                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
                                 >
                                   <CheckCircle2 className="w-3.5 h-3.5" />
                                   <span>{t('Accept', 'এক্সেপ্ট')}</span>
                                 </button>
                                 <button
                                   onClick={() => handleUpdateStatus(order.id, 'rejected')}
-                                  className="bg-rose-600 hover:bg-rose-700 text-white font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1 cursor-pointer"
+                                  className="bg-rose-600 hover:bg-rose-700 text-white font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
                                 >
                                   <XCircle className="w-3.5 h-3.5" />
                                   <span>{t('Reject', 'রিজেক্ট')}</span>
                                 </button>
-                              </>
+                              </div>
                             );
                           }
                           if (cStat === 'accepted') {
                             return (
                               <button
                                 onClick={() => handleUpdateStatus(order.id, 'shipped')}
-                                className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1 cursor-pointer"
+                                className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
                               >
                                 <Truck className="w-3.5 h-3.5" />
                                 <span>{t('Mark as Delivered', 'ডেলিভারি করা হয়েছে')}</span>
@@ -616,7 +678,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ currentUser, language })
                           if (cStat === 'shipped' || cStat === 'dispatched') {
                             return (
                               <span className="text-xs text-purple-700 font-semibold bg-purple-50 px-2.5 py-1 rounded-lg border border-purple-200">
-                                {t('Shipped - Awaiting Wholesaler Confirmation', 'ডেলিভারি করা হয়েছে (অপেক্ষমান)')}
+                                {t('Shipped - Awaiting Confirmation', 'ডেলিভারি করা হয়েছে (ক্রেতার নিশ্চিতকরণের অপেক্ষায়)')}
                               </span>
                             );
                           }
@@ -637,18 +699,20 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ currentUser, language })
                           }
                         }
 
-                        if (isWholesalerBuyer) {
+                        // ── 2. ORDER SENDER (BUYER) CONTROLS ──
+                        // Wholesaler in Tier 1, Retailer in Tier 2, Consumer in Tier 3
+                        if (isBuyer) {
                           if (cStat === 'pending') {
                             return (
                               <span className="text-xs text-amber-700 font-semibold bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200">
-                                ⏳ {t('Awaiting Farmer Acceptance', 'কৃষকের সম্মতির অপেক্ষায়')}
+                                ⏳ {t('Awaiting Seller Acceptance', 'বিক্রেতার সম্মতির অপেক্ষায়')}
                               </span>
                             );
                           }
                           if (cStat === 'accepted') {
                             return (
                               <span className="text-xs text-blue-700 font-semibold bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200">
-                                📦 {t('Accepted - Farmer Preparing Goods', 'গৃহীত (কৃষক প্রস্তুত করছেন)')}
+                                📦 {t('Accepted - Seller Preparing Goods', 'গৃহীত (বিক্রেতা প্রস্তুত করছেন)')}
                               </span>
                             );
                           }
@@ -656,7 +720,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ currentUser, language })
                             return (
                               <button
                                 onClick={() => handleUpdateStatus(order.id, 'completed')}
-                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1 cursor-pointer"
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
                               >
                                 <CheckCircle2 className="w-3.5 h-3.5" />
                                 <span>{t('Mark as Received', 'ডেলিভারি গ্রহণ করেছি')}</span>
@@ -682,25 +746,6 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ currentUser, language })
 
                         return null;
                       })()}
-
-                      {/* Retailer -> Consumer Controls */}
-                      {currentStatus === 'Confirmed' && isRetailer && activeTab === 'retailer_to_consumer' && (
-                        <button
-                          onClick={() => handleUpdateStatus(order.id, 'Dispatched')}
-                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1 cursor-pointer"
-                        >
-                          <Truck className="w-3.5 h-3.5" />
-                          <span>{t('Dispatch Van', 'ভ্যানে মাল পাঠান')}</span>
-                        </button>
-                      )}
-                      {currentStatus === 'Dispatched' && isRetailer && activeTab === 'retailer_to_consumer' && (
-                        <button
-                          onClick={() => handleUpdateStatus(order.id, 'Delivered')}
-                          className="bg-stone-900 hover:bg-stone-800 text-white font-bold px-3 py-1.5 rounded-xl text-xs cursor-pointer"
-                        >
-                          {t('Mark Delivered', 'ডেলিভারি নিশ্চিত করুন')}
-                        </button>
-                      )}
                     </div>
                   )}
                 </div>

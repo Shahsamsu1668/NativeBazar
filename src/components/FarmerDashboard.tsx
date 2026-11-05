@@ -483,6 +483,7 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
   ) => {
     try {
       await orderApi.updateStatus(orderId, status, currentUser?.name || 'Farmer', 'farmer');
+      window.dispatchEvent(new CustomEvent('nb_order_updated', { detail: { orderId, status } }));
       await loadReceivedOrders();
       const statusLabel = status === 'accepted' ? (language === 'bn' ? 'গৃহীত (Accepted)' : 'Accepted')
         : status === 'rejected' ? (language === 'bn' ? 'প্রত্যাখ্যাত (Rejected)' : 'Rejected')

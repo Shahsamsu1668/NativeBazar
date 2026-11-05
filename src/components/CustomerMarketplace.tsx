@@ -269,6 +269,7 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
         }
       }
 
+      window.dispatchEvent(new CustomEvent('nb_order_updated', { detail: { orderId: lastOrderId } }));
       setOrderSuccessDetails({
         orderId: lastOrderId || `NB-ORD-${Date.now().toString().slice(-6)}`,
         totalBDT: grandTotalBDT,

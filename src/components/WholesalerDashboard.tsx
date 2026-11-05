@@ -16,6 +16,7 @@ import {
   Truck,
   PlusCircle,
   CheckCircle2,
+  XCircle,
   AlertCircle,
   MapPin,
   Clock,
@@ -1003,22 +1004,63 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
                   </div>
 
                   <div className="flex items-center gap-1.5">
-                    {((order.status || order.deliveryStatus) === 'Confirmed') && (
-                      <button
-                        onClick={() => handleUpdateRetailerOrderStatus(order.id, 'Dispatched')}
-                        className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-1.5 rounded-xl text-xs"
-                      >
-                        {t('Mark Dispatched', 'মাল পাঠান')}
-                      </button>
-                    )}
-                    {((order.status || order.deliveryStatus) === 'Dispatched') && (
-                      <button
-                        onClick={() => handleUpdateRetailerOrderStatus(order.id, 'Delivered')}
-                        className="bg-stone-900 hover:bg-stone-800 text-white font-bold px-3 py-1.5 rounded-xl text-xs"
-                      >
-                        {t('Mark Delivered', 'ডেলিভারি সম্পন্ন')}
-                      </button>
-                    )}
+                    {(() => {
+                      const cStat = (order.orderStatus || order.status || order.deliveryStatus || 'pending').toLowerCase();
+                      if (cStat === 'pending') {
+                        return (
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              onClick={() => handleUpdateRetailerOrderStatus(order.id, 'accepted')}
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>{t('Accept', 'এক্সেপ্ট')}</span>
+                            </button>
+                            <button
+                              onClick={() => handleUpdateRetailerOrderStatus(order.id, 'rejected')}
+                              className="bg-rose-600 hover:bg-rose-700 text-white font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                            >
+                              <XCircle className="w-3.5 h-3.5" />
+                              <span>{t('Reject', 'রিজেক্ট')}</span>
+                            </button>
+                          </div>
+                        );
+                      }
+                      if (cStat === 'accepted') {
+                        return (
+                          <button
+                            onClick={() => handleUpdateRetailerOrderStatus(order.id, 'shipped')}
+                            className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                          >
+                            <Truck className="w-3.5 h-3.5" />
+                            <span>{t('Mark as Delivered', 'ডেলিভারি করা হয়েছে')}</span>
+                          </button>
+                        );
+                      }
+                      if (cStat === 'shipped' || cStat === 'dispatched') {
+                        return (
+                          <span className="text-xs text-purple-700 font-semibold bg-purple-50 px-2.5 py-1 rounded-lg border border-purple-200">
+                            {t('Shipped - Awaiting Retailer Confirmation', 'ডেলিভারি করা হয়েছে (অপেক্ষমান)')}
+                          </span>
+                        );
+                      }
+                      if (cStat === 'completed' || cStat === 'delivered') {
+                        return (
+                          <span className="text-xs text-emerald-700 font-bold bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 flex items-center gap-1">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>{t('Completed', 'ডেলিভারি সম্পন্ন হয়েছে')}</span>
+                          </span>
+                        );
+                      }
+                      if (cStat === 'rejected' || cStat === 'cancelled') {
+                        return (
+                          <span className="text-xs text-rose-700 font-semibold bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-200">
+                            {t('Rejected', 'প্রত্যাখ্যাত')}
+                          </span>
+                        );
+                      }
+                      return null;
+                    })()}
                   </div>
                 </div>
               </div>

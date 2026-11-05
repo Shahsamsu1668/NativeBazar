@@ -1295,13 +1295,14 @@ app.post('/api/orders', requireAuth, async (req: AuthenticatedRequest, res) => {
       notes,
     }, pool);
 
-    // Real-time notification & SSE to Farmer (order receiver)
+    // Real-time notification & SSE to Seller (order receiver across all tiers)
     if (result.sellerId) {
+      const buyerRoleBn = effectiveBuyerRole === 'wholesaler' ? 'পাইকার' : effectiveBuyerRole === 'retailer' ? 'খুচরা বিক্রেতা' : 'ভোক্তা';
       try {
         await createNeonNotification(
           result.sellerId,
           `নতুন ক্রয়াদেশ / New Order Request`,
-          `${effectiveBuyerName} (${effectiveBuyerRole === 'wholesaler' ? 'পাইকার' : effectiveBuyerRole}) আপনার ফসলের জন্য ৳${result.totalBdt} টাকার নতুন অর্ডার দিয়েছেন। এক্সেপ্ট করতে ক্লিক করুন।`,
+          `${effectiveBuyerName} (${buyerRoleBn}) আপনার পণ্যের জন্য ৳${result.totalBdt} টাকার নতুন অর্ডার দিয়েছেন। এক্সেপ্ট করতে ক্লিক করুন।`,
           'order',
           `/orders`
         );
@@ -1499,44 +1500,57 @@ app.put('/api/orders/:id/status', requireAuth, async (req: AuthenticatedRequest,
       );
     }
 
-    // ─── Real-Time Notifications for Lifecycle Events ──────────────────────────
+    // Sync status to local SQLite store
     try {
+      db.prepare("UPDATE orders SET delivery_status = ?, order_status = ?, updated_at = ? WHERE id = ?")
+        .run(targetStatus, targetStatus, new Date().toISOString(), id);
+    } catch (sqliteErr) {}
+
+    // ─── Real-Time Notifications for Lifecycle Events Across All Tiers ──────────
+    try {
+      const sellerLabelBn = order.seller_role === 'farmer' ? 'কৃষক' : order.seller_role === 'wholesaler' ? 'পাইকার' : order.seller_role === 'retailer' ? 'খুচরা বিক্রেতা' : 'বিক্রেতা';
+      const buyerLabelBn = order.buyer_role === 'wholesaler' ? 'পাইকার' : order.buyer_role === 'retailer' ? 'খুচরা বিক্রেতা' : order.buyer_role === 'consumer' ? 'ভোক্তা' : 'ক্রেতা';
+
       if (targetStatus === 'accepted') {
-        // Farmer accepted -> notify Wholesaler (Buyer)
-        await createNeonNotification(
-          order.buyer_id,
-          `অর্ডার অনুমোদিত / Order Accepted`,
-          `কৃষক ${order.seller_name} আপনার #${id} অর্ডারটি গ্রহণ করেছেন। মাল প্রস্তুত করা হচ্ছে।`,
-          'order',
-          `/orders`
-        );
+        if (order.buyer_id) {
+          await createNeonNotification(
+            order.buyer_id,
+            `অর্ডার অনুমোদিত / Order Accepted`,
+            `${sellerLabelBn} ${order.seller_name} আপনার #${id} অর্ডারটি গ্রহণ করেছেন। পণ্য প্রস্তুত করা হচ্ছে।`,
+            'order',
+            `/orders`
+          );
+        }
       } else if (targetStatus === 'rejected') {
-        // Farmer rejected -> notify Wholesaler (Buyer)
-        await createNeonNotification(
-          order.buyer_id,
-          `অর্ডার প্রত্যাখ্যাত / Order Rejected`,
-          `কৃষক ${order.seller_name} আপনার #${id} অর্ডারটি গ্রহণ করেননি (প্রত্যাখ্যাত)। স্টক মুক্ত করা হয়েছে।`,
-          'warning',
-          `/orders`
-        );
+        if (order.buyer_id) {
+          await createNeonNotification(
+            order.buyer_id,
+            `অর্ডার প্রত্যাখ্যাত / Order Rejected`,
+            `${sellerLabelBn} ${order.seller_name} আপনার #${id} অর্ডারটি গ্রহণ করেননি (প্রত্যাখ্যাত)। স্টক মুক্ত করা হয়েছে।`,
+            'warning',
+            `/orders`
+          );
+        }
       } else if (targetStatus === 'shipped') {
-        // Farmer marked as delivered -> notify Wholesaler (Buyer)
-        await createNeonNotification(
-          order.buyer_id,
-          `ডেলিভারি পাঠানো হয়েছে / Order Shipped`,
-          `কৃষক ${order.seller_name} #${id} অর্ডারের পণ্য ডেলিভারির জন্য পাঠিয়েছেন। পৌঁছালে 'ডেলিভারি গ্রহণ করেছি' ক্লিক করুন।`,
-          'order',
-          `/orders`
-        );
+        if (order.buyer_id) {
+          await createNeonNotification(
+            order.buyer_id,
+            `ডেলিভারি পাঠানো হয়েছে / Order Shipped`,
+            `${sellerLabelBn} ${order.seller_name} #${id} অর্ডারের পণ্য ডেলিভারির জন্য পাঠিয়েছেন। পৌঁছালে 'ডেলিভারি গ্রহণ করেছি' ক্লিক করুন।`,
+            'order',
+            `/orders`
+          );
+        }
       } else if (targetStatus === 'completed') {
-        // Wholesaler marked as received -> notify Farmer (Seller)
-        await createNeonNotification(
-          order.seller_id,
-          `ডেলিভারি সম্পন্ন / Order Received & Completed`,
-          `পাইকার ${order.buyer_name} #${id} অর্ডারের পণ্য গ্রহণ করেছেন। লেনদেন সফলভাবে সম্পন্ন হয়েছে।`,
-          'success',
-          `/orders`
-        );
+        if (order.seller_id) {
+          await createNeonNotification(
+            order.seller_id,
+            `ডেলিভারি সম্পন্ন / Order Received & Completed`,
+            `${buyerLabelBn} ${order.buyer_name} #${id} অর্ডারের পণ্য গ্রহণ করেছেন। লেনদেন সফলভাবে সম্পন্ন হয়েছে।`,
+            'success',
+            `/orders`
+          );
+        }
       }
     } catch (notifErr) {
       console.warn('[Orders] Realtime notification warning:', notifErr);

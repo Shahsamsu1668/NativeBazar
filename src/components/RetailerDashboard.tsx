@@ -4,6 +4,7 @@ import {
   User,
   MarketplaceProduct,
   SupplyChainOrder,
+  OrderLifecycleStatus,
 } from '../types';
 import { productApi, orderApi } from '../services/api';
 import { toBanglaNumber } from './Header';
@@ -15,6 +16,7 @@ import {
   Truck,
   PlusCircle,
   CheckCircle2,
+  XCircle,
   AlertCircle,
   Search,
   RefreshCw,
@@ -345,6 +347,18 @@ export const RetailerDashboard: React.FC<RetailerDashboardProps> = ({
     loadConsumerOrders();
   }, [currentUser.id]);
 
+  // Reactive listener for real-time order updates without page reload
+  useEffect(() => {
+    const handleOrderEvent = () => {
+      loadConsumerOrders();
+      loadWholesaleListings();
+    };
+    window.addEventListener('nb_order_updated', handleOrderEvent);
+    return () => {
+      window.removeEventListener('nb_order_updated', handleOrderEvent);
+    };
+  }, []);
+
   const [isPublishingProduct, setIsPublishingProduct] = useState(false);
   const [toastMessage, setToastMessage] = useState<{ text: string; type?: 'success' | 'error' } | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -532,7 +546,7 @@ export const RetailerDashboard: React.FC<RetailerDashboardProps> = ({
   // Update Consumer Order Status
   const handleUpdateConsumerOrderStatus = async (
     orderId: string,
-    status: 'Confirmed' | 'Processing' | 'Dispatched' | 'Delivered'
+    status: OrderLifecycleStatus | string
   ) => {
     try {
       await orderApi.updateStatus(orderId, status, currentUser?.name || 'Retailer', 'retailer');
@@ -543,6 +557,7 @@ export const RetailerDashboard: React.FC<RetailerDashboardProps> = ({
         ),
         'success'
       );
+      window.dispatchEvent(new CustomEvent('nb_order_updated', { detail: { orderId, status } }));
       loadConsumerOrders();
     } catch (e: any) {
       showToast(e.message || t('Failed to update order status', 'অর্ডার স্ট্যাটাস আপডেট ব্যর্থ হয়েছে'), 'error');
@@ -1051,23 +1066,63 @@ export const RetailerDashboard: React.FC<RetailerDashboardProps> = ({
                         </div>
 
                         <div className="flex items-center gap-1.5">
-                          {currentStatus === 'Confirmed' && (
-                            <button
-                              onClick={() => handleUpdateConsumerOrderStatus(order.id, 'Dispatched')}
-                              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
-                            >
-                              <Truck className="w-3.5 h-3.5" />
-                              <span>{t('Dispatch Van', 'ভ্যানে মাল পাঠান')}</span>
-                            </button>
-                          )}
-                          {currentStatus === 'Dispatched' && (
-                            <button
-                              onClick={() => handleUpdateConsumerOrderStatus(order.id, 'Delivered')}
-                              className="bg-stone-900 hover:bg-stone-800 text-white font-bold px-3 py-1.5 rounded-xl text-xs cursor-pointer transition-colors"
-                            >
-                              {t('Confirm Delivered', 'ডেলিভারি সম্পন্ন নিশ্চিতকরণ')}
-                            </button>
-                          )}
+                          {(() => {
+                            const cStat = (order.orderStatus || order.status || order.deliveryStatus || 'pending').toLowerCase();
+                            if (cStat === 'pending') {
+                              return (
+                                <div className="flex items-center gap-1.5">
+                                  <button
+                                    onClick={() => handleUpdateConsumerOrderStatus(order.id, 'accepted')}
+                                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                                  >
+                                    <CheckCircle2 className="w-3.5 h-3.5" />
+                                    <span>{t('Accept', 'এক্সেপ্ট')}</span>
+                                  </button>
+                                  <button
+                                    onClick={() => handleUpdateConsumerOrderStatus(order.id, 'rejected')}
+                                    className="bg-rose-600 hover:bg-rose-700 text-white font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                                  >
+                                    <XCircle className="w-3.5 h-3.5" />
+                                    <span>{t('Reject', 'রিজেক্ট')}</span>
+                                  </button>
+                                </div>
+                              );
+                            }
+                            if (cStat === 'accepted') {
+                              return (
+                                <button
+                                  onClick={() => handleUpdateConsumerOrderStatus(order.id, 'shipped')}
+                                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                                >
+                                  <Truck className="w-3.5 h-3.5" />
+                                  <span>{t('Mark as Delivered', 'ডেলিভারি করা হয়েছে')}</span>
+                                </button>
+                              );
+                            }
+                            if (cStat === 'shipped' || cStat === 'dispatched') {
+                              return (
+                                <span className="text-xs text-purple-700 font-semibold bg-purple-50 px-2.5 py-1 rounded-lg border border-purple-200">
+                                  {t('Shipped - Awaiting Consumer Confirmation', 'ডেলিভারি করা হয়েছে (ভোক্তার নিশ্চিতকরণের অপেক্ষায়)')}
+                                </span>
+                              );
+                            }
+                            if (cStat === 'completed' || cStat === 'delivered') {
+                              return (
+                                <span className="text-xs text-emerald-700 font-bold bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 flex items-center gap-1">
+                                  <CheckCircle2 className="w-3.5 h-3.5" />
+                                  <span>{t('Completed', 'ডেলিভারি সম্পন্ন হয়েছে')}</span>
+                                </span>
+                              );
+                            }
+                            if (cStat === 'rejected' || cStat === 'cancelled') {
+                              return (
+                                <span className="text-xs text-rose-700 font-semibold bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-200">
+                                  {t('Rejected', 'প্রত্যাখ্যাত')}
+                                </span>
+                              );
+                            }
+                            return null;
+                          })()}
                         </div>
                       </div>
                     </div>
