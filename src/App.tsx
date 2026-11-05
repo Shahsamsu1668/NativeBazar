@@ -96,6 +96,15 @@ export default function App() {
   }, []);
 
   const [activeView, setActiveView] = useState<ActiveView>('dashboard');
+  // Role guard: Ensure admin is restricted to dashboard and all platform transactions ('orders')
+  useEffect(() => {
+    if (currentUser?.role === 'admin') {
+      if (activeView === 'contacts' || activeView === 'market_rates') {
+        setActiveView('dashboard');
+      }
+    }
+  }, [currentUser?.role, activeView]);
+
 
   // Auth Modal State (When guest clicks Sign In / Register)
   const [isAuthOpen, setIsAuthOpen] = useState(false);
@@ -489,6 +498,9 @@ export default function App() {
         onViewChange={(v) => {
           if (v === 'profile') {
             setViewedUser(currentUser);
+          } else if (currentUser?.role === 'admin' && (v === 'contacts' || v === 'market_rates')) {
+            setViewedUser(null);
+            setActiveView('dashboard');
           } else {
             setViewedUser(null);
             setActiveView(v);
@@ -531,7 +543,7 @@ export default function App() {
           />
         ) : (
           <>
-            {activeView === 'contacts' && currentUser && (
+            {activeView === 'contacts' && currentUser && currentUser.role !== 'admin' && (
               <ContactsView
                 currentUser={currentUser}
                 language={language}
@@ -541,7 +553,7 @@ export default function App() {
               />
             )}
 
-            {activeView === 'market_rates' && (
+            {activeView === 'market_rates' && currentUser?.role !== 'admin' && (
               <MarketRatesView
                 rates={INITIAL_MARKET_RATES}
                 language={language}
@@ -735,7 +747,7 @@ export default function App() {
       />
 
       {/* Real-time Incoming Call Floating Alert Banner */}
-      {incomingCall && currentUser && (
+      {incomingCall && currentUser && currentUser.role !== 'admin' && (
         <div className="fixed top-20 right-4 z-50 max-w-sm w-full bg-stone-900/95 text-white p-4 rounded-2xl shadow-2xl border-2 border-emerald-500/80 backdrop-blur-md animate-bounce-once">
           <div className="flex items-center gap-3">
             <div className="relative">

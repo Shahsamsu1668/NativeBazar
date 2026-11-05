@@ -64,9 +64,9 @@ const ROLE_CONFIG: Record<UserRole, { icon: React.ReactNode; color: string; labe
 // Removed weather, bulletins, and ledger navigation items
 const NAV_ITEMS: Array<{ id: ActiveView; icon: React.ReactNode; labelEn: string; labelBn: string; roles?: UserRole[] }> = [
   { id: 'dashboard',    icon: <Sprout className="w-4 h-4" />,    labelEn: 'Marketplace / Dashboard', labelBn: 'ড্যাশবোর্ড' },
-  { id: 'market_rates', icon: <TrendingUp className="w-4 h-4" />,labelEn: 'DAM Market Rates', labelBn: 'বাজার দর', roles: ['farmer', 'wholesaler', 'retailer', 'admin'] },
-  { id: 'orders',       icon: <Package className="w-4 h-4" />,   labelEn: 'Farmer-Wholesaler Trades', labelBn: 'কৃষক-পাইকার বাণিজ্য', roles: ['farmer', 'wholesaler', 'retailer', 'consumer', 'admin'] },
-  { id: 'contacts',     icon: <Users className="w-4 h-4" />,      labelEn: 'Trade Network', labelBn: 'যোগাযোগ ও নেটওয়ার্ক', roles: ['farmer', 'wholesaler', 'retailer', 'consumer', 'admin'] },
+  { id: 'market_rates', icon: <TrendingUp className="w-4 h-4" />,labelEn: 'DAM Market Rates', labelBn: 'বাজার দর', roles: ['farmer', 'wholesaler', 'retailer'] },
+  { id: 'orders',       icon: <Package className="w-4 h-4" />,   labelEn: 'Farmer-Wholesaler Trades', labelBn: 'কৃষক-পাইকার বাণিজ্য', roles: ['farmer', 'wholesaler', 'retailer', 'consumer'] },
+  { id: 'contacts',     icon: <Users className="w-4 h-4" />,      labelEn: 'Trade Network', labelBn: 'যোগাযোগ ও নেটওয়ার্ক', roles: ['farmer', 'wholesaler', 'retailer', 'consumer'] },
 ];
 
 export const Header: React.FC<HeaderProps> = ({
@@ -127,6 +127,7 @@ export const Header: React.FC<HeaderProps> = ({
   }, [currentUser?.id]);
 
   const role: UserRole = currentUser ? currentUser.role : 'consumer';
+  const isAdmin = currentUser?.role === 'admin';
   const config = ROLE_CONFIG[role] || ROLE_CONFIG.consumer;
 
   // Use the logged-in user's profile district for the header logo subtitle; fallback to view filter
@@ -147,6 +148,11 @@ export const Header: React.FC<HeaderProps> = ({
     ? [
         { id: 'dashboard' as ActiveView, icon: <Sprout className="w-4 h-4" />, labelEn: 'Home', labelBn: 'হোম' },
         { id: 'market_rates' as ActiveView, icon: <TrendingUp className="w-4 h-4" />, labelEn: 'DAM Market Rates', labelBn: 'বাজার দর' },
+      ]
+    : isAdmin
+    ? [
+        { id: 'dashboard' as ActiveView, icon: <ShieldCheck className="w-4 h-4" />, labelEn: 'Ecosystem Control Center', labelBn: 'কন্ট্রোল সেন্টার' },
+        { id: 'orders' as ActiveView, icon: <Package className="w-4 h-4" />, labelEn: 'All Platform Transactions', labelBn: 'সকল প্ল্যাটফর্ম ট্রানজ্যাকশন' },
       ]
     : NAV_ITEMS.filter(n => !n.roles || n.roles.includes(role));
 
@@ -242,7 +248,9 @@ export const Header: React.FC<HeaderProps> = ({
                 </span>
               </div>
               <p className="text-[10px] text-stone-500 font-medium leading-none">
-                {currentUser
+                {isAdmin
+                  ? (language === 'bn' ? 'কেন্দ্রীয় প্রশাসন ও এআই কন্ট্রোল' : 'Central Admin & AI Control')
+                  : currentUser
                   ? (language === 'bn' ? `${toBanglaDistrict(profileDistrict)} • বাংলাদেশ` : `${profileDistrict} • Bangladesh`)
                   : (language === 'bn' ? 'ডিজিটাল কৃষি প্ল্যাটফর্ম • বাংলাদেশ' : 'Digital Agri Platform • Bangladesh')}
               </p>
@@ -251,8 +259,8 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Desktop Actions */}
           <div className="hidden md:flex items-center gap-2 flex-1 justify-end">
-            {/* AI Crop Doctor Button — hidden for consumer */}
-            {role !== 'consumer' && role !== 'retailer' && (
+            {/* AI Crop Doctor Button — hidden for consumer, retailer, and admin */}
+            {!isAdmin && role !== 'consumer' && role !== 'retailer' && (
               <button
                 onClick={onOpenCropDoctor}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
@@ -263,8 +271,8 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             )}
 
-            {/* Voice Assistant Button — hidden for consumer */}
-            {role !== 'consumer' && role !== 'retailer' && (
+            {/* Voice Assistant Button — hidden for consumer, retailer, and admin */}
+            {!isAdmin && role !== 'consumer' && role !== 'retailer' && (
               <button
                 onClick={onOpenVoiceAssistant}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
@@ -275,8 +283,8 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             )}
 
-            {/* District Selector (Only for authenticated users) */}
-            {currentUser && (
+            {/* District Selector (Only for authenticated users, hidden for admin) */}
+            {currentUser && !isAdmin && (
             <div className="flex items-center gap-1 bg-stone-100 border border-stone-200 rounded-lg px-2 py-1.5 text-xs">
               <MapPin className="w-3.5 h-3.5 text-stone-500 shrink-0" />
               <select
@@ -316,7 +324,7 @@ export const Header: React.FC<HeaderProps> = ({
               <span>{language === 'bn' ? 'বাং' : 'EN'}</span>
             </button>
 
-            {currentUser && (
+            {currentUser && !isAdmin && (
             <div className="relative" ref={notifRef}>
               <button
                 onClick={() => { setShowNotifs(v => !v); setShowUserMenu(false); }}
@@ -412,8 +420,8 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
             )}
 
-            {/* Quick Direct Messages / Contacts Button (For registered traders) */}
-            {currentUser && role !== 'consumer' && (
+            {/* Quick Direct Messages / Contacts Button (Hidden for consumers and admin) */}
+            {currentUser && !isAdmin && role !== 'consumer' && (
               <button
                 onClick={() => onViewChange('contacts')}
                 className={`relative w-8 h-8 flex items-center justify-center rounded-lg transition-colors border cursor-pointer ${
@@ -433,8 +441,8 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             )}
 
-            {/* Cart Badge (Visible for consumers or guests) */}
-            {cartCount > 0 && (
+            {/* Cart Badge (Visible for consumers or guests, hidden for admin) */}
+            {cartCount > 0 && !isAdmin && (
               <button
                 onClick={() => onViewChange('dashboard')}
                 className="relative flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-xs font-bold rounded-lg hover:bg-purple-700 transition-colors shadow-2xs cursor-pointer"
@@ -537,7 +545,7 @@ export const Header: React.FC<HeaderProps> = ({
                   }`}
                 >
                   {nav.id === 'orders' && role === 'consumer' ? <ShoppingBag className="w-4 h-4" /> : nav.icon}
-                  <span>{nav.id === 'orders' ? (role === 'consumer' ? t('Consumer Purchases', 'ভোক্তার ক্রয়') : role === 'retailer' ? t('Retailer Trade', 'খুচরা বিক্রেতার বাণিজ্য') : t(nav.labelEn, nav.labelBn)) : t(nav.labelEn, nav.labelBn)}</span>
+                  <span>{nav.id === 'orders' ? (role === 'consumer' ? t('Consumer Purchases', 'ভোক্তার ক্রয়') : role === 'retailer' ? t('Retailer Trade', 'খুচরা বিক্রেতার বাণিজ্য') : role === 'admin' ? t('All Platform Transactions', 'সকল প্ল্যাটফর্ম ট্রানজ্যাকশন') : t(nav.labelEn, nav.labelBn)) : t(nav.labelEn, nav.labelBn)}</span>
                 </button>
               );
             })}
@@ -545,7 +553,7 @@ export const Header: React.FC<HeaderProps> = ({
             {/* Status indicator */}
             <div className="ml-auto hidden lg:flex items-center gap-1.5 text-[11px] text-stone-400 font-medium shrink-0 pr-1">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span>{t('AI Network Active', 'এআই নেটওয়ার্ক সক্রিয়')}</span>
+              <span>{isAdmin ? t('System Telemetry Live', 'সিস্টেম টেলিমেট্রি লাইভ') : t('AI Network Active', 'এআই নেটওয়ার্ক সক্রিয়')}</span>
             </div>
           </div>
         </div>
@@ -577,8 +585,8 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           )}
 
-          {/* Crop Doctor & Voice AI — hidden for consumer role on mobile, Crop Doctor hidden for retailer */}
-          {role !== 'consumer' && (
+          {/* Crop Doctor & Voice AI — hidden for consumer and admin roles on mobile, Crop Doctor hidden for retailer */}
+          {role !== 'consumer' && !isAdmin && (
             <div className={role === 'retailer' ? 'grid grid-cols-1 gap-2' : 'grid grid-cols-2 gap-2'}>
               {role !== 'retailer' && (
                 <button
@@ -596,29 +604,48 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             </div>
           )}
-          <div className="grid grid-cols-3 gap-2">
-            <div className="col-span-2 flex items-center gap-1 bg-stone-100 rounded-lg px-2 py-1.5 text-xs">
-              <MapPin className="w-3.5 h-3.5 text-stone-500" />
-              <select
-                value={selectedDistrict}
-                onChange={e => onDistrictChange(e.target.value)}
-                className="bg-transparent text-xs font-semibold text-stone-700 focus:outline-hidden flex-1 cursor-pointer"
+          {!isAdmin ? (
+            <div className="grid grid-cols-3 gap-2">
+              <div className="col-span-2 flex items-center gap-1 bg-stone-100 rounded-lg px-2 py-1.5 text-xs">
+                <MapPin className="w-3.5 h-3.5 text-stone-500" />
+                <select
+                  value={selectedDistrict}
+                  onChange={e => onDistrictChange(e.target.value)}
+                  className="bg-transparent text-xs font-semibold text-stone-700 focus:outline-hidden flex-1 cursor-pointer"
+                >
+                  <option value="Bogura">{language === 'bn' ? 'বগুড়া' : 'Bogura'}</option>
+                  <option value="Rajshahi">{language === 'bn' ? 'রাজশাহী' : 'Rajshahi'}</option>
+                  <option value="Rangpur">{language === 'bn' ? 'রংপুর' : 'Rangpur'}</option>
+                  <option value="Jashore">{language === 'bn' ? 'যশোর' : 'Jashore'}</option>
+                  <option value="Dhaka">{language === 'bn' ? 'ঢাকা' : 'Dhaka'}</option>
+                  <option value="Mymensingh">{language === 'bn' ? 'ময়মনসিংহ' : 'Mymensingh'}</option>
+                </select>
+              </div>
+              <button
+                onClick={onLanguageToggle}
+                className="px-2 py-1.5 bg-stone-100 hover:bg-stone-200 rounded-lg text-xs font-bold text-stone-800 text-center cursor-pointer"
               >
-                <option value="Bogura">{language === 'bn' ? 'বগুড়া' : 'Bogura'}</option>
-                <option value="Rajshahi">{language === 'bn' ? 'রাজশাহী' : 'Rajshahi'}</option>
-                <option value="Rangpur">{language === 'bn' ? 'রংপুর' : 'Rangpur'}</option>
-                <option value="Jashore">{language === 'bn' ? 'যশোর' : 'Jashore'}</option>
-                <option value="Dhaka">{language === 'bn' ? 'ঢাকা' : 'Dhaka'}</option>
-                <option value="Mymensingh">{language === 'bn' ? 'ময়মনসিংহ' : 'Mymensingh'}</option>
-              </select>
+                {language === 'bn' ? 'EN' : 'বাংলা'}
+              </button>
             </div>
-            <button
-              onClick={onLanguageToggle}
-              className="px-2 py-1.5 bg-stone-100 hover:bg-stone-200 rounded-lg text-xs font-bold text-stone-800 text-center cursor-pointer"
-            >
-              {language === 'bn' ? 'EN' : 'বাংলা'}
-            </button>
-          </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={onThemeToggle}
+                className="flex items-center justify-center gap-2 p-2 bg-stone-100 hover:bg-stone-200 rounded-lg text-xs font-bold text-stone-800 cursor-pointer"
+              >
+                {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-500" /> : <Moon className="w-4 h-4 text-stone-600" />}
+                <span>{theme === 'dark' ? t('Light', 'লাইট') : t('Dark', 'ডার্ক')}</span>
+              </button>
+              <button
+                onClick={onLanguageToggle}
+                className="flex items-center justify-center gap-2 p-2 bg-stone-100 hover:bg-stone-200 rounded-lg text-xs font-bold text-stone-800 cursor-pointer"
+              >
+                <Globe className="w-3.5 h-3.5 text-stone-600" />
+                <span>{language === 'bn' ? 'English' : 'বাংলা'}</span>
+              </button>
+            </div>
+          )}
 
           {currentUser && (
             <button

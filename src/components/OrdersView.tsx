@@ -9,6 +9,7 @@ import { orderApi } from '../services/api';
 import { toBanglaNumber } from './Header';
 import {
   Package,
+  ShieldCheck,
   Truck,
   CheckCircle2,
   XCircle,
@@ -36,6 +37,7 @@ type OrderTabId = 'wholesaler_to_retailer' | 'retailer_to_consumer' | 'farmer_to
 export const OrdersView: React.FC<OrdersViewProps> = ({ currentUser, language }) => {
   const isRetailer = currentUser?.role === 'retailer';
   const isConsumer = currentUser?.role === 'consumer';
+  const isAdmin = currentUser?.role === 'admin';
 
   // Set default tab based on user role
   const [activeTab, setActiveTab] = useState<OrderTabId>(() => {
@@ -57,11 +59,13 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ currentUser, language })
     setLoading(true);
     try {
       const res = await orderApi.getOrders(
-        isConsumer
+        isAdmin
+          ? undefined
+          : isConsumer
           ? { role: 'consumer', buyerId: currentUser?.id }
           : isRetailer
           ? { role: 'retailer' }
-          : currentUser && currentUser.role !== 'admin'
+          : currentUser
           ? { userId: currentUser.id }
           : undefined
       );
@@ -103,6 +107,11 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ currentUser, language })
 
   // Strict role-based trade filtering
   const isOrderInTab = (o: SupplyChainOrder) => {
+    // 0. ADMIN ROLE: Globally view ALL platform orders across entire database
+    if (isAdmin) {
+      return true;
+    }
+
     const ot = (o.orderType || '').toLowerCase();
     const sRole = (o.sellerRole || '').toLowerCase();
     const bRole = (o.buyerRole || '').toLowerCase();
@@ -254,7 +263,9 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ currentUser, language })
         <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           <div className="space-y-2 max-w-2xl">
             <div className="inline-flex items-center gap-1.5 bg-teal-900/70 border border-teal-400/30 px-3 py-1 rounded-full text-xs font-semibold text-teal-300">
-              {isConsumer ? (
+              {isAdmin ? (
+                <ShieldCheck className="w-3.5 h-3.5 text-teal-300" />
+              ) : isConsumer ? (
                 <ShoppingBag className="w-3.5 h-3.5 text-teal-300" />
               ) : isRetailer ? (
                 <Store className="w-3.5 h-3.5 text-teal-400" />
@@ -262,7 +273,9 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ currentUser, language })
                 <Sprout className="w-3.5 h-3.5 text-emerald-400" />
               )}
               <span>
-                {isConsumer
+                {isAdmin
+                  ? t('Global Platform Audit Registry', 'সকল প্ল্যাটফর্ম ট্রানজ্যাকশন ও অডিট রেজিস্ট্রি')
+                  : isConsumer
                   ? t('Consumer Purchase History', 'ভোক্তার ক্রয় খতিয়ান')
                   : isRetailer
                   ? t('Retailer Trade Hub', 'খুচরা বিক্রেতার বাণিজ্য হাব')
@@ -270,14 +283,21 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ currentUser, language })
               </span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-              {isConsumer
+              {isAdmin
+                ? t('All Platform Transactions', 'সকল প্ল্যাটফর্ম ট্রানজ্যাকশন')
+                : isConsumer
                 ? t('Consumer Purchases', 'ভোক্তার ক্রয়')
                 : isRetailer
                 ? t('Retailer Trade', 'খুচরা বিক্রেতার বাণিজ্য')
                 : t('Agricultural Trade & Order Registry', 'কৃষি বাণিজ্য ও অর্ডার রেজিস্ট্রি')}
             </h1>
             <p className="text-xs sm:text-sm text-stone-300 leading-relaxed">
-              {isConsumer
+              {isAdmin
+                ? t(
+                    'Real-time global oversight of all agricultural trades, wholesale procurements, and retail fulfillment orders across Bangladesh.',
+                    'সমগ্র বাংলাদেশ জুড়ে সমস্ত কৃষি লেনদেন, পাইকারি সরবরাহ ও খুচরা ডেলিভারি অর্ডারের রিয়েল-টাইম কেন্দ্রীয় অডিট ও পর্যবেক্ষণ।'
+                  )
+                : isConsumer
                 ? t(
                     'Order history and live delivery tracking of fresh agricultural items purchased from certified Retailers. Direct purchases from Farmers or Wholesalers are restricted by supply chain rules.',
                     'প্রত্যয়িত স্থানীয় খুচরা বিক্রেতাদের থেকে ক্রয়কৃত তাজা কৃষিপণ্যের অর্ডার খতিয়ান ও হোম ডেলিভারি ট্র্যাকিং। সরবরাহ শৃঙ্খলা নীতি অনুযায়ী কৃষক বা পাইকারদের থেকে সরাসরি ক্রয় নিষিদ্ধ।'
@@ -315,7 +335,18 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ currentUser, language })
 
       {/* ─── TABS NAVIGATION ──────────────────────────────────────────────────────── */}
       <div className="flex items-center gap-2 border-b border-stone-200 pb-2 overflow-x-auto no-scrollbar">
-        {isConsumer ? (
+        {isAdmin ? (
+          /* 0. ADMIN ROLE: All Platform Transactions */
+          <button
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all bg-emerald-700 text-white shadow-sm cursor-default"
+          >
+            <ShieldCheck className="w-4 h-4" />
+            <span>{t('All Platform Transactions', 'সকল প্ল্যাটফর্ম ট্রানজ্যাকশন')}</span>
+            <span className="bg-stone-900 text-white text-[10px] px-1.5 py-0.2 rounded-full">
+              {formatNum(filteredOrders.length)}
+            </span>
+          </button>
+        ) : isConsumer ? (
           /* 1. CONSUMER ROLE: Dedicated "ভোক্তার ক্রয়" (Consumer Purchases) tab */
           <button
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all bg-teal-700 text-white shadow-sm cursor-default"
@@ -386,7 +417,9 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ currentUser, language })
           <div className="text-center py-16 bg-white rounded-3xl border border-stone-200 p-8 space-y-2">
             <ShoppingBag className="w-10 h-10 text-stone-300 mx-auto" />
             <h4 className="font-bold text-stone-800 text-sm">
-              {isConsumer
+              {isAdmin
+                ? t('No platform transactions found', 'কোনো প্ল্যাটফর্ম ট্রানজ্যাকশন পাওয়া যায়নি')
+                : isConsumer
                 ? t('No consumer purchases found', 'এখনও কোনো ক্রয়ের তথ্য পাওয়া যায়নি')
                 : isRetailer
                 ? activeTab === 'wholesaler_to_retailer'
@@ -395,7 +428,12 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ currentUser, language })
                 : t('No Farmer ↔ Wholesaler trades found', 'কোনো সক্রিয় কৃষক ও পাইকার লেনদেন পাওয়া যায়নি')}
             </h4>
             <p className="text-xs text-stone-500 max-w-md mx-auto">
-              {isConsumer
+              {isAdmin
+                ? t(
+                    'All trades, procurement agreements, and customer orders across the platform will be logged here for monitoring.',
+                    'প্ল্যাটফর্মের সমস্ত বাণিজ্যিক চুক্তি, পাইকারি সংগ্রহ ও ক্রেতার অর্ডার এখানে কেন্দ্রীয়ভাবে সংরক্ষিত হবে।'
+                  )
+                : isConsumer
                 ? t(
                     'Items you purchase from verified local Retailers on the marketplace feed will appear here for order tracking and delivery status.',
                     'মার্কেটপ্লেস ফিড থেকে অনুমোদিত খুচরা বিক্রেতাদের থেকে পণ্য ক্রয় করলে তা হোম ডেলিভারি ট্র্যাকিং ও রসিদের জন্য এখানে যুক্ত হবে।'
@@ -534,8 +572,8 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ currentUser, language })
                     </div>
                   )}
 
-                  {/* Status update controls for Farmer-Wholesaler lifecycle and Retailer dispatch */}
-                  {!isConsumer && (
+                  {/* Status update controls for Farmer-Wholesaler lifecycle and Retailer dispatch (hidden for admin) */}
+                  {!isConsumer && !isAdmin && (
                     <div className="flex items-center gap-1.5 self-end sm:self-auto flex-wrap">
                       {/* Farmer -> Wholesaler Lifecycle Controls */}
                       {activeTab === 'farmer_to_wholesaler' && (() => {
