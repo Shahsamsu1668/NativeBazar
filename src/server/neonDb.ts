@@ -1,3 +1,4 @@
+import { getAllDistrictsMarketPrices } from './marketData.js';
 import pg from 'pg';
 import dotenv from 'dotenv';
 import fs from 'fs';
@@ -241,7 +242,55 @@ export async function initNeonDatabase(): Promise<void> {
           last_updated TIMESTAMPTZ DEFAULT NOW()
         );
         CREATE INDEX IF NOT EXISTS idx_market_prices_district ON market_prices(district);
+        ALTER TABLE market_prices ADD COLUMN IF NOT EXISTS min_wholesale NUMERIC;
+        ALTER TABLE market_prices ADD COLUMN IF NOT EXISTS max_wholesale NUMERIC;
+        ALTER TABLE market_prices ADD COLUMN IF NOT EXISTS min_retail NUMERIC;
+        ALTER TABLE market_prices ADD COLUMN IF NOT EXISTS max_retail NUMERIC;
       `);
+
+      // Verify all 64 districts are populated with 20+ commodities each in Neon
+      const countRes = await client.query('SELECT COUNT(*) as cnt FROM market_prices');
+      const cnt = parseInt(countRes.rows[0]?.cnt || '0', 10);
+      if (cnt < 1200) {
+        const allPrices = getAllDistrictsMarketPrices();
+        console.log(`[Neon] Seeding ${allPrices.length} market prices across all 64 districts...`);
+        const chunkSize = 100;
+        for (let i = 0; i < allPrices.length; i += chunkSize) {
+          const chunk = allPrices.slice(i, i + chunkSize);
+          const valueClauses: string[] = [];
+          const values: any[] = [];
+          let paramIdx = 1;
+
+          for (const r of chunk) {
+            valueClauses.push(`(${paramIdx++}, ${paramIdx++}, ${paramIdx++}, ${paramIdx++}, ${paramIdx++}, ${paramIdx++}, ${paramIdx++}, ${paramIdx++}, ${paramIdx++}, ${paramIdx++}, ${paramIdx++}, ${paramIdx++}, ${paramIdx++}, ${paramIdx++}, ${paramIdx++}, ${paramIdx++}, ${paramIdx++}, ${paramIdx++}, ${paramIdx++}, NOW())`);
+            values.push(
+              r.id, r.district, r.upazila, r.market_name, r.market_name_bn,
+              r.crop_name, r.bangla_name, r.category, r.wholesale_price, r.wholesale_dhaka,
+              r.retail_price, r.min_wholesale, r.max_wholesale, r.min_retail, r.max_retail,
+              r.unit, r.change_24h, r.trend, r.source
+            );
+          }
+
+          await client.query(`
+            INSERT INTO market_prices (
+              id, district, upazila, market_name, market_name_bn,
+              crop_name, bangla_name, category, wholesale_price, wholesale_dhaka,
+              retail_price, min_wholesale, max_wholesale, min_retail, max_retail,
+              unit, change_24h, trend, source, last_updated
+            ) VALUES ${valueClauses.join(', ')}
+            ON CONFLICT (id) DO UPDATE SET
+              wholesale_price = EXCLUDED.wholesale_price,
+              wholesale_dhaka = EXCLUDED.wholesale_dhaka,
+              retail_price = EXCLUDED.retail_price,
+              min_wholesale = EXCLUDED.min_wholesale,
+              max_wholesale = EXCLUDED.max_wholesale,
+              min_retail = EXCLUDED.min_retail,
+              max_retail = EXCLUDED.max_retail,
+              last_updated = NOW()
+          `, values);
+        }
+        console.log('[Neon] Market prices seeding complete across all 64 districts.');
+      }
     } catch (err: any) {
       console.warn('[Neon] market_prices table init warning:', err.message);
     }

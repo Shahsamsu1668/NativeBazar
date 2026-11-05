@@ -810,7 +810,11 @@ export const MarketRatesView: React.FC<MarketRatesViewProps> = ({
   const currentDistrictRates = useMemo(() => {
     if (apiRates.length > 0) {
       const filtered = apiRates.filter(
-        (r) => !activeDistrict || activeDistrict === 'All' || r.district.toLowerCase() === activeDistrict.toLowerCase()
+        (r) => {
+          if (!activeDistrict || activeDistrict === 'All') return true;
+          const clean = (s: string) => s.toLowerCase().replace(/chittagong/g, 'chattogram').replace(/barisal/g, 'barishal').replace(/comilla/g, 'cumilla').replace(/jessore/g, 'jashore').replace(/bogra/g, 'bogura');
+          return r.district.toLowerCase() === activeDistrict.toLowerCase() || clean(r.district) === clean(activeDistrict);
+        }
       );
       if (filtered.length > 0) return filtered;
     }

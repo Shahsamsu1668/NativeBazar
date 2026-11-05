@@ -1,3 +1,4 @@
+import { getAllDistrictsMarketPrices, generateDistrictMarketPrices } from './marketData.js';
 import Database from 'better-sqlite3';
 import path from 'path';
 import crypto from 'crypto';
@@ -140,6 +141,10 @@ export function initDatabase() {
       wholesale_price REAL NOT NULL,
       wholesale_dhaka REAL NOT NULL,
       retail_price REAL NOT NULL,
+      min_wholesale REAL,
+      max_wholesale REAL,
+      min_retail REAL,
+      max_retail REAL,
       unit TEXT DEFAULT 'kg',
       change_24h REAL DEFAULT 0,
       trend TEXT DEFAULT 'stable',
@@ -180,6 +185,18 @@ export function initDatabase() {
   } catch {}
   try {
     db.prepare("ALTER TABLE order_items ADD COLUMN unit TEXT DEFAULT 'kg'").run();
+  } catch {}
+  try {
+    db.prepare("ALTER TABLE market_prices ADD COLUMN min_wholesale REAL").run();
+  } catch {}
+  try {
+    db.prepare("ALTER TABLE market_prices ADD COLUMN max_wholesale REAL").run();
+  } catch {}
+  try {
+    db.prepare("ALTER TABLE market_prices ADD COLUMN min_retail REAL").run();
+  } catch {}
+  try {
+    db.prepare("ALTER TABLE market_prices ADD COLUMN max_retail REAL").run();
   } catch {}
 
   seedDemoUsers();
@@ -347,158 +364,32 @@ function seedDemoUsers() {
   }
 }
 
-// ─── SEED OFFICIAL DAM MARKET PRICES ─────────────────────────────────────────
-function seedOfficialMarketPrices() {
+// ─── SEED OFFICIAL DAM MARKET PRICES (COMPREHENSIVE 64 DISTRICTS) ─────────────
+export function seedOfficialMarketPrices() {
   const countStmt = db.prepare('SELECT COUNT(*) as count FROM market_prices');
   const { count } = countStmt.get() as { count: number };
-  if (count > 0) return;
 
-  const nowIso = new Date().toISOString();
-  const insertStmt = db.prepare(`
-    INSERT INTO market_prices (
-      id, district, upazila, market_name, market_name_bn, crop_name, bangla_name,
-      category, wholesale_price, wholesale_dhaka, retail_price, unit, change_24h,
-      trend, source, last_updated
-    ) VALUES (
-      @id, @district, @upazila, @market_name, @market_name_bn, @crop_name, @bangla_name,
-      @category, @wholesale_price, @wholesale_dhaka, @retail_price, @unit, @change_24h,
-      @trend, @source, @last_updated
-    )
-  `);
+  // If database contains fewer than 1,200 records, seed/update all 64 districts with 34 commodities each
+  if (count < 1200) {
+    const insertStmt = db.prepare(`
+      INSERT OR REPLACE INTO market_prices (
+        id, district, upazila, market_name, market_name_bn, crop_name, bangla_name,
+        category, wholesale_price, wholesale_dhaka, retail_price, min_wholesale, max_wholesale,
+        min_retail, max_retail, unit, change_24h, trend, source, last_updated
+      ) VALUES (
+        @id, @district, @upazila, @market_name, @market_name_bn, @crop_name, @bangla_name,
+        @category, @wholesale_price, @wholesale_dhaka, @retail_price, @min_wholesale, @max_wholesale,
+        @min_retail, @max_retail, @unit, @change_24h, @trend, @source, @last_updated
+      )
+    `);
 
-  const initialRates = [
-    {
-      id: 'dam-bog-1',
-      district: 'Bogura',
-      upazila: 'Shibganj',
-      market_name: 'Mahasthangarh Mokam & Arat',
-      market_name_bn: 'মহাস্থানগড় মোকাম ও আড়ত',
-      crop_name: 'Tomato (Hybrid Ripe)',
-      bangla_name: 'হাইব্রিড পাকা টমেটো',
-      category: 'Vegetables',
-      wholesale_price: 38,
-      wholesale_dhaka: 46,
-      retail_price: 52,
-      unit: 'kg',
-      change_24h: 2.5,
-      trend: 'up',
-      source: 'Department of Agricultural Marketing (DAM)',
-      last_updated: nowIso,
-    },
-    {
-      id: 'dam-bog-2',
-      district: 'Bogura',
-      upazila: 'Bogura Sadar',
-      market_name: 'Chak Jadu Wholesale Market',
-      market_name_bn: 'চক জাদু পাইকারি বাজার',
-      crop_name: 'Potato (Diamond Table)',
-      bangla_name: 'ডায়মন্ড আলু (খাবার)',
-      category: 'Tubers',
-      wholesale_price: 28,
-      wholesale_dhaka: 34,
-      retail_price: 40,
-      unit: 'kg',
-      change_24h: -1.0,
-      trend: 'down',
-      source: 'Department of Agricultural Marketing (DAM)',
-      last_updated: nowIso,
-    },
-    {
-      id: 'dam-bog-3',
-      district: 'Bogura',
-      upazila: 'Sariakandi',
-      market_name: 'Char Jamuna Mokam',
-      market_name_bn: 'চর যমুনা মোকাম',
-      crop_name: 'Green Chili (Fresh)',
-      bangla_name: 'তাজা কাঁচা মরিচ',
-      category: 'Spices',
-      wholesale_price: 85,
-      wholesale_dhaka: 110,
-      retail_price: 130,
-      unit: 'kg',
-      change_24h: 5.0,
-      trend: 'up',
-      source: 'Department of Agricultural Marketing (DAM)',
-      last_updated: nowIso,
-    },
-    {
-      id: 'dam-bog-4',
-      district: 'Bogura',
-      upazila: 'Sherpur',
-      market_name: 'Sherpur Grain Arat',
-      market_name_bn: 'শেরপুর শস্য আড়ত',
-      crop_name: 'Paddy / Rice (BRRI-28)',
-      bangla_name: 'ব্রি ধান-২৮ (প্রতি মণ)',
-      category: 'Grains',
-      wholesale_price: 32,
-      wholesale_dhaka: 36,
-      retail_price: 64,
-      unit: 'kg',
-      change_24h: 0.5,
-      trend: 'stable',
-      source: 'Department of Agricultural Marketing (DAM)',
-      last_updated: nowIso,
-    },
-    {
-      id: 'dam-raj-1',
-      district: 'Rajshahi',
-      upazila: 'Paba',
-      market_name: 'Baneswar Wholesale Arat',
-      market_name_bn: 'বানেশ্বর হাট আড়ত',
-      crop_name: 'Eggplant / Brinjal (Gol Begun)',
-      bangla_name: 'গোল বেগুন',
-      category: 'Vegetables',
-      wholesale_price: 36,
-      wholesale_dhaka: 48,
-      retail_price: 55,
-      unit: 'kg',
-      change_24h: 1.5,
-      trend: 'up',
-      source: 'Department of Agricultural Marketing (DAM)',
-      last_updated: nowIso,
-    },
-    {
-      id: 'dam-dhk-1',
-      district: 'Dhaka',
-      upazila: 'Tejgaon',
-      market_name: 'Karwan Bazar Central Arat',
-      market_name_bn: 'কাওরান বাজার পাইকারি মোকাম',
-      crop_name: 'Tomato (Table Grade A)',
-      bangla_name: 'টমেটো গ্রেড-এ',
-      category: 'Vegetables',
-      wholesale_price: 46,
-      wholesale_dhaka: 46,
-      retail_price: 58,
-      unit: 'kg',
-      change_24h: 2.0,
-      trend: 'up',
-      source: 'Department of Agricultural Marketing (DAM)',
-      last_updated: nowIso,
-    },
-    {
-      id: 'dam-ran-1',
-      district: 'Rangpur',
-      upazila: 'Mithapukur',
-      market_name: 'Mithapukur Haat',
-      market_name_bn: 'মিঠাপুকুর হাট',
-      crop_name: 'Winter Cauliflower',
-      bangla_name: 'শীতকালীন তাজা ফুলকপি',
-      category: 'Vegetables',
-      wholesale_price: 24,
-      wholesale_dhaka: 35,
-      retail_price: 45,
-      unit: 'kg',
-      change_24h: -2.0,
-      trend: 'down',
-      source: 'Department of Agricultural Marketing (DAM)',
-      last_updated: nowIso,
-    },
-  ];
-
-  const insertMany = db.transaction((rates: any[]) => {
-    for (const r of rates) insertStmt.run(r);
-  });
-  insertMany(initialRates);
+    const allRates = getAllDistrictsMarketPrices();
+    const insertMany = db.transaction((rates: any[]) => {
+      for (const r of rates) insertStmt.run(r);
+    });
+    insertMany(allRates);
+    console.log(`[SQLite] Successfully seeded ${allRates.length} DAM market prices across all 64 districts.`);
+  }
 }
 
 // ─── SEED WHOLESALER PURCHASE OFFERS (Farmer-Only Intelligence) ──────────────
