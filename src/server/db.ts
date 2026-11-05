@@ -91,9 +91,6 @@ export function initDatabase() {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
-    try {
-      db.prepare("ALTER TABLE orders ADD COLUMN order_status TEXT DEFAULT 'pending'").run();
-    } catch {}
 
     CREATE TABLE IF NOT EXISTS order_items (
       id TEXT PRIMARY KEY,
@@ -165,6 +162,10 @@ export function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_orders_seller ON orders(seller_id);
     CREATE INDEX IF NOT EXISTS idx_market_district ON market_prices(district);
   `);
+
+  try {
+    db.prepare("ALTER TABLE orders ADD COLUMN order_status TEXT DEFAULT 'pending'").run();
+  } catch {}
 
   seedDemoUsers();
   seedOfficialMarketPrices();
