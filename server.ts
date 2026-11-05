@@ -1150,6 +1150,7 @@ app.post('/api/products', requireAuth, async (req: AuthenticatedRequest, res) =>
       return res.status(403).json({ error: 'Only Farmers, Wholesalers, and Retailers are authorized to publish products.' });
     }
 
+    const effectiveUnit = (unit === 'dozen' ? 'dozen' : 'kg');
     const finalQuantity = Number(quantity || quantityKg);
     const finalPrice = Number(unitPrice || pricePerKg);
 
@@ -1159,30 +1160,55 @@ app.post('/api/products', requireAuth, async (req: AuthenticatedRequest, res) =>
 
     const prodId = `prod-${sRole.slice(0, 3)}-${Date.now()}`;
     const finalMarketPrice = marketPricePerKg ? Number(marketPricePerKg) : finalPrice * 1.15;
+    const finalImg = imageUrl || 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=800&auto=format&fit=crop&q=80';
 
     await pool.query(`
       INSERT INTO products (
         id, seller_id, seller_name, seller_phone, seller_role, target_role,
         crop_name, bangla_name, category, variety, unit, quantity, available_qty,
-        min_order_qty, unit_price, market_price, quality_grade, district,
+        quantity_kg, available_kg, min_order_qty, unit_price, price_per_kg, market_price, quality_grade, district,
         upazila, location_details, harvest_status, available_date, organic_certified,
         image_url, description, farmer_origin, wholesaler_arat, procurement_date,
         safety_note, created_at, updated_at
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
-        $14, $15, $16, $17, $18, $19, $20, $21, $22, $23,
+        $12, $13, $14, $15, $15, $16, $17, $18, $19, $20, $21, $22, $23,
         $24, $25, $26, $27, $28, $29, NOW(), NOW()
       )
     `, [
       prodId, effectiveSellerId, effectiveSellerName, effectiveSellerPhone, sRole, targetRole,
-      cropName, banglaName || cropName, category, variety || '', unit || 'kg', finalQuantity, finalQuantity,
+      cropName, banglaName || cropName, category, variety || '', effectiveUnit, finalQuantity, finalQuantity,
       Number(minOrderKg) || 1, finalPrice, finalMarketPrice, qualityGrade, district,
       upazila || '', locationDetails || '', harvestStatus, availableDate, Boolean(organicCertified),
-      imageUrl || 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=800&auto=format&fit=crop&q=80',
+      finalImg,
       description || '', farmerOrigin || (sRole === 'farmer' ? effectiveSellerName : ''),
       wholesalerArat || (sRole === 'wholesaler' ? effectiveSellerName : ''),
       procurementDate || '', safetyNote || ''
     ]);
+
+    try {
+      db.prepare(`
+        INSERT INTO products (
+          id, seller_id, seller_name, seller_phone, seller_role, target_role,
+          crop_name, bangla_name, category, variety, unit, quantity, available_qty,
+          quantity_kg, available_kg, min_order_kg, price_per_kg, market_price_per_kg, quality_grade, district,
+          upazila, location_details, harvest_status, available_date, organic_certified,
+          image_url, description, farmer_origin, wholesaler_arat, procurement_date,
+          safety_note, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        prodId, effectiveSellerId, effectiveSellerName, effectiveSellerPhone, sRole, targetRole,
+        cropName, banglaName || cropName, category, variety || '', effectiveUnit, finalQuantity, finalQuantity,
+        finalQuantity, finalQuantity, Number(minOrderKg) || 1, finalPrice, finalMarketPrice, qualityGrade, district,
+        upazila || '', locationDetails || '', harvestStatus, availableDate, organicCertified ? 1 : 0,
+        finalImg,
+        description || '', farmerOrigin || (sRole === 'farmer' ? effectiveSellerName : ''),
+        wholesalerArat || (sRole === 'wholesaler' ? effectiveSellerName : ''),
+        procurementDate || '', safetyNote || '', new Date().toISOString()
+      );
+    } catch (e: any) {
+      console.warn('[SQLite] products sync warning:', e.message);
+    }
 
     return res.status(201).json({
       success: true,
@@ -1200,7 +1226,7 @@ app.post('/api/products', requireAuth, async (req: AuthenticatedRequest, res) =>
 app.put('/api/products/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
     const { id } = req.params;
-    const { pricePerKg, unitPrice, quantityKg, quantity, availableKg, availableQty, qualityGrade, harvestStatus, description, imageUrl } = req.body;
+    const { unit, pricePerKg, unitPrice, quantityKg, quantity, availableKg, availableQty, qualityGrade, harvestStatus, description, imageUrl } = req.body;
 
     const existingRes = await pool.query('SELECT * FROM products WHERE id = $1', [id]);
     if (existingRes.rows.length === 0) return res.status(404).json({ error: 'Product not found.' });
@@ -1216,17 +1242,21 @@ app.put('/api/products/:id', requireAuth, async (req: AuthenticatedRequest, res)
 
     await pool.query(`
       UPDATE products
-      SET unit_price = COALESCE($1, unit_price),
-          quantity = COALESCE($2, quantity),
-          available_qty = COALESCE($3, available_qty),
-          quality_grade = COALESCE($4, quality_grade),
-          harvest_status = COALESCE($5, harvest_status),
-          description = COALESCE($6, description),
-          image_url = COALESCE($7, image_url),
+      SET unit = COALESCE($1, unit),
+          unit_price = COALESCE($2, unit_price),
+          price_per_kg = COALESCE($2, price_per_kg),
+          quantity = COALESCE($3, quantity),
+          quantity_kg = COALESCE($3, quantity_kg),
+          available_qty = COALESCE($4, available_qty),
+          available_kg = COALESCE($4, available_kg),
+          quality_grade = COALESCE($5, quality_grade),
+          harvest_status = COALESCE($6, harvest_status),
+          description = COALESCE($7, description),
+          image_url = COALESCE($8, image_url),
           updated_at = NOW()
-      WHERE id = $8
+      WHERE id = $9
     `, [
-      newPrice, newQty, newAvail, qualityGrade || null, harvestStatus || null,
+      unit || null, newPrice, newQty, newAvail, qualityGrade || null, harvestStatus || null,
       description || null, imageUrl || null, id
     ]);
 

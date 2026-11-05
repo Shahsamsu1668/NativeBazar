@@ -246,6 +246,63 @@ export async function initNeonDatabase(): Promise<void> {
       console.warn('[Neon] market_prices table init warning:', err.message);
     }
 
+
+    // 9. Products table in Neon PostgreSQL
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS products (
+          id TEXT PRIMARY KEY,
+          seller_id TEXT NOT NULL,
+          seller_name TEXT NOT NULL,
+          seller_phone TEXT,
+          seller_role TEXT NOT NULL,
+          target_role TEXT NOT NULL,
+          crop_name TEXT NOT NULL,
+          bangla_name TEXT NOT NULL,
+          category TEXT NOT NULL,
+          variety TEXT,
+          unit TEXT DEFAULT 'kg',
+          quantity NUMERIC NOT NULL DEFAULT 0,
+          available_qty NUMERIC NOT NULL DEFAULT 0,
+          quantity_kg NUMERIC,
+          available_kg NUMERIC,
+          min_order_qty NUMERIC DEFAULT 1,
+          unit_price NUMERIC NOT NULL DEFAULT 0,
+          price_per_kg NUMERIC,
+          market_price NUMERIC,
+          quality_grade TEXT DEFAULT 'A',
+          district TEXT NOT NULL,
+          upazila TEXT,
+          location_details TEXT,
+          harvest_status TEXT,
+          available_date TEXT,
+          organic_certified BOOLEAN DEFAULT FALSE,
+          image_url TEXT,
+          description TEXT,
+          farmer_origin TEXT,
+          wholesaler_arat TEXT,
+          procurement_date TEXT,
+          safety_note TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        ALTER TABLE products ADD COLUMN IF NOT EXISTS unit TEXT DEFAULT 'kg';
+        ALTER TABLE products ADD COLUMN IF NOT EXISTS quantity NUMERIC DEFAULT 0;
+        ALTER TABLE products ADD COLUMN IF NOT EXISTS available_qty NUMERIC DEFAULT 0;
+        ALTER TABLE products ADD COLUMN IF NOT EXISTS quantity_kg NUMERIC;
+        ALTER TABLE products ADD COLUMN IF NOT EXISTS available_kg NUMERIC;
+        ALTER TABLE products ADD COLUMN IF NOT EXISTS min_order_qty NUMERIC DEFAULT 1;
+        ALTER TABLE products ADD COLUMN IF NOT EXISTS unit_price NUMERIC DEFAULT 0;
+        ALTER TABLE products ADD COLUMN IF NOT EXISTS price_per_kg NUMERIC;
+        CREATE INDEX IF NOT EXISTS idx_products_target_role ON products(target_role);
+        CREATE INDEX IF NOT EXISTS idx_products_seller_id ON products(seller_id);
+        CREATE INDEX IF NOT EXISTS idx_products_seller_role ON products(seller_role);
+        CREATE INDEX IF NOT EXISTS idx_products_district ON products(district);
+      `);
+    } catch (err: any) {
+      console.warn('[Neon] products table init warning:', err.message);
+    }
+
     console.log('Neon PostgreSQL tables verified and active for production.');
   } finally {
     client.release();

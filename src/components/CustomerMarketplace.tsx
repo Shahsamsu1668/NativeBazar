@@ -606,11 +606,11 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
                         <span className="text-base sm:text-lg font-black text-stone-900">
                           ৳{product.pricePerKg}
                         </span>
-                        <span className="text-[11px] font-semibold text-stone-500">/kg</span>
+                        <span className="text-[11px] font-semibold text-stone-500">/{product.unit === 'dozen' ? (language === 'bn' ? 'ডজন' : 'dozen') : (language === 'bn' ? 'কেজি' : 'kg')}</span>
                       </div>
                       {product.marketPricePerKg && product.marketPricePerKg > product.pricePerKg && (
                         <span className="text-[10px] text-stone-400 line-through block">
-                          {language === 'bn' ? `সরকারি কৃষি বিপণন দর: ৳${toBanglaNumber(product.marketPricePerKg)}/কেজি` : `Govt DAM: ৳${product.marketPricePerKg}/kg`}
+                          {language === 'bn' ? `সরকারি কৃষি বিপণন দর: ৳${toBanglaNumber(product.marketPricePerKg)}/${product.unit === 'dozen' ? 'ডজন' : 'কেজি'}` : `Govt DAM: ৳${product.marketPricePerKg}/${product.unit === 'dozen' ? 'dozen' : 'kg'}`}
                         </span>
                       )}
                     </div>
@@ -698,11 +698,11 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
                       <div className="text-xs text-stone-500">
                         {language === 'bn' ? 'মজুদ আছে:' : 'Stock Available:'}{' '}
                         <strong className="text-stone-800 font-bold">
-                          {product.availableKg} kg
+                          {product.availableKg} {product.unit === 'dozen' ? (language === 'bn' ? 'ডজন' : 'dozen') : (language === 'bn' ? 'কেজি' : 'kg')}
                         </strong>
                         {product.minOrderKg && product.minOrderKg > 1 && (
                           <span className="text-[10px] text-stone-400 block">
-                            ({language === 'bn' ? 'নূন্যতম:' : 'Min:'} {language === 'bn' ? toBanglaNumber(product.minOrderKg) : product.minOrderKg} {language === 'bn' ? 'কেজি' : 'kg'})
+                            ({language === 'bn' ? 'নূন্যতম:' : 'Min:'} {language === 'bn' ? toBanglaNumber(product.minOrderKg) : product.minOrderKg} {product.unit === 'dozen' ? (language === 'bn' ? 'ডজন' : 'dozen') : (language === 'bn' ? 'কেজি' : 'kg')})
                           </span>
                         )}
                       </div>
@@ -716,7 +716,7 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
                             <Minus className="w-3.5 h-3.5" />
                           </button>
                           <span className="font-extrabold text-xs px-2 text-stone-900">
-                            {language === 'bn' ? toBanglaNumber(inCart.quantityKg) : inCart.quantityKg} {language === 'bn' ? 'কেজি' : 'kg'}
+                            {language === 'bn' ? toBanglaNumber(inCart.quantityKg) : inCart.quantityKg} {product.unit === 'dozen' ? (language === 'bn' ? 'ডজন' : 'dozen') : (language === 'bn' ? 'কেজি' : 'kg')}
                           </span>
                           <button
                             onClick={() => updateCartQty(product.id, 1)}
@@ -780,7 +780,7 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
                             : item.product.cropName}
                         </h4>
                         <p className="text-[10px] text-stone-500">
-                          {item.quantityKg} kg × ৳{item.product.pricePerKg} •{' '}
+                          {item.quantityKg} {item.product.unit === 'dozen' ? (language === 'bn' ? 'ডজন' : 'dozen') : (language === 'bn' ? 'কেজি' : 'kg')} × ৳{item.product.pricePerKg} •{' '}
                           <span className="text-emerald-700 font-semibold truncate">
                             {item.product.sellerName}
                           </span>

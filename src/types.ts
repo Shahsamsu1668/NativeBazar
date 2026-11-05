@@ -165,6 +165,10 @@ export interface MarketplaceProduct {
   banglaName: string;
   category: 'Vegetables' | 'Tubers' | 'Grains' | 'Spices' | 'Fruits' | string;
   variety?: string;
+  unit?: 'kg' | 'dozen';
+  quantity?: number;
+  availableQty?: number;
+  unitPrice?: number;
   quantityKg: number;
   availableKg: number;
   minOrderKg?: number;

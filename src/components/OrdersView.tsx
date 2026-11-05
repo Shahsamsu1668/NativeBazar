@@ -590,7 +590,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({ currentUser, language })
                             {language === 'bn' ? it.banglaName || it.cropName : it.cropName}
                           </span>
                           <span className="text-stone-500 text-[11px] ml-2">
-                            {formatNum(it.quantityKg)} {t('kg', 'কেজি')} × ৳{formatNum(it.unitPrice)}/{t('kg', 'কেজি')}
+                            {formatNum(it.quantityKg)} {it.unit === 'dozen' ? t('dozen', 'ডজন') : t('kg', 'কেজি')} × ৳{formatNum(it.unitPrice)}/{it.unit === 'dozen' ? t('dozen', 'ডজন') : t('kg', 'কেজি')}
                           </span>
                         </div>
                         <span className="font-extrabold text-stone-800">

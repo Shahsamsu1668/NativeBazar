@@ -12,6 +12,8 @@ import { NotificationStore } from '../data/store';
 import { MASTER_AGRICULTURAL_CATALOG } from '../data/catalogData';
 import {
   Store,
+  Camera,
+  Upload,
   Package,
   Truck,
   PlusCircle,
@@ -252,13 +254,15 @@ export const RetailerDashboard: React.FC<RetailerDashboardProps> = ({
   const [retailProductsLoading, setRetailProductsLoading] = useState(false);
   const [showAddRetailModal, setShowAddRetailModal] = useState(false);
   const [retailForm, setRetailForm] = useState({
-    cropName: 'Fresh Table Tomatoes',
-    banglaName: 'তাজা পাকা টমেটো',
+    cropName: '',
+    banglaName: '',
     category: 'Vegetables',
-    variety: 'Hybrid Shingro-3',
-    quantityKg: 300,
-    pricePerKg: 52,
-    marketPricePerKg: 56,
+    variety: 'Fresh Quality A',
+    unit: 'kg' as 'kg' | 'dozen',
+    quantityKg: '' as number | '',
+    quantityDozen: '' as number | '',
+    pricePerUnit: '' as number | '',
+    marketPricePerUnit: '' as number | '',
     qualityGrade: 'A' as 'A' | 'B' | 'C',
     organicCertified: true,
     farmerOrigin: 'Shibganj Farmer Cooperatives, Bogura',
@@ -266,12 +270,31 @@ export const RetailerDashboard: React.FC<RetailerDashboardProps> = ({
     wholesalerArat: 'Mahasthangarh Wholesale Arat Hub',
     wholesalerAratBn: 'মহাস্থানগড় পাইকারি আড়ত হাব',
     locationDetails: currentUser.address || `${currentUser.upazila || 'Bogura Sadar'} Retail Store`,
-    imageUrl: 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=800&auto=format&fit=crop&q=80',
-    description: 'Crisp, hand-picked table tomatoes directly sourced from Shibganj fields. Certified formalin-free and ready for home delivery.',
-    descriptionBn: 'শিবগঞ্জের মাঠ থেকে সরাসরি সংগৃহীত তাজা পাকা টমেটো। ১০০% ফরমালিনমুক্ত এবং দ্রুত হোম ডেলিভারির জন্য প্রস্তুত।',
+    imageUrl: '',
+    description: '',
+    descriptionBn: '',
     safetyNote: '100% formalin-free tested. Harvested naturally without chemical ripening agents.',
     safetyNoteBn: '১০০% ফরমালিনমুক্ত পরীক্ষিত। রাসায়নিক পাকানোর উপাদান ছাড়া প্রাকৃতিকভাবে সংগৃহীত।',
   });
+
+  const retailFileInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  const handleRetailImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 8 * 1024 * 1024) {
+        showToast(t('Image must be under 8MB', 'ছবির সাইজ ৮ মেগাবাইটের কম হতে হবে'), 'error');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (typeof reader.result === 'string') {
+          setRetailForm((f) => ({ ...f, imageUrl: reader.result as string }));
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const [consumerOrders, setConsumerOrders] = useState<SupplyChainOrder[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
@@ -447,11 +470,39 @@ export const RetailerDashboard: React.FC<RetailerDashboardProps> = ({
   // Publish Retail Product for Consumers (Retailer -> Consumer)
   const handlePublishRetailProduct = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const enName = retailForm.cropName.trim();
+    const bnName = retailForm.banglaName.trim() || enName;
+
+    if (!enName) {
+      showToast(t('Please enter product name', 'অনুগ্রহ করে পণ্যের নাম লিখুন'), 'error');
+      return;
+    }
+
+    const currentQty = retailForm.unit === 'dozen' ? Number(retailForm.quantityDozen) : Number(retailForm.quantityKg);
+    if (!currentQty || currentQty <= 0) {
+      showToast(
+        retailForm.unit === 'dozen'
+          ? t('Please enter valid quantity in dozen', 'অনুগ্রহ করে ডজনে সঠিক পরিমাণ লিখুন')
+          : t('Please enter valid quantity in kg', 'অনুগ্রহ করে কেজিতে সঠিক পরিমাণ লিখুন'),
+        'error'
+      );
+      return;
+    }
+
+    const currentPrice = Number(retailForm.pricePerUnit);
+    if (!currentPrice || currentPrice <= 0) {
+      showToast(
+        retailForm.unit === 'dozen'
+          ? t('Please enter valid retail price per dozen', 'অনুগ্রহ করে প্রতি ডজনের সঠিক খুচরা মূল্য লিখুন')
+          : t('Please enter valid retail price per kg', 'অনুগ্রহ করে প্রতি কেজির সঠিক খুচরা মূল্য লিখুন'),
+        'error'
+      );
+      return;
+    }
+
     if (isPublishingProduct) return;
     setIsPublishingProduct(true);
-
-    const enName = retailForm.cropName.trim() || getCropName({ banglaName: retailForm.banglaName }, 'en');
-    const bnName = retailForm.banglaName.trim() || getCropName({ cropName: retailForm.cropName }, 'bn');
 
     const combinedOrigin = retailForm.farmerOriginBn.trim()
       ? `${retailForm.farmerOrigin.trim()} || ${retailForm.farmerOriginBn.trim()}`
@@ -461,13 +512,16 @@ export const RetailerDashboard: React.FC<RetailerDashboardProps> = ({
       ? `${retailForm.wholesalerArat.trim()} || ${retailForm.wholesalerAratBn.trim()}`
       : retailForm.wholesalerArat.trim();
 
-    const combinedDesc = retailForm.descriptionBn.trim()
-      ? `${retailForm.description.trim()} || ${retailForm.descriptionBn.trim()}`
-      : retailForm.description.trim();
+    const defaultDescEn = `Freshly stocked ${enName} procured directly from verified regional markets.`;
+    const defaultDescBn = `${bnName} সরাসরি আড়ত ও কৃষক থেকে সংগৃহীত। ১০০% ফরমালিনমুক্ত এবং তাজা।`;
+
+    const combinedDesc = (retailForm.description.trim() || defaultDescEn) + ' || ' + (retailForm.descriptionBn.trim() || defaultDescBn);
 
     const combinedSafety = retailForm.safetyNoteBn.trim()
       ? `${retailForm.safetyNote.trim()} || ${retailForm.safetyNoteBn.trim()}`
       : retailForm.safetyNote.trim();
+
+    const finalImg = retailForm.imageUrl || 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=800&auto=format&fit=crop&q=80';
 
     try {
       await productApi.createProduct({
@@ -479,12 +533,16 @@ export const RetailerDashboard: React.FC<RetailerDashboardProps> = ({
         cropName: enName,
         banglaName: bnName,
         category: retailForm.category,
-        variety: retailForm.variety,
-        quantityKg: retailForm.quantityKg,
-        availableKg: retailForm.quantityKg,
+        variety: retailForm.variety || 'Fresh Quality A',
+        unit: retailForm.unit,
+        quantity: currentQty,
+        availableQty: currentQty,
+        quantityKg: currentQty,
+        availableKg: currentQty,
         minOrderKg: 1,
-        pricePerKg: retailForm.pricePerKg,
-        marketPricePerKg: retailForm.marketPricePerKg,
+        pricePerKg: currentPrice,
+        unitPrice: currentPrice,
+        marketPricePerKg: retailForm.marketPricePerUnit ? Number(retailForm.marketPricePerUnit) : currentPrice * 1.1,
         qualityGrade: retailForm.qualityGrade,
         district: currentUser?.district || 'Bogura',
         upazila: currentUser?.upazila || 'Bogura Sadar',
@@ -492,7 +550,7 @@ export const RetailerDashboard: React.FC<RetailerDashboardProps> = ({
         harvestStatus: 'Fresh Farm Stock',
         availableDate: 'Ready for Home Delivery',
         organicCertified: retailForm.organicCertified,
-        imageUrl: retailForm.imageUrl,
+        imageUrl: finalImg,
         description: combinedDesc,
         traceability: {
           farmerOrigin: combinedOrigin,
@@ -502,18 +560,43 @@ export const RetailerDashboard: React.FC<RetailerDashboardProps> = ({
         },
       });
 
+      const unitText = retailForm.unit === 'dozen' ? (language === 'bn' ? 'ডজন' : 'dozen') : (language === 'bn' ? 'কেজি' : 'kg');
+
       NotificationStore.addSystemNotif(
         currentUser.id,
         t('Retail Product Live on Social Feed!', 'খুচরা পণ্য সোশ্যাল ফিডে প্রকাশিত!'),
         t(
-          `Published ${enName} at ৳${retailForm.pricePerKg}/kg. Consumers can now purchase via Guest Checkout.`,
-          `${bnName} ৳${toBanglaNumber(retailForm.pricePerKg)}/কেজি দরে ফিডে উন্মুক্ত করা হয়েছে। ভোক্তারা সরাসরি অর্ডার করতে পারবেন।`
+          `Published ${enName} (${currentQty} ${unitText}) at ৳${currentPrice}/${unitText}. Consumers can now purchase via Guest Checkout.`,
+          `${bnName} (${currentQty} ${unitText}) ৳${toBanglaNumber(currentPrice)}/${unitText} দরে ফিডে উন্মুক্ত করা হয়েছে।`
         ),
         'success'
       );
 
       showToast(t('Retail Product Live on Social Feed!', 'খুচরা পণ্য সোশ্যাল ফিডে প্রকাশিত!'), 'success');
       setShowAddRetailModal(false);
+      setRetailForm({
+        cropName: '',
+        banglaName: '',
+        category: 'Vegetables',
+        variety: 'Fresh Quality A',
+        unit: 'kg',
+        quantityKg: '',
+        quantityDozen: '',
+        pricePerUnit: '',
+        marketPricePerUnit: '',
+        qualityGrade: 'A',
+        organicCertified: true,
+        farmerOrigin: 'Shibganj Farmer Cooperatives, Bogura',
+        farmerOriginBn: 'শিবগঞ্জ কৃষক সমবায়, বগুড়া',
+        wholesalerArat: 'Mahasthangarh Wholesale Arat Hub',
+        wholesalerAratBn: 'মহাস্থানগড় পাইকারি আড়ত হাব',
+        locationDetails: currentUser.address || `${currentUser.upazila || 'Bogura Sadar'} Retail Store`,
+        imageUrl: '',
+        description: '',
+        descriptionBn: '',
+        safetyNote: '100% formalin-free tested. Harvested naturally without chemical ripening agents.',
+        safetyNoteBn: '১০০% ফরমালিনমুক্ত পরীক্ষিত। রাসায়নিক পাকানোর উপাদান ছাড়া প্রাকৃতিকভাবে সংগৃহীত।',
+      });
       loadMyRetailProducts();
     } catch (err: any) {
       showToast(err.message || t('Failed to publish retail product', 'পণ্য প্রকাশ করতে ব্যর্থ হয়েছে'), 'error');
@@ -920,7 +1003,7 @@ export const RetailerDashboard: React.FC<RetailerDashboardProps> = ({
                       </div>
                       <div className="absolute bottom-2 right-2 bg-white/95 px-3 py-1 rounded-xl shadow-md border border-stone-200 text-right backdrop-blur-xs">
                         <span className="text-base font-black text-stone-900">৳{formatNum(prod.pricePerKg)}</span>
-                        <span className="text-[10px] text-stone-500">{t('/kg retail', '/কেজি খুচরা')}</span>
+                        <span className="text-[10px] text-stone-500">/{prod.unit === 'dozen' ? (language === 'bn' ? 'ডজন খুচরা' : 'dozen retail') : (language === 'bn' ? 'কেজি খুচরা' : 'kg retail')}</span>
                       </div>
                     </div>
 
@@ -1226,11 +1309,17 @@ export const RetailerDashboard: React.FC<RetailerDashboardProps> = ({
       {showAddRetailModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-stone-200 my-8 animate-scale-up">
-            <div className="flex items-center justify-between pb-3 border-b border-stone-100">
-              <h3 className="font-extrabold text-stone-900 text-base">
-                {t('Publish Retail Product to Consumer Marketplace', 'ভোক্তাদের জন্য খুচরা পণ্য প্রকাশ')}
-              </h3>
+            <div className="flex items-center justify-between pb-3.5 border-b border-stone-100">
+              <div>
+                <h3 className="font-extrabold text-stone-900 text-base sm:text-lg">
+                  {t('Publish Retail Product to Consumer Marketplace', 'ভোক্তাদের জন্য খুচরা পণ্য প্রকাশ')}
+                </h3>
+                <p className="text-xs text-stone-500">
+                  {t('Manual entry with custom image and unit selection', 'ম্যানুয়াল নাম, ছবি এবং একক নির্ধারণ')}
+                </p>
+              </div>
               <button
+                type="button"
                 onClick={() => setShowAddRetailModal(false)}
                 className="w-8 h-8 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-600 flex items-center justify-center font-bold cursor-pointer"
               >
@@ -1239,16 +1328,18 @@ export const RetailerDashboard: React.FC<RetailerDashboardProps> = ({
             </div>
 
             <form onSubmit={handlePublishRetailProduct} className="space-y-3.5 mt-4 text-xs">
-              <div className="grid grid-cols-2 gap-2">
+              {/* Product Titles */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div>
                   <label className="block font-bold text-stone-700 mb-1">
-                    {t('Product Title (English)', 'পণ্যের ইংরেজি নাম')} *
+                    {t('Product Title (English / Common) *', 'পণ্যের নাম লিখুন *')}
                   </label>
                   <input
                     type="text"
                     value={retailForm.cropName}
                     onChange={(e) => setRetailForm((f) => ({ ...f, cropName: e.target.value }))}
-                    className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl font-medium"
+                    placeholder="e.g. Fresh Tomatoes, Eggs..."
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl font-bold text-stone-900 focus:outline-hidden focus:border-emerald-600 focus:bg-white"
                     required
                   />
                 </div>
@@ -1260,12 +1351,14 @@ export const RetailerDashboard: React.FC<RetailerDashboardProps> = ({
                     type="text"
                     value={retailForm.banglaName}
                     onChange={(e) => setRetailForm((f) => ({ ...f, banglaName: e.target.value }))}
-                    className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl font-medium"
+                    placeholder="যেমন: তাজা পাকা টমেটো, দেশি ডিম..."
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl font-medium focus:outline-hidden focus:border-emerald-600 focus:bg-white"
                     required
                   />
                 </div>
               </div>
 
+              {/* Category & Variety */}
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="block font-bold text-stone-700 mb-1">
@@ -1281,55 +1374,10 @@ export const RetailerDashboard: React.FC<RetailerDashboardProps> = ({
                     <option value="Spices">{t('Spices', 'মশলা')}</option>
                     <option value="Grains">{t('Grains', 'খাদ্যশস্য')}</option>
                     <option value="Fruits">{t('Fruits', 'ফলমূল')}</option>
+                    <option value="Poultry">{t('Poultry & Eggs', 'পোল্ট্রি ও ডিম')}</option>
+                    <option value="Other">{t('Other', 'অন্যান্য')}</option>
                   </select>
                 </div>
-                <div>
-                  <label className="block font-bold text-stone-700 mb-1">
-                    {t('Retail Stock (kg)', 'মজুদ পরিমাণ (কেজি)')} *
-                  </label>
-                  <input
-                    type="number"
-                    value={retailForm.quantityKg}
-                    onChange={(e) =>
-                      setRetailForm((f) => ({ ...f, quantityKg: Number(e.target.value) }))
-                    }
-                    className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl font-bold"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block font-bold text-stone-700 mb-1">
-                    {t('Consumer Retail Price (৳/kg) *', 'ভোক্তা খুচরা বিক্রয় মূল্য (৳/কেজি) *')}
-                  </label>
-                  <input
-                    type="number"
-                    value={retailForm.pricePerKg}
-                    onChange={(e) =>
-                      setRetailForm((f) => ({ ...f, pricePerKg: Number(e.target.value) }))
-                    }
-                    className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl font-black text-emerald-700 text-sm"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-stone-700 mb-1">
-                    {t('DAM Benchmark (৳/kg)', 'সরকারি কৃষি বিপণন দর (৳/কেজি)')}
-                  </label>
-                  <input
-                    type="number"
-                    value={retailForm.marketPricePerKg}
-                    onChange={(e) =>
-                      setRetailForm((f) => ({ ...f, marketPricePerKg: Number(e.target.value) }))
-                    }
-                    className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="block font-bold text-stone-700 mb-1">
                     {t('Variety', 'জাত')}
@@ -1342,20 +1390,234 @@ export const RetailerDashboard: React.FC<RetailerDashboardProps> = ({
                     placeholder="e.g. Hybrid Shingro-3"
                   />
                 </div>
+              </div>
+
+              {/* Image Upload Button & Preview */}
+              <div className="pt-1">
+                <label className="block font-bold text-stone-700 mb-1 flex items-center gap-1.5">
+                  <Camera className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>{t('Upload Product Image (Manual Upload)', 'পণ্যের ছবি আপলোড করুন')}</span>
+                </label>
+                <input
+                  type="file"
+                  ref={retailFileInputRef}
+                  accept="image/*"
+                  onChange={handleRetailImageUpload}
+                  className="hidden"
+                />
+
+                {retailForm.imageUrl ? (
+                  <div className="relative inline-block border-2 border-emerald-500 rounded-2xl overflow-hidden shadow-xs">
+                    <img
+                      src={retailForm.imageUrl}
+                      alt="Product Preview"
+                      className="w-32 h-20 object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setRetailForm((f) => ({ ...f, imageUrl: '' }))}
+                      className="absolute top-1 right-1 w-5 h-5 rounded-full bg-red-600 text-white font-black text-xs flex items-center justify-center hover:bg-red-700 transition cursor-pointer"
+                      title={t('Remove Image', 'ছবি মুছুন')}
+                    >
+                      ✕
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => retailFileInputRef.current?.click()}
+                      className="absolute bottom-1 left-1 right-1 py-0.5 px-1 rounded-md bg-black/70 text-white text-[9px] font-bold text-center hover:bg-black/85 transition cursor-pointer"
+                    >
+                      {t('Change Photo', 'ছবি পরিবর্তন')}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => retailFileInputRef.current?.click()}
+                    className="w-full px-3 py-2.5 border-2 border-dashed border-emerald-300 hover:border-emerald-600 bg-emerald-50/50 hover:bg-emerald-50 rounded-xl flex items-center justify-center gap-2 font-bold text-emerald-800 transition cursor-pointer"
+                  >
+                    <Upload className="w-4 h-4 text-emerald-600" />
+                    <span>{t('Choose Image File', 'ডিভাইস থেকে ছবি আপলোড করুন')}</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Dynamic Quantity & Unit Selection */}
+              <div className="pt-2 border-t border-stone-100 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block font-bold text-stone-800">
+                    {t('Quantity & Unit (Mutually Exclusive) *', 'একক ও পরিমাণ নির্ধারণ (পরস্পর স্বতন্ত্র) *')}
+                  </label>
+                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                    {retailForm.unit === 'dozen' ? t('Dozen Mode', 'ডজন সক্রিয়') : t('Kg Mode', 'কেজি সক্রিয়')}
+                  </span>
+                </div>
+
+                {/* Unit Switch Buttons */}
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRetailForm((f) => ({ ...f, unit: 'kg', quantityDozen: '' }));
+                    }}
+                    className={`py-2 px-2.5 rounded-xl font-black text-xs flex items-center justify-center gap-1.5 border-2 transition cursor-pointer ${
+                      retailForm.unit === 'kg'
+                        ? 'border-emerald-600 bg-emerald-50 text-emerald-950 shadow-xs ring-2 ring-emerald-500/20'
+                        : 'border-stone-200 bg-stone-50 text-stone-600 hover:bg-stone-100'
+                    }`}
+                  >
+                    <span>⚖️</span>
+                    <span>{t('Quantity in Kg', 'পরিমাণ কেজিতে')}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRetailForm((f) => ({ ...f, unit: 'dozen', quantityKg: '' }));
+                    }}
+                    className={`py-2 px-2.5 rounded-xl font-black text-xs flex items-center justify-center gap-1.5 border-2 transition cursor-pointer ${
+                      retailForm.unit === 'dozen'
+                        ? 'border-emerald-600 bg-emerald-50 text-emerald-950 shadow-xs ring-2 ring-emerald-500/20'
+                        : 'border-stone-200 bg-stone-50 text-stone-600 hover:bg-stone-100'
+                    }`}
+                  >
+                    <span>🥚</span>
+                    <span>{t('Quantity in Dozen', 'পরিমাণ ডজনে')}</span>
+                  </button>
+                </div>
+
+                {/* Mutually Exclusive Inputs */}
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  {/* Kg Input */}
+                  <div className={`p-2.5 rounded-xl border-2 transition-all ${
+                    retailForm.unit === 'kg'
+                      ? 'border-emerald-500 bg-white shadow-xs'
+                      : 'border-stone-200 bg-stone-100/70 opacity-45 cursor-not-allowed'
+                  }`}>
+                    <label className="block text-[11px] font-bold text-stone-700 mb-1">
+                      {t('Quantity in Kg', 'পরিমাণ কেজিতে')}
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="1"
+                        disabled={retailForm.unit !== 'kg'}
+                        value={retailForm.quantityKg}
+                        onChange={(e) => {
+                          const val = e.target.value === '' ? '' : Math.max(0, Number(e.target.value));
+                          setRetailForm((f) => ({
+                            ...f,
+                            quantityKg: val,
+                            ...(val !== '' ? { unit: 'kg', quantityDozen: '' } : {}),
+                          }));
+                        }}
+                        placeholder="১০০"
+                        className="w-full pl-2.5 pr-8 py-1.5 bg-white border border-stone-300 rounded-lg font-bold text-stone-900 disabled:bg-stone-100 text-xs"
+                      />
+                      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 font-bold text-[10px] text-stone-500">
+                        kg
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Dozen Input */}
+                  <div className={`p-2.5 rounded-xl border-2 transition-all ${
+                    retailForm.unit === 'dozen'
+                      ? 'border-emerald-500 bg-white shadow-xs'
+                      : 'border-stone-200 bg-stone-100/70 opacity-45 cursor-not-allowed'
+                  }`}>
+                    <label className="block text-[11px] font-bold text-stone-700 mb-1">
+                      {t('Quantity in Dozen', 'পরিমাণ ডজনে')}
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="1"
+                        disabled={retailForm.unit !== 'dozen'}
+                        value={retailForm.quantityDozen}
+                        onChange={(e) => {
+                          const val = e.target.value === '' ? '' : Math.max(0, Number(e.target.value));
+                          setRetailForm((f) => ({
+                            ...f,
+                            quantityDozen: val,
+                            ...(val !== '' ? { unit: 'dozen', quantityKg: '' } : {}),
+                          }));
+                        }}
+                        placeholder="৫০"
+                        className="w-full pl-2.5 pr-10 py-1.5 bg-white border border-stone-300 rounded-lg font-bold text-stone-900 disabled:bg-stone-100 text-xs"
+                      />
+                      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 font-bold text-[10px] text-stone-500">
+                        dozen
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Dynamic Prices */}
+              <div className="grid grid-cols-2 gap-2 pt-1 border-t border-stone-100">
                 <div>
                   <label className="block font-bold text-stone-700 mb-1">
-                    {t('Quality Grade', 'মান বা গ্রেড')}
+                    {retailForm.unit === 'dozen'
+                      ? t('Retail Price (৳/dozen) *', 'ভোক্তা বিক্রয় মূল্য (৳/ডজন) *')
+                      : t('Retail Price (৳/kg) *', 'ভোক্তা বিক্রয় মূল্য (৳/কেজি) *')}
                   </label>
-                  <select
-                    value={retailForm.qualityGrade}
-                    onChange={(e) => setRetailForm((f) => ({ ...f, qualityGrade: e.target.value as 'A' | 'B' | 'C' }))}
-                    className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl font-semibold cursor-pointer"
-                  >
-                    <option value="A">{t('Grade A (Premium)', 'গ্রেড এ (উন্নত)')}</option>
-                    <option value="B">{t('Grade B (Standard)', 'গ্রেড বি (সাধারণ)')}</option>
-                    <option value="C">{t('Grade C (Commercial)', 'গ্রেড সি (বাণিজ্যিক)')}</option>
-                  </select>
+                  <div className="relative">
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 font-bold text-emerald-700">৳</span>
+                    <input
+                      type="number"
+                      min="1"
+                      value={retailForm.pricePerUnit}
+                      onChange={(e) =>
+                        setRetailForm((f) => ({
+                          ...f,
+                          pricePerUnit: e.target.value === '' ? '' : Math.max(0, Number(e.target.value)),
+                        }))
+                      }
+                      placeholder={retailForm.unit === 'dozen' ? '১৪০' : '৫০'}
+                      className="w-full pl-6 pr-12 py-2 bg-stone-50 border border-stone-300 rounded-xl font-black text-emerald-700 text-sm"
+                      required
+                    />
+                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 font-bold text-[10px] text-stone-500">
+                      /{retailForm.unit === 'dozen' ? 'dozen' : 'kg'}
+                    </span>
+                  </div>
                 </div>
+
+                <div>
+                  <label className="block font-bold text-stone-700 mb-1">
+                    {retailForm.unit === 'dozen'
+                      ? t('DAM Benchmark (৳/dozen)', 'সরকারি কৃষি বিপণন দর (৳/ডজন)')
+                      : t('DAM Benchmark (৳/kg)', 'সরকারি কৃষি বিপণন দর (৳/কেজি)')}
+                  </label>
+                  <input
+                    type="number"
+                    value={retailForm.marketPricePerUnit}
+                    onChange={(e) =>
+                      setRetailForm((f) => ({
+                        ...f,
+                        marketPricePerUnit: e.target.value === '' ? '' : Math.max(0, Number(e.target.value)),
+                      }))
+                    }
+                    placeholder={retailForm.unit === 'dozen' ? '১৫০' : '৫৫'}
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl"
+                  />
+                </div>
+              </div>
+
+              {/* Quality Grade */}
+              <div>
+                <label className="block font-bold text-stone-700 mb-1">
+                  {t('Quality Grade', 'মান বা গ্রেড')}
+                </label>
+                <select
+                  value={retailForm.qualityGrade}
+                  onChange={(e) => setRetailForm((f) => ({ ...f, qualityGrade: e.target.value as 'A' | 'B' | 'C' }))}
+                  className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl font-semibold cursor-pointer"
+                >
+                  <option value="A">{t('Grade A (Premium)', 'গ্রেড এ (উন্নত)')}</option>
+                  <option value="B">{t('Grade B (Standard)', 'গ্রেড বি (সাধারণ)')}</option>
+                  <option value="C">{t('Grade C (Commercial)', 'গ্রেড সি (বাণিজ্যিক)')}</option>
+                </select>
               </div>
 
               {/* Bilingual Origin & Arat inputs */}
@@ -1425,8 +1687,8 @@ export const RetailerDashboard: React.FC<RetailerDashboardProps> = ({
                     rows={2}
                     value={retailForm.description}
                     onChange={(e) => setRetailForm((f) => ({ ...f, description: e.target.value }))}
+                    placeholder="e.g. Hand-picked fresh produce, direct from Bogura farmlands."
                     className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl font-medium"
-                    required
                   />
                 </div>
                 <div>
@@ -1442,7 +1704,6 @@ export const RetailerDashboard: React.FC<RetailerDashboardProps> = ({
                   />
                 </div>
               </div>
-
               {/* Safety note */}
               <div>
                 <label className="block font-bold text-stone-700 mb-1">

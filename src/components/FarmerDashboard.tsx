@@ -16,6 +16,9 @@ import {
   Sprout,
   PlusCircle,
   TrendingUp,
+  Camera,
+  Upload,
+  Image as ImageIcon,
   TrendingDown,
   CheckCircle2,
   XCircle,
@@ -174,19 +177,41 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
   const [receivedOrders, setReceivedOrders] = useState<SupplyChainOrder[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
 
-  // Add Product Form
+  // Add Product Form (Dynamic Manual Entry, Image Upload & Unit Selection)
   const [showAddModal, setShowAddModal] = useState(false);
   const [submittingProduct, setSubmittingProduct] = useState(false);
-  const [selectedCropIndex, setSelectedCropIndex] = useState(0);
-  const [customCropName, setCustomCropName] = useState('');
-  const [customCategory, setCustomCategory] = useState<'Vegetables' | 'Tubers' | 'Grains' | 'Spices' | 'Fruits'>('Vegetables');
-  const [quantityKg, setQuantityKg] = useState(0);
-  const [pricePerKg, setPricePerKg] = useState(0);
+  const [productName, setProductName] = useState('');
+  const [productNameBn, setProductNameBn] = useState('');
+  const [productImage, setProductImage] = useState('');
+  const [selectedUnit, setSelectedUnit] = useState<'kg' | 'dozen'>('kg');
+  const [quantityKgInput, setQuantityKgInput] = useState<number | ''>('');
+  const [quantityDozenInput, setQuantityDozenInput] = useState<number | ''>('');
+  const [pricePerUnit, setPricePerUnit] = useState<number | ''>('');
+  const [customCategory, setCustomCategory] = useState<'Vegetables' | 'Tubers' | 'Grains' | 'Spices' | 'Fruits' | 'Poultry' | string>('Vegetables');
   const [qualityGrade, setQualityGrade] = useState<'A' | 'B' | 'C'>('A');
   const [harvestStatus, setHarvestStatus] = useState('Ready to Harvest');
   const [organicCertified, setOrganicCertified] = useState(false);
-  const [variety, setVariety] = useState('Diamond Grade A');
-  const [description, setDescription] = useState('Freshly harvested batch from our family farmland.');
+  const [variety, setVariety] = useState('দেশি উন্নত জাত');
+  const [description, setDescription] = useState('সরাসরি চাষির নিজস্ব খামার থেকে সংগৃহীত তাজা পণ্য।');
+
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 8 * 1024 * 1024) {
+        showToast(t('Image must be under 8MB', 'ছবির সাইজ ৮ মেগাবাইটের কম হতে হবে'), 'error');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (typeof reader.result === 'string') {
+          setProductImage(reader.result);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   // AI Price Prediction
   const [isPredicting, setIsPredicting] = useState(false);
@@ -358,19 +383,19 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
   // AI Price Recommendation
   const handlePredictPrice = async () => {
     setIsPredicting(true);
-    const isCustom = customCropName.trim().length > 0;
-    const cropName = isCustom ? customCropName.trim() : (QUICK_CROPS[selectedCropIndex]?.nameEn || 'Agro Product');
+    const cropName = productName.trim() || 'Agro Product';
+    const activeQty = selectedUnit === 'dozen' ? (Number(quantityDozenInput) || 20) : (Number(quantityKgInput) || 100);
     try {
       const result = await requestMarketPrediction(
         cropName,
-        quantityKg || 100,
+        activeQty,
         harvestStatus,
         selectedDistrict,
         language
       );
       setAiPrediction(result);
       if (result.expectedPriceRangeBDT?.recommendedWholesale) {
-        setPricePerKg(result.expectedPriceRangeBDT.recommendedWholesale);
+        setPricePerUnit(result.expectedPriceRangeBDT.recommendedWholesale);
       }
     } catch (e) {
       console.error('AI prediction error', e);
@@ -379,34 +404,43 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
     }
   };
 
-  // Publish Crop Batch (Farmer -> Wholesaler)
+  // Publish Crop Batch (Farmer -> Wholesaler) with custom name, image, and unit
   const handlePublishCrop = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const isCustom = customCropName.trim().length > 0;
-    const selected = !isCustom && selectedCropIndex >= 0 ? QUICK_CROPS[selectedCropIndex] : null;
-
-    if (!isCustom && !selected) {
-      showToast(t('Please select or type a crop name', 'অনুগ্রহ করে একটি ফসল নির্বাচন করুন বা নাম লিখুন'), 'error');
+    const name = productName.trim();
+    if (!name) {
+      showToast(t('Please enter a product name', 'অনুগ্রহ করে পণ্যের নাম লিখুন'), 'error');
       return;
     }
 
-    if (quantityKg <= 0) {
-      showToast(t('Please enter valid crop quantity', 'অনুগ্রহ করে ফসলের সঠিক পরিমাণ উল্লেখ করুন'), 'error');
+    const currentQty = selectedUnit === 'dozen' ? Number(quantityDozenInput) : Number(quantityKgInput);
+    if (!currentQty || currentQty <= 0) {
+      showToast(
+        selectedUnit === 'dozen'
+          ? t('Please enter valid quantity in dozen', 'অনুগ্রহ করে ডজনে সঠিক পরিমাণ উল্লেখ করুন')
+          : t('Please enter valid quantity in kg', 'অনুগ্রহ করে কেজিতে সঠিক পরিমাণ উল্লেখ করুন'),
+        'error'
+      );
       return;
     }
 
-    if (pricePerKg <= 0) {
-      showToast(t('Please enter valid wholesale price', 'অনুগ্রহ করে প্রতি কেজির সঠিক পাইকারি দর উল্লেখ করুন'), 'error');
+    const currentPrice = Number(pricePerUnit);
+    if (!currentPrice || currentPrice <= 0) {
+      showToast(
+        selectedUnit === 'dozen'
+          ? t('Please enter valid wholesale price per dozen', 'অনুগ্রহ করে প্রতি ডজনের সঠিক পাইকারি দর উল্লেখ করুন')
+          : t('Please enter valid wholesale price per kg', 'অনুগ্রহ করে প্রতি কেজির সঠিক পাইকারি দর উল্লেখ করুন'),
+        'error'
+      );
       return;
     }
 
     setSubmittingProduct(true);
 
-    const cropNameEn = isCustom ? customCropName.trim() : (selected?.nameEn || 'Agro Product');
-    const cropNameBn = isCustom ? customCropName.trim() : (selected?.nameBn || 'কৃষিপণ্য');
-    const category = isCustom ? customCategory : (selected?.category || 'Vegetables');
-    const cropImg = selected?.img || 'https://images.unsplash.com/photo-1595974482597-4b8da8879bc5?w=800&auto=format&fit=crop&q=80';
+    const cropNameEn = name;
+    const cropNameBn = productNameBn.trim() || name;
+    const cropImg = productImage || 'https://images.unsplash.com/photo-1595974482597-4b8da8879bc5?w=800&auto=format&fit=crop&q=80';
 
     try {
       await productApi.createProduct({
@@ -417,12 +451,16 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
         targetRole: 'wholesaler',
         cropName: cropNameEn,
         banglaName: cropNameBn,
-        category: category,
-        variety: variety || (isCustom ? 'দেশি জাত' : selected?.variety) || 'দেশি উন্নত জাত',
-        quantityKg,
-        availableKg: quantityKg,
-        minOrderKg: Math.min(50, quantityKg),
-        pricePerKg,
+        category: customCategory,
+        variety: variety || 'দেশি উন্নত জাত',
+        unit: selectedUnit,
+        quantity: currentQty,
+        availableQty: currentQty,
+        quantityKg: currentQty,
+        availableKg: currentQty,
+        minOrderKg: selectedUnit === 'dozen' ? 1 : Math.min(20, currentQty),
+        pricePerKg: currentPrice,
+        unitPrice: currentPrice,
         qualityGrade,
         district: currentUser.district || selectedDistrict,
         upazila: currentUser.upazila || 'Shibganj',
@@ -438,19 +476,27 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
         },
       });
 
+      const unitTextEn = selectedUnit === 'dozen' ? 'dozen' : 'kg';
+      const unitTextBn = selectedUnit === 'dozen' ? 'ডজন' : 'কেজি';
+
       NotificationStore.addSystemNotif(
         currentUser?.id || 'usr-farmer',
         t('Harvest Published!', 'ফসল তালিকাভুক্ত!'),
         t(
-          `${cropNameEn} (${quantityKg}kg) published to Wholesalers at ৳${pricePerKg}/kg.`,
-          `${cropNameBn} (${quantityKg} কেজি) পাইকারদের জন্য তালিকাভুক্ত করা হয়েছে। মূল্য ৳${pricePerKg}/কেজি।`
+          `${cropNameEn} (${currentQty} ${unitTextEn}) published to Wholesalers at ৳${currentPrice}/${unitTextEn}.`,
+          `${cropNameBn} (${currentQty} ${unitTextBn}) পাইকারদের জন্য তালিকাভুক্ত করা হয়েছে। মূল্য ৳${currentPrice}/${unitTextBn}।`
         ),
         'success'
       );
 
       showToast(t('Harvest published successfully!', 'ফসল সফলভাবে তালিকাভুক্ত হয়েছে!'), 'success');
       setShowAddModal(false);
-      setCustomCropName('');
+      setProductName('');
+      setProductNameBn('');
+      setProductImage('');
+      setQuantityKgInput('');
+      setQuantityDozenInput('');
+      setPricePerUnit('');
       setAiPrediction(null);
       loadMyProducts();
     } catch (err: any) {
@@ -747,7 +793,7 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
                   </div>
                   <div className="absolute bottom-2 right-2 bg-white/95 px-2.5 py-1 rounded-xl shadow-md border border-stone-200 text-right">
                     <span className="text-sm font-black text-stone-900">৳{prod.pricePerKg}</span>
-                    <span className="text-[10px] text-stone-500">/kg wholesale</span>
+                    <span className="text-[10px] text-stone-500">/{prod.unit === 'dozen' ? (language === 'bn' ? 'ডজন' : 'dozen') : (language === 'bn' ? 'কেজি' : 'kg')} wholesale</span>
                   </div>
                 </div>
 
@@ -762,7 +808,7 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
                     <div className="mt-2 text-stone-700 font-semibold flex items-center justify-between text-xs bg-stone-50 p-2 rounded-xl border border-stone-100">
                       <span>Available Stock:</span>
                       <strong className="text-emerald-700 font-black text-sm">
-                        {prod.availableKg} kg
+                        {prod.availableKg} {prod.unit === 'dozen' ? (language === 'bn' ? 'ডজন' : 'dozen') : (language === 'bn' ? 'কেজি' : 'kg')}
                       </strong>
                     </div>
                   </div>
@@ -1032,231 +1078,343 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
             </div>
 
             <form onSubmit={handlePublishCrop} className="space-y-4 mt-4">
-              {/* ─── Step 1: Crop Selection ─── */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
+              {/* ─── Step 1: Product Name & Category (Mandatory Manual Entry) ─── */}
+              <div className="space-y-3">
+                <div className="space-y-1.5">
                   <label className="block text-xs sm:text-sm font-black text-stone-800">
-                    {t('1. Select Crop (Quick-Pick or Custom):', '১. ফসল নির্বাচন করুন:')}
+                    {t('1. Product Name (Manual Entry)', '১. পণ্যের নাম লিখুন (বাধ্যতামূলক)')} *
                   </label>
-                  <span className="text-[11px] text-stone-500 font-medium">
-                    {t('Tap image or type custom name below', 'ছবিতে স্পর্শ করুন বা নিজে নাম লিখুন')}
-                  </span>
-                </div>
-
-                {/* Quick-Pick Image Grid */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {QUICK_CROPS.map((crop, idx) => {
-                    const isSelected = selectedCropIndex === idx && !customCropName.trim();
-                    return (
-                      <button
-                        key={crop.nameEn}
-                        type="button"
-                        onClick={() => {
-                          setSelectedCropIndex(idx);
-                          setCustomCropName('');
-                          setPricePerKg(crop.suggestedPrice);
-                          setVariety(crop.variety);
-                        }}
-                        className={`p-2.5 rounded-2xl border-2 text-center transition-all flex flex-col items-center gap-1 relative cursor-pointer active:scale-95 ${
-                          isSelected
-                            ? 'border-emerald-600 bg-emerald-50/90 text-emerald-950 font-black shadow-xs ring-2 ring-emerald-500/20'
-                            : 'border-stone-200 text-stone-700 hover:bg-stone-50 hover:border-stone-300'
-                        }`}
-                      >
-                        {isSelected && (
-                          <span className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[10px] font-bold">
-                            ✓
-                          </span>
-                        )}
-                        <img
-                          src={crop.img}
-                          alt={crop.nameEn}
-                          className="w-11 h-11 rounded-xl object-cover shadow-2xs"
-                        />
-                        <span className="font-extrabold text-xs leading-tight line-clamp-1">
-                          {language === 'bn' ? crop.nameBn : crop.nameEn}
-                        </span>
-                        <span className="text-[10px] text-emerald-700 font-bold bg-white/80 px-1.5 py-0.5 rounded-md border border-emerald-200/60">
-                          ৳{language === 'bn' ? toBanglaNumber(crop.suggestedPrice) : crop.suggestedPrice}/কেজি
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* ── Custom Crop Text Input Field ── */}
-                <div className="pt-2.5">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-xs sm:text-sm font-black text-stone-800 flex items-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>{t('Or Type Your Crop Name:', 'অথবা ফসলের নাম লিখুন:')}</span>
-                    </label>
-                    {customCropName.trim() && (
-                      <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                        {t('Custom Selected', 'কাস্টম ফসল সক্রিয়')}
-                      </span>
+                  <input
+                    type="text"
+                    value={productName}
+                    onChange={(e) => setProductName(e.target.value)}
+                    placeholder={t(
+                      'Type product name (e.g. Diamond Potato, Hybrid Tomato, Country Eggs, Banana)...',
+                      'পণ্যের নাম লিখুন (যেমন: ডায়মন্ড আলু, পাকা টমেটো, দেশি ডিম, সবরি কলা, কাঁচা মরিচ)...'
                     )}
-                  </div>
+                    required
+                    className="w-full px-4 py-3 bg-stone-50 border-2 border-stone-200 rounded-2xl text-sm sm:text-base font-bold text-stone-900 transition-all focus:outline-hidden focus:bg-white focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 placeholder:text-stone-400 placeholder:font-normal"
+                  />
+                </div>
 
-                  <div className="relative">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="block text-xs font-bold text-stone-700">
+                      {t('Bangla Name (Optional)', 'বাংলা নাম (ঐচ্ছিক)')}
+                    </label>
                     <input
                       type="text"
-                      value={customCropName}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setCustomCropName(val);
-                        if (val.trim().length > 0) {
-                          setSelectedCropIndex(-1);
-                        }
-                      }}
-                      placeholder={t(
-                        'Type crop name (e.g. Maize, Papaya, Garlic, Cucumber, Mustard)...',
-                        'যেমন: ভুট্টা, পেঁপে, রসুন, শসা, গম, সরিষা বা যেকোনো ফসলের নাম...'
-                      )}
-                      className={`w-full px-4 py-3 bg-stone-50 border-2 rounded-2xl text-sm sm:text-base font-bold text-stone-900 transition-all focus:outline-hidden focus:bg-white placeholder:text-stone-400 placeholder:font-normal ${
-                        customCropName.trim().length > 0
-                          ? 'border-emerald-600 ring-2 ring-emerald-500/20 bg-white'
-                          : 'border-stone-200 focus:border-emerald-600'
-                      }`}
+                      value={productNameBn}
+                      onChange={(e) => setProductNameBn(e.target.value)}
+                      placeholder={t('Bangla name if typing in English...', 'বাংলা নাম (যেমন: দেশি গোল আলু)...')}
+                      className="w-full px-3 py-2.5 bg-stone-50 border border-stone-300 rounded-xl text-xs sm:text-sm font-medium focus:outline-hidden focus:border-emerald-600 focus:bg-white transition"
                     />
-                    {customCropName && (
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-xs font-bold text-stone-700">
+                      {t('Category', 'ক্যাটাগরি')}
+                    </label>
+                    <select
+                      value={customCategory}
+                      onChange={(e) => setCustomCategory(e.target.value)}
+                      className="w-full px-3 py-2.5 bg-stone-50 border border-stone-300 rounded-xl text-xs sm:text-sm font-bold text-stone-800 focus:outline-hidden focus:border-emerald-600 focus:bg-white transition cursor-pointer"
+                    >
+                      <option value="Vegetables">{t('Vegetables', 'শাকসবজি')}</option>
+                      <option value="Tubers">{t('Tubers', 'আলু ও কন্দ')}</option>
+                      <option value="Fruits">{t('Fruits', 'ফলমূল')}</option>
+                      <option value="Grains">{t('Grains', 'দানাশস্য')}</option>
+                      <option value="Spices">{t('Spices', 'মসলা')}</option>
+                      <option value="Poultry">{t('Poultry & Eggs', 'পোল্ট্রি ও ডিম')}</option>
+                      <option value="Other">{t('Other Agro', 'অন্যান্য কৃষিপণ্য')}</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* ── Image Upload Button & Preview ── */}
+                <div className="pt-1">
+                  <label className="block text-xs font-black text-stone-800 mb-1.5 flex items-center gap-1.5">
+                    <Camera className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>{t('Upload Product Image (Manual Upload)', 'পণ্যের ছবি আপলোড করুন')}</span>
+                  </label>
+
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    className="hidden"
+                  />
+
+                  {productImage ? (
+                    <div className="relative inline-block border-2 border-emerald-500 rounded-2xl overflow-hidden shadow-xs">
+                      <img
+                        src={productImage}
+                        alt="Product Preview"
+                        className="w-32 h-24 sm:w-40 sm:h-28 object-cover"
+                      />
                       <button
                         type="button"
-                        onClick={() => {
-                          setCustomCropName('');
-                          setSelectedCropIndex(0);
-                          setPricePerKg(QUICK_CROPS[0].suggestedPrice);
-                        }}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-stone-200 hover:bg-stone-300 text-stone-600 flex items-center justify-center text-xs cursor-pointer font-bold"
+                        onClick={() => setProductImage('')}
+                        className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-red-600 text-white font-black text-xs flex items-center justify-center shadow-md hover:bg-red-700 transition cursor-pointer"
+                        title={t('Remove Image', 'ছবি মুছুন')}
                       >
                         ✕
                       </button>
-                    )}
-                  </div>
-
-                  {/* Category Pills when Custom is typed */}
-                  {customCropName.trim().length > 0 && (
-                    <div className="mt-2 flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar text-xs">
-                      <span className="text-[11px] font-bold text-stone-500 shrink-0">
-                        {t('Category:', 'ক্যাটাগরি:')}
-                      </span>
-                      {(['Vegetables', 'Tubers', 'Grains', 'Spices', 'Fruits'] as const).map((cat) => {
-                        const catLabels: Record<string, string> = {
-                          Vegetables: 'শাকসবজি',
-                          Tubers: 'আলু ও কন্দ',
-                          Grains: 'দানাশস্য',
-                          Spices: 'মসলা',
-                          Fruits: 'ফলমূল',
-                        };
-                        const isCatSelected = customCategory === cat;
-                        return (
-                          <button
-                            key={cat}
-                            type="button"
-                            onClick={() => setCustomCategory(cat)}
-                            className={`px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                              isCatSelected
-                                ? 'bg-emerald-600 text-white shadow-2xs'
-                                : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-                            }`}
-                          >
-                            {language === 'bn' ? catLabels[cat] : cat}
-                          </button>
-                        );
-                      })}
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="absolute bottom-1.5 left-1.5 right-1.5 py-1 px-2 rounded-lg bg-black/70 backdrop-blur-xs text-white text-[10px] font-bold text-center hover:bg-black/85 transition cursor-pointer"
+                      >
+                        {t('Change Photo', 'ছবি পরিবর্তন')}
+                      </button>
                     </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="w-full sm:w-auto px-4 py-3 border-2 border-dashed border-emerald-300 hover:border-emerald-600 bg-emerald-50/50 hover:bg-emerald-50 rounded-2xl flex items-center justify-center gap-2.5 text-xs sm:text-sm font-bold text-emerald-800 transition cursor-pointer"
+                    >
+                      <Upload className="w-4 h-4 text-emerald-600" />
+                      <span>{t('Choose Image from Device', 'ডিভাইস থেকে ছবি আপলোড করুন')}</span>
+                    </button>
                   )}
                 </div>
               </div>
 
-              {/* ─── Step 2: Quantity & Price (Spacious & Farmer-Friendly) ─── */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-2 border-t border-stone-100">
-                {/* Quantity Input */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <label className="block text-xs sm:text-sm font-black text-stone-800">
-                      {t('2. Quantity (kg)', '২. ফসলের পরিমাণ (কেজি)')} *
-                    </label>
-                    <span className="text-[11px] text-stone-500 font-bold">
-                      ≈ {language === 'bn' ? toBanglaNumber((quantityKg / 40).toFixed(1)) : (quantityKg / 40).toFixed(1)} মণ
-                    </span>
-                  </div>
-
-                  <div className="relative">
-                    <input
-                      type="number"
-                      min="10"
-                      value={quantityKg || ''}
-                      onChange={(e) => setQuantityKg(Math.max(0, Number(e.target.value)))}
-                      placeholder="১০০"
-                      className="w-full pl-4 pr-12 py-3 bg-stone-50 border-2 border-stone-200 rounded-2xl font-black text-lg sm:text-xl font-mono text-stone-900 focus:outline-hidden focus:border-emerald-600 focus:bg-white transition"
-                      required
-                    />
-                    <span className="absolute right-4 top-1/2 -translate-y-1/2 font-bold text-xs text-stone-500">
-                      {t('kg', 'কেজি')}
-                    </span>
-                  </div>
-
-                  {/* Quick Quantity Increment Pills */}
-                  <div className="flex items-center gap-1.5 pt-1">
-                    {[50, 100, 200, 500].map((increment) => (
-                      <button
-                        key={increment}
-                        type="button"
-                        onClick={() => setQuantityKg((prev) => (prev || 0) + increment)}
-                        className="px-2 py-1 rounded-lg bg-stone-100 hover:bg-emerald-50 hover:text-emerald-800 border border-stone-200 text-[10px] font-bold text-stone-600 transition cursor-pointer active:scale-95"
-                      >
-                        +{language === 'bn' ? toBanglaNumber(increment) : increment}
-                      </button>
-                    ))}
-                  </div>
+              {/* ─── Step 2: Dynamic Quantity & Unit Selection ─── */}
+              <div className="pt-3 border-t border-stone-100 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs sm:text-sm font-black text-stone-800">
+                    {t('2. Quantity & Unit Selection (Mutually Exclusive)', '২. পরিমাপের একক ও পরিমাণ নির্ধারণ')} *
+                  </label>
+                  <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                    {selectedUnit === 'dozen' ? t('Dozen Mode Active', 'ডজন সক্রিয়') : t('Kg Mode Active', 'কেজি সক্রিয়')}
+                  </span>
                 </div>
 
-                {/* Wholesale Price Input */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs sm:text-sm font-black text-stone-800">
-                      {t('3. Wholesale Price (৳/kg)', '৩. পাইকারি দর (৳/কেজি)')} *
-                    </label>
-                    <button
-                      type="button"
-                      onClick={handlePredictPrice}
-                      disabled={isPredicting}
-                      className="text-emerald-700 hover:text-emerald-800 text-[11px] font-bold underline flex items-center gap-1 cursor-pointer"
-                    >
-                      <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                      <span>{isPredicting ? t('Checking...', 'যাচাই হচ্ছে...') : t('AI Price', 'এআই দর')}</span>
-                    </button>
+                {/* Unit Switch Buttons */}
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedUnit('kg');
+                      setQuantityDozenInput('');
+                    }}
+                    className={`py-2.5 px-3 rounded-2xl font-black text-xs sm:text-sm flex items-center justify-center gap-2 border-2 transition cursor-pointer ${
+                      selectedUnit === 'kg'
+                        ? 'border-emerald-600 bg-emerald-50 text-emerald-950 shadow-xs ring-2 ring-emerald-500/20'
+                        : 'border-stone-200 bg-stone-50 text-stone-600 hover:bg-stone-100'
+                    }`}
+                  >
+                    <span>⚖️</span>
+                    <span>{t('Quantity in Kg (পরিমাণ কেজিতে)', 'পরিমাণ কেজিতে')}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedUnit('dozen');
+                      setQuantityKgInput('');
+                    }}
+                    className={`py-2.5 px-3 rounded-2xl font-black text-xs sm:text-sm flex items-center justify-center gap-2 border-2 transition cursor-pointer ${
+                      selectedUnit === 'dozen'
+                        ? 'border-emerald-600 bg-emerald-50 text-emerald-950 shadow-xs ring-2 ring-emerald-500/20'
+                        : 'border-stone-200 bg-stone-50 text-stone-600 hover:bg-stone-100'
+                    }`}
+                  >
+                    <span>🥚</span>
+                    <span>{t('Quantity in Dozen (পরিমাণ ডজনে)', 'পরিমাণ ডজনে')}</span>
+                  </button>
+                </div>
+
+                {/* Mutually Exclusive Inputs */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  {/* Option A: Quantity in Kg */}
+                  <div className={`p-3 rounded-2xl border-2 transition-all ${
+                    selectedUnit === 'kg'
+                      ? 'border-emerald-500 bg-white shadow-xs'
+                      : 'border-stone-200 bg-stone-100/70 opacity-50 cursor-not-allowed'
+                  }`}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-xs font-black text-stone-800">
+                        {t('Quantity in Kg', 'পরিমাণ কেজিতে')}
+                      </span>
+                      {selectedUnit === 'kg' && quantityKgInput ? (
+                        <span className="text-[10px] text-stone-500 font-bold">
+                          ≈ {language === 'bn' ? toBanglaNumber((Number(quantityKgInput) / 40).toFixed(1)) : (Number(quantityKgInput) / 40).toFixed(1)} মণ
+                        </span>
+                      ) : null}
+                    </div>
+
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="1"
+                        disabled={selectedUnit !== 'kg'}
+                        value={quantityKgInput}
+                        onChange={(e) => {
+                          const val = e.target.value === '' ? '' : Math.max(0, Number(e.target.value));
+                          setQuantityKgInput(val);
+                          if (val !== '') {
+                            setSelectedUnit('kg');
+                            setQuantityDozenInput('');
+                          }
+                        }}
+                        placeholder="১০০"
+                        className="w-full pl-3 pr-12 py-2.5 bg-white border border-stone-300 rounded-xl font-black text-base sm:text-lg font-mono text-stone-900 focus:outline-hidden focus:border-emerald-600 disabled:bg-stone-100 disabled:text-stone-400 transition"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 font-bold text-xs text-stone-500">
+                        {t('kg', 'কেজি')}
+                      </span>
+                    </div>
+
+                    {selectedUnit === 'kg' ? (
+                      <div className="flex items-center gap-1.5 pt-2">
+                        {[50, 100, 200, 500].map((inc) => (
+                          <button
+                            key={inc}
+                            type="button"
+                            onClick={() => {
+                              setSelectedUnit('kg');
+                              setQuantityKgInput((prev) => (Number(prev) || 0) + inc);
+                              setQuantityDozenInput('');
+                            }}
+                            className="px-2 py-0.5 rounded-lg bg-stone-100 hover:bg-emerald-50 hover:text-emerald-800 border border-stone-200 text-[10px] font-bold text-stone-600 transition cursor-pointer active:scale-95"
+                          >
+                            +{language === 'bn' ? toBanglaNumber(inc) : inc}
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-[10px] text-stone-400 font-medium pt-1.5">
+                        {t('(Disabled in Dozen mode)', '(ডজন সক্রিয় থাকায় এটি নিষ্ক্রিয়)')}
+                      </p>
+                    )}
                   </div>
 
-                  <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-xl text-emerald-700">
-                      ৳
-                    </span>
-                    <input
-                      type="number"
-                      min="1"
-                      value={pricePerKg || ''}
-                      onChange={(e) => setPricePerKg(Math.max(0, Number(e.target.value)))}
-                      placeholder="৩৫"
-                      className="w-full pl-9 pr-14 py-3 bg-stone-50 border-2 border-stone-200 rounded-2xl font-black text-lg sm:text-xl font-mono text-emerald-800 focus:outline-hidden focus:border-emerald-600 focus:bg-white transition"
-                      required
-                    />
-                    <span className="absolute right-4 top-1/2 -translate-y-1/2 font-bold text-xs text-stone-500">
-                      / {t('kg', 'কেজি')}
-                    </span>
-                  </div>
+                  {/* Option B: Quantity in Dozen */}
+                  <div className={`p-3 rounded-2xl border-2 transition-all ${
+                    selectedUnit === 'dozen'
+                      ? 'border-emerald-500 bg-white shadow-xs'
+                      : 'border-stone-200 bg-stone-100/70 opacity-50 cursor-not-allowed'
+                  }`}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-xs font-black text-stone-800">
+                        {t('Quantity in Dozen', 'পরিমাণ ডজনে')}
+                      </span>
+                      {selectedUnit === 'dozen' && quantityDozenInput ? (
+                        <span className="text-[10px] text-stone-500 font-bold">
+                          = {language === 'bn' ? toBanglaNumber(Number(quantityDozenInput) * 12) : Number(quantityDozenInput) * 12} টি
+                        </span>
+                      ) : null}
+                    </div>
 
-                  {/* Estimated Total Calculation */}
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="1"
+                        disabled={selectedUnit !== 'dozen'}
+                        value={quantityDozenInput}
+                        onChange={(e) => {
+                          const val = e.target.value === '' ? '' : Math.max(0, Number(e.target.value));
+                          setQuantityDozenInput(val);
+                          if (val !== '') {
+                            setSelectedUnit('dozen');
+                            setQuantityKgInput('');
+                          }
+                        }}
+                        placeholder="৫০"
+                        className="w-full pl-3 pr-14 py-2.5 bg-white border border-stone-300 rounded-xl font-black text-base sm:text-lg font-mono text-stone-900 focus:outline-hidden focus:border-emerald-600 disabled:bg-stone-100 disabled:text-stone-400 transition"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 font-bold text-xs text-stone-500">
+                        {t('dozen', 'ডজন')}
+                      </span>
+                    </div>
+
+                    {selectedUnit === 'dozen' ? (
+                      <div className="flex items-center gap-1.5 pt-2">
+                        {[10, 25, 50, 100].map((inc) => (
+                          <button
+                            key={inc}
+                            type="button"
+                            onClick={() => {
+                              setSelectedUnit('dozen');
+                              setQuantityDozenInput((prev) => (Number(prev) || 0) + inc);
+                              setQuantityKgInput('');
+                            }}
+                            className="px-2 py-0.5 rounded-lg bg-stone-100 hover:bg-emerald-50 hover:text-emerald-800 border border-stone-200 text-[10px] font-bold text-stone-600 transition cursor-pointer active:scale-95"
+                          >
+                            +{language === 'bn' ? toBanglaNumber(inc) : inc}
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-[10px] text-stone-400 font-medium pt-1.5">
+                        {t('(Disabled in Kg mode)', '(কেজি সক্রিয় থাকায় এটি নিষ্ক্রিয়)')}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* ─── Step 3: Dynamic Pricing Field (Updates by Selected Unit) ─── */}
+              <div className="pt-2 border-t border-stone-100 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs sm:text-sm font-black text-stone-800">
+                    {selectedUnit === 'dozen'
+                      ? t('3. Wholesale Price per Dozen (৳/dozen) *', '৩. পাইকারি দর (৳ প্রতি ডজন) *')
+                      : t('3. Wholesale Price per Kg (৳/kg) *', '৩. পাইকারি দর (৳ প্রতি কেজি) *')}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handlePredictPrice}
+                    disabled={isPredicting}
+                    className="text-emerald-700 hover:text-emerald-800 text-[11px] font-bold underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                    <span>{isPredicting ? t('Checking...', 'যাচাই হচ্ছে...') : t('AI Price Recommendation', 'এআই দর যাচাই')}</span>
+                  </button>
+                </div>
+
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-xl text-emerald-700">
+                    ৳
+                  </span>
+                  <input
+                    type="number"
+                    min="1"
+                    value={pricePerUnit}
+                    onChange={(e) => setPricePerUnit(e.target.value === '' ? '' : Math.max(0, Number(e.target.value)))}
+                    placeholder={selectedUnit === 'dozen' ? '১২০' : '৩৫'}
+                    className="w-full pl-9 pr-20 py-3 bg-stone-50 border-2 border-stone-200 rounded-2xl font-black text-lg sm:text-xl font-mono text-emerald-800 focus:outline-hidden focus:border-emerald-600 focus:bg-white transition"
+                    required
+                  />
+                  <span className="absolute right-4 top-1/2 -translate-y-1/2 font-bold text-xs text-stone-500">
+                    / {selectedUnit === 'dozen' ? t('dozen', 'ডজন') : t('kg', 'কেজি')}
+                  </span>
+                </div>
+
+                {/* Estimated Total Calculation */}
+                {pricePerUnit && (selectedUnit === 'dozen' ? quantityDozenInput : quantityKgInput) ? (
                   <div className="pt-1">
-                    <div className="px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200/80 flex items-center justify-between text-xs">
-                      <span className="text-emerald-800 font-bold">{t('Est. Payout:', 'মোট মূল্য:')}</span>
-                      <span className="font-black text-emerald-950 font-mono">
-                        ৳{language === 'bn' ? toBanglaNumber((quantityKg * pricePerKg).toLocaleString()) : (quantityKg * pricePerKg).toLocaleString()}
+                    <div className="px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-200/80 flex items-center justify-between text-xs">
+                      <span className="text-emerald-800 font-bold">
+                        {t('Estimated Total Payout:', 'মোট আনুমানিক বিক্রয়মূল্য:')}
+                      </span>
+                      <span className="font-black text-emerald-950 font-mono text-sm">
+                        ৳{language === 'bn'
+                          ? toBanglaNumber(
+                              ((selectedUnit === 'dozen' ? Number(quantityDozenInput) : Number(quantityKgInput)) * Number(pricePerUnit)).toLocaleString()
+                            )
+                          : ((selectedUnit === 'dozen' ? Number(quantityDozenInput) : Number(quantityKgInput)) * Number(pricePerUnit)).toLocaleString()}{' '}
+                        <span className="text-[11px] font-normal text-emerald-700">
+                          ({selectedUnit === 'dozen' ? quantityDozenInput : quantityKgInput} {selectedUnit === 'dozen' ? t('dozen', 'ডজন') : t('kg', 'কেজি')} × ৳{pricePerUnit})
+                        </span>
                       </span>
                     </div>
                   </div>
-                </div>
+                ) : null}
               </div>
 
               {/* AI Prediction Hint Box */}
@@ -1264,7 +1422,9 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
                 <div className="p-3 bg-emerald-50 rounded-2xl border border-emerald-200 text-xs space-y-1 animate-slide-down">
                   <div className="flex items-center justify-between font-bold text-emerald-900">
                     <span>{t('AI Market Recommended Wholesale:', 'এআই প্রস্তাবিত পাইকারি দর:')}</span>
-                    <span className="font-black text-sm">৳{language === 'bn' ? toBanglaNumber(aiPrediction.expectedPriceRangeBDT.recommendedWholesale) : aiPrediction.expectedPriceRangeBDT.recommendedWholesale}/কেজি</span>
+                    <span className="font-black text-sm">
+                      ৳{language === 'bn' ? toBanglaNumber(aiPrediction.expectedPriceRangeBDT.recommendedWholesale) : aiPrediction.expectedPriceRangeBDT.recommendedWholesale} / {selectedUnit === 'dozen' ? t('dozen', 'ডজন') : t('kg', 'কেজি')}
+                    </span>
                   </div>
                   <p className="text-[11px] text-emerald-800/80">
                     {aiPrediction.keyMarketDrivers?.[0] || 'মহাস্থানগড় ও স্থানীয় আড়তের চাহিদার ভিত্তিতে প্রস্তাবিত দর।'}
@@ -1272,7 +1432,7 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
                 </div>
               )}
 
-              {/* ─── Step 3: Quality & Readiness (Simplified) ─── */}
+              {/* ─── Step 4: Quality & Readiness ─── */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-2 border-t border-stone-100">
                 <div>
                   <label className="block text-xs font-black text-stone-700 mb-1.5">

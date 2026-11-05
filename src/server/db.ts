@@ -46,6 +46,9 @@ export function initDatabase() {
       bangla_name TEXT NOT NULL,
       category TEXT NOT NULL,
       variety TEXT,
+      unit TEXT DEFAULT 'kg',
+      quantity REAL,
+      available_qty REAL,
       quantity_kg REAL NOT NULL,
       available_kg REAL NOT NULL,
       min_order_kg REAL DEFAULT 1,
@@ -165,6 +168,18 @@ export function initDatabase() {
 
   try {
     db.prepare("ALTER TABLE orders ADD COLUMN order_status TEXT DEFAULT 'pending'").run();
+  } catch {}
+  try {
+    db.prepare("ALTER TABLE products ADD COLUMN unit TEXT DEFAULT 'kg'").run();
+  } catch {}
+  try {
+    db.prepare("ALTER TABLE products ADD COLUMN quantity REAL").run();
+  } catch {}
+  try {
+    db.prepare("ALTER TABLE products ADD COLUMN available_qty REAL").run();
+  } catch {}
+  try {
+    db.prepare("ALTER TABLE order_items ADD COLUMN unit TEXT DEFAULT 'kg'").run();
   } catch {}
 
   seedDemoUsers();

@@ -28,6 +28,8 @@ import {
   DollarSign,
   ArrowRight,
   TrendingUp,
+  Camera,
+  Upload,
   Trash2,
   Filter,
 } from 'lucide-react';
@@ -64,18 +66,38 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
   const [myListingsLoading, setMyListingsLoading] = useState(false);
   const [showAddBatchModal, setShowAddBatchModal] = useState(false);
   const [newBatchForm, setNewBatchForm] = useState({
-    cropName: 'Diamond Potato',
-    banglaName: 'ডায়মন্ড আলু (পাইকারি)',
-    category: 'Tubers',
+    cropName: '',
+    banglaName: '',
+    category: 'Vegetables',
     variety: 'Table Grade A',
-    quantityKg: 2000,
-    minOrderKg: 100,
-    pricePerKg: 32,
+    unit: 'kg' as 'kg' | 'dozen',
+    quantityKg: '' as number | '',
+    quantityDozen: '' as number | '',
+    minOrder: 50 as number | '',
+    pricePerUnit: '' as number | '',
     qualityGrade: 'A' as 'A' | 'B' | 'C',
-    farmerOrigin: 'Shibganj Farmer Cooperatives, Bogura',
-    imageUrl: 'https://images.unsplash.com/photo-1518977676601-b53f82aba655?w=800&auto=format&fit=crop&q=80',
-    description: 'Bulk wholesale lot procured directly from verified Bogura farm gates.',
+    farmerOrigin: '',
+    imageUrl: '',
+    description: '',
   });
+  const batchFileInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  const handleBatchImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 8 * 1024 * 1024) {
+        showToast(t('Image must be under 8MB', 'ছবির সাইজ ৮ মেগাবাইটের কম হতে হবে'), 'error');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (typeof reader.result === 'string') {
+          setNewBatchForm((f) => ({ ...f, imageUrl: reader.result as string }));
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   // Tab: Orders received from Retailers
   const [retailerOrders, setRetailerOrders] = useState<SupplyChainOrder[]>([]);
@@ -257,23 +279,59 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
   // Publish Wholesale Batch for Retailers (Wholesaler -> Retailer)
   const handlePublishWholesaleBatch = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const name = newBatchForm.cropName.trim();
+    if (!name) {
+      showToast(t('Please enter product name', 'অনুগ্রহ করে পণ্যের নাম লিখুন'), 'error');
+      return;
+    }
+
+    const currentQty = newBatchForm.unit === 'dozen' ? Number(newBatchForm.quantityDozen) : Number(newBatchForm.quantityKg);
+    if (!currentQty || currentQty <= 0) {
+      showToast(
+        newBatchForm.unit === 'dozen'
+          ? t('Please enter valid quantity in dozen', 'অনুগ্রহ করে ডজনে সঠিক পরিমাণ লিখুন')
+          : t('Please enter valid quantity in kg', 'অনুগ্রহ করে কেজিতে সঠিক পরিমাণ লিখুন'),
+        'error'
+      );
+      return;
+    }
+
+    const currentPrice = Number(newBatchForm.pricePerUnit);
+    if (!currentPrice || currentPrice <= 0) {
+      showToast(
+        newBatchForm.unit === 'dozen'
+          ? t('Please enter valid wholesale price per dozen', 'অনুগ্রহ করে প্রতি ডজনের সঠিক পাইকারি দর লিখুন')
+          : t('Please enter valid wholesale price per kg', 'অনুগ্রহ করে প্রতি কেজির সঠিক পাইকারি দর লিখুন'),
+        'error'
+      );
+      return;
+    }
+
     if (isPublishingBatch) return;
     setIsPublishingBatch(true);
     try {
+      const bnName = newBatchForm.banglaName.trim() || name;
+      const finalImg = newBatchForm.imageUrl || 'https://images.unsplash.com/photo-1595974482597-4b8da8879bc5?w=800&auto=format&fit=crop&q=80';
+
       await productApi.createProduct({
         sellerId: currentUser?.id || 'usr-wholesaler',
         sellerName: currentUser?.businessName || currentUser?.name || 'Wholesaler Arat',
         sellerPhone: currentUser?.phone || '01711000000',
         sellerRole: 'wholesaler',
         targetRole: 'retailer',
-        cropName: newBatchForm.cropName,
-        banglaName: newBatchForm.banglaName,
+        cropName: name,
+        banglaName: bnName,
         category: newBatchForm.category,
-        variety: newBatchForm.variety,
-        quantityKg: newBatchForm.quantityKg,
-        availableKg: newBatchForm.quantityKg,
-        minOrderKg: newBatchForm.minOrderKg,
-        pricePerKg: newBatchForm.pricePerKg,
+        variety: newBatchForm.variety || 'Table Grade A',
+        unit: newBatchForm.unit,
+        quantity: currentQty,
+        availableQty: currentQty,
+        quantityKg: currentQty,
+        availableKg: currentQty,
+        minOrderKg: Number(newBatchForm.minOrder) || (newBatchForm.unit === 'dozen' ? 1 : 20),
+        pricePerKg: currentPrice,
+        unitPrice: currentPrice,
         qualityGrade: newBatchForm.qualityGrade,
         district: currentUser?.district || 'Bogura',
         upazila: currentUser?.upazila || 'Shibganj',
@@ -281,28 +339,45 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
         harvestStatus: 'Cold-chain stored / Fresh Lot',
         availableDate: 'Ready for Retailer Dispatch',
         organicCertified: false,
-        imageUrl: newBatchForm.imageUrl,
-        description: newBatchForm.description,
+        imageUrl: finalImg,
+        description: newBatchForm.description || `${bnName} পাইকারি আড়ত থেকে সরাসরি খুচরা বিক্রেতাদের জন্য প্রস্তুত লট।`,
         traceability: {
-          farmerOrigin: newBatchForm.farmerOrigin,
+          farmerOrigin: newBatchForm.farmerOrigin || 'বগুড়ার নির্ভরযোগ্য কৃষক সমবায়',
           wholesalerArat: currentUser?.businessName || currentUser?.name || 'Wholesaler Arat',
           procurementDate: 'Procured from verified farmer',
           safetyNote: 'Sorted and crate-packed for retail shops.',
         },
       });
 
+      const unitText = newBatchForm.unit === 'dozen' ? (language === 'bn' ? 'ডজন' : 'dozen') : (language === 'bn' ? 'কেজি' : 'kg');
+
       NotificationStore.addSystemNotif(
         currentUser?.id || 'usr-wholesaler',
         t('Wholesale Batch Published', 'পাইকারি লট প্রকাশিত'),
         t(
-          `Published ${newBatchForm.quantityKg}kg of ${newBatchForm.cropName} for retailers at ৳${newBatchForm.pricePerKg}/kg.`,
-          `খুচরা বিক্রেতাদের জন্য ৳${newBatchForm.pricePerKg}/কেজি দরে পাইকারি লট প্রকাশ করা হয়েছে।`
+          `Published ${currentQty} ${unitText} of ${name} for retailers at ৳${currentPrice}/${unitText}.`,
+          `খুচরা বিক্রেতাদের জন্য ৳${currentPrice}/${unitText} দরে পাইকারি লট প্রকাশ করা হয়েছে।`
         ),
         'success'
       );
 
       showToast(t('Wholesale batch published for retailers!', 'খুচরা বিক্রেতাদের জন্য পাইকারি লট সফলভাবে প্রকাশিত হয়েছে!'), 'success');
       setShowAddBatchModal(false);
+      setNewBatchForm({
+        cropName: '',
+        banglaName: '',
+        category: 'Vegetables',
+        variety: 'Table Grade A',
+        unit: 'kg',
+        quantityKg: '',
+        quantityDozen: '',
+        minOrder: 50,
+        pricePerUnit: '',
+        qualityGrade: 'A',
+        farmerOrigin: '',
+        imageUrl: '',
+        description: '',
+      });
       loadMyListings();
     } catch (err: any) {
       showToast(err.message || 'Failed to create wholesale batch', 'error');
@@ -731,7 +806,7 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
                   </div>
                   <div className="absolute bottom-2 right-2 bg-white/95 px-2.5 py-1 rounded-xl shadow-md border border-stone-200 text-right">
                     <span className="text-base font-black text-stone-900">৳{batch.pricePerKg}</span>
-                    <span className="text-[10px] text-stone-500">/kg to Retailers</span>
+                    <span className="text-[10px] text-stone-500">/{batch.unit === "dozen" ? (language === "bn" ? "ডজন" : "dozen") : (language === "bn" ? "কেজি" : "kg")} to Retailers</span>
                   </div>
                 </div>
 
@@ -741,13 +816,13 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
                       {language === 'bn' ? batch.banglaName || batch.cropName : batch.cropName}
                     </h4>
                     <p className="text-[11px] text-stone-500 mt-0.5">
-                      {batch.variety} • Min Order: {batch.minOrderKg || 100} kg
+                      {batch.variety} • Min Order: {batch.minOrderKg || 50} {batch.unit === "dozen" ? (language === "bn" ? "ডজন" : "dozen") : (language === "bn" ? "কেজি" : "kg")}
                     </p>
 
                     <div className="mt-2 text-stone-700 font-semibold flex items-center justify-between text-xs bg-stone-50 p-2 rounded-xl border border-stone-100">
                       <span>Available Stock:</span>
                       <strong className="text-blue-700 font-black text-sm">
-                        {batch.availableKg} kg
+                        {batch.availableKg} {batch.unit === "dozen" ? (language === "bn" ? "ডজন" : "dozen") : (language === "bn" ? "কেজি" : "kg")}
                       </strong>
                     </div>
 
@@ -1354,119 +1429,344 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
 
       {/* ─── MODAL: CREATE WHOLESALE BATCH FOR RETAILERS ─────────────────────────── */}
       {showAddBatchModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-stone-200 animate-scale-up">
-            <div className="flex items-center justify-between pb-3 border-b border-stone-100">
-              <h3 className="font-extrabold text-stone-900 text-base">
-                {t('Publish Wholesale Batch for Retailers', 'খুচরা বিক্রেতাদের জন্য লট তৈরি')}
-              </h3>
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-stone-200 my-8 animate-scale-up">
+            <div className="flex items-center justify-between pb-3.5 border-b border-stone-100">
+              <div>
+                <h3 className="font-black text-stone-900 text-base sm:text-lg">
+                  {t('Publish Wholesale Batch for Retailers', 'খুচরা বিক্রেতাদের জন্য পাইকারি লট তৈরি')}
+                </h3>
+                <p className="text-xs text-stone-500">
+                  {t('Manual entry with custom image and unit selection', 'ম্যানুয়াল নাম, ছবি এবং একক নির্ধারণ')}
+                </p>
+              </div>
               <button
+                type="button"
                 onClick={() => setShowAddBatchModal(false)}
-                className="w-8 h-8 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-600 flex items-center justify-center font-bold"
+                className="w-8 h-8 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-600 flex items-center justify-center font-bold cursor-pointer"
               >
                 ✕
               </button>
             </div>
 
             <form onSubmit={handlePublishWholesaleBatch} className="space-y-3.5 mt-4 text-xs">
-              <div className="grid grid-cols-2 gap-2">
+              {/* Product Name Inputs */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <div>
-                  <label className="block font-bold text-stone-700 mb-1">Crop Name</label>
+                  <label className="block font-bold text-stone-700 mb-1">
+                    {t('Product Name (English / Common) *', 'পণ্যের নাম লিখুন *')}
+                  </label>
                   <input
                     type="text"
                     value={newBatchForm.cropName}
                     onChange={(e) =>
                       setNewBatchForm((f) => ({ ...f, cropName: e.target.value }))
                     }
-                    className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl"
+                    placeholder="e.g. Diamond Potato, Eggs..."
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl font-bold text-stone-900 focus:outline-hidden focus:border-blue-600 focus:bg-white"
                     required
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-stone-700 mb-1">Bangla Name</label>
+                  <label className="block font-bold text-stone-700 mb-1">
+                    {t('Bangla Name', 'পণ্যের বাংলা নাম')}
+                  </label>
                   <input
                     type="text"
                     value={newBatchForm.banglaName}
                     onChange={(e) =>
                       setNewBatchForm((f) => ({ ...f, banglaName: e.target.value }))
                     }
-                    className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl"
-                    required
+                    placeholder="যেমন: ডায়মন্ড আলু, দেশি ডিম..."
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl font-medium focus:outline-hidden focus:border-blue-600 focus:bg-white"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
+              {/* Category & Variety */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <div>
-                  <label className="block font-bold text-stone-700 mb-1">Stock Quantity (kg)</label>
+                  <label className="block font-bold text-stone-700 mb-1">
+                    {t('Category', 'ক্যাটাগরি')}
+                  </label>
+                  <select
+                    value={newBatchForm.category}
+                    onChange={(e) =>
+                      setNewBatchForm((f) => ({ ...f, category: e.target.value }))
+                    }
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl font-bold cursor-pointer"
+                  >
+                    <option value="Vegetables">Vegetables (শাকসবজি)</option>
+                    <option value="Tubers">Tubers (আলু ও কন্দ)</option>
+                    <option value="Fruits">Fruits (ফলমূল)</option>
+                    <option value="Grains">Grains (দানাশস্য)</option>
+                    <option value="Spices">Spices (মসলা)</option>
+                    <option value="Poultry">Poultry & Eggs (পোল্ট্রি ও ডিম)</option>
+                    <option value="Other">Other (অন্যান্য)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-stone-700 mb-1">
+                    {t('Variety / Specification', 'জাত বা ধরন')}
+                  </label>
+                  <input
+                    type="text"
+                    value={newBatchForm.variety}
+                    onChange={(e) =>
+                      setNewBatchForm((f) => ({ ...f, variety: e.target.value }))
+                    }
+                    placeholder="e.g. Table Grade A"
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl font-medium"
+                  />
+                </div>
+              </div>
+
+              {/* Image Upload Button & Preview */}
+              <div className="pt-1">
+                <label className="block font-bold text-stone-700 mb-1 flex items-center gap-1.5">
+                  <Camera className="w-3.5 h-3.5 text-blue-600" />
+                  <span>{t('Upload Product Image', 'পণ্যের ছবি আপলোড করুন')}</span>
+                </label>
+                <input
+                  type="file"
+                  ref={batchFileInputRef}
+                  accept="image/*"
+                  onChange={handleBatchImageUpload}
+                  className="hidden"
+                />
+
+                {newBatchForm.imageUrl ? (
+                  <div className="relative inline-block border-2 border-blue-500 rounded-2xl overflow-hidden shadow-xs">
+                    <img
+                      src={newBatchForm.imageUrl}
+                      alt="Batch Preview"
+                      className="w-32 h-20 object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setNewBatchForm((f) => ({ ...f, imageUrl: '' }))}
+                      className="absolute top-1 right-1 w-5 h-5 rounded-full bg-red-600 text-white font-black text-xs flex items-center justify-center hover:bg-red-700 transition cursor-pointer"
+                      title={t('Remove Image', 'ছবি মুছুন')}
+                    >
+                      ✕
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => batchFileInputRef.current?.click()}
+                      className="absolute bottom-1 left-1 right-1 py-0.5 px-1 rounded-md bg-black/70 text-white text-[9px] font-bold text-center hover:bg-black/85 transition cursor-pointer"
+                    >
+                      {t('Change', 'বদলান')}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => batchFileInputRef.current?.click()}
+                    className="w-full px-3 py-2.5 border-2 border-dashed border-blue-300 hover:border-blue-600 bg-blue-50/50 hover:bg-blue-50 rounded-xl flex items-center justify-center gap-2 font-bold text-blue-800 transition cursor-pointer"
+                  >
+                    <Upload className="w-4 h-4 text-blue-600" />
+                    <span>{t('Choose Image File', 'ডিভাইস থেকে ছবি আপলোড করুন')}</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Dynamic Quantity & Unit Selection */}
+              <div className="pt-2 border-t border-stone-100 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block font-bold text-stone-800">
+                    {t('Quantity & Unit (Mutually Exclusive) *', 'একক ও পরিমাণ নির্ধারণ (পরস্পর স্বতন্ত্র) *')}
+                  </label>
+                  <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
+                    {newBatchForm.unit === 'dozen' ? t('Dozen Mode', 'ডজন সক্রিয়') : t('Kg Mode', 'কেজি সক্রিয়')}
+                  </span>
+                </div>
+
+                {/* Unit Switch Buttons */}
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewBatchForm((f) => ({ ...f, unit: 'kg', quantityDozen: '' }));
+                    }}
+                    className={`py-2 px-2.5 rounded-xl font-black text-xs flex items-center justify-center gap-1.5 border-2 transition cursor-pointer ${
+                      newBatchForm.unit === 'kg'
+                        ? 'border-blue-600 bg-blue-50 text-blue-950 shadow-xs ring-2 ring-blue-500/20'
+                        : 'border-stone-200 bg-stone-50 text-stone-600 hover:bg-stone-100'
+                    }`}
+                  >
+                    <span>⚖️</span>
+                    <span>{t('Quantity in Kg', 'পরিমাণ কেজিতে')}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewBatchForm((f) => ({ ...f, unit: 'dozen', quantityKg: '' }));
+                    }}
+                    className={`py-2 px-2.5 rounded-xl font-black text-xs flex items-center justify-center gap-1.5 border-2 transition cursor-pointer ${
+                      newBatchForm.unit === 'dozen'
+                        ? 'border-blue-600 bg-blue-50 text-blue-950 shadow-xs ring-2 ring-blue-500/20'
+                        : 'border-stone-200 bg-stone-50 text-stone-600 hover:bg-stone-100'
+                    }`}
+                  >
+                    <span>🥚</span>
+                    <span>{t('Quantity in Dozen', 'পরিমাণ ডজনে')}</span>
+                  </button>
+                </div>
+
+                {/* Mutually Exclusive Inputs */}
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  {/* Kg Input */}
+                  <div className={`p-2.5 rounded-xl border-2 transition-all ${
+                    newBatchForm.unit === 'kg'
+                      ? 'border-blue-500 bg-white shadow-xs'
+                      : 'border-stone-200 bg-stone-100/70 opacity-45 cursor-not-allowed'
+                  }`}>
+                    <label className="block text-[11px] font-bold text-stone-700 mb-1">
+                      {t('Quantity in Kg', 'পরিমাণ কেজিতে')}
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="1"
+                        disabled={newBatchForm.unit !== 'kg'}
+                        value={newBatchForm.quantityKg}
+                        onChange={(e) => {
+                          const val = e.target.value === '' ? '' : Math.max(0, Number(e.target.value));
+                          setNewBatchForm((f) => ({
+                            ...f,
+                            quantityKg: val,
+                            ...(val !== '' ? { unit: 'kg', quantityDozen: '' } : {}),
+                          }));
+                        }}
+                        placeholder="১০০০"
+                        className="w-full pl-2.5 pr-8 py-1.5 bg-white border border-stone-300 rounded-lg font-bold text-stone-900 disabled:bg-stone-100 text-xs"
+                      />
+                      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 font-bold text-[10px] text-stone-500">
+                        kg
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Dozen Input */}
+                  <div className={`p-2.5 rounded-xl border-2 transition-all ${
+                    newBatchForm.unit === 'dozen'
+                      ? 'border-blue-500 bg-white shadow-xs'
+                      : 'border-stone-200 bg-stone-100/70 opacity-45 cursor-not-allowed'
+                  }`}>
+                    <label className="block text-[11px] font-bold text-stone-700 mb-1">
+                      {t('Quantity in Dozen', 'পরিমাণ ডজনে')}
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="1"
+                        disabled={newBatchForm.unit !== 'dozen'}
+                        value={newBatchForm.quantityDozen}
+                        onChange={(e) => {
+                          const val = e.target.value === '' ? '' : Math.max(0, Number(e.target.value));
+                          setNewBatchForm((f) => ({
+                            ...f,
+                            quantityDozen: val,
+                            ...(val !== '' ? { unit: 'dozen', quantityKg: '' } : {}),
+                          }));
+                        }}
+                        placeholder="১০০"
+                        className="w-full pl-2.5 pr-10 py-1.5 bg-white border border-stone-300 rounded-lg font-bold text-stone-900 disabled:bg-stone-100 text-xs"
+                      />
+                      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 font-bold text-[10px] text-stone-500">
+                        dozen
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Dynamic Price & Min Order */}
+              <div className="grid grid-cols-2 gap-2 pt-1 border-t border-stone-100">
+                <div>
+                  <label className="block font-bold text-stone-700 mb-1">
+                    {newBatchForm.unit === 'dozen'
+                      ? t('Wholesale Price (৳/dozen) *', 'পাইকারি দর (৳ প্রতি ডজন) *')
+                      : t('Wholesale Price (৳/kg) *', 'পাইকারি দর (৳ প্রতি কেজি) *')}
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 font-bold text-blue-700">৳</span>
+                    <input
+                      type="number"
+                      min="1"
+                      value={newBatchForm.pricePerUnit}
+                      onChange={(e) =>
+                        setNewBatchForm((f) => ({
+                          ...f,
+                          pricePerUnit: e.target.value === '' ? '' : Math.max(0, Number(e.target.value)),
+                        }))
+                      }
+                      placeholder={newBatchForm.unit === 'dozen' ? '১২০' : '৩২'}
+                      className="w-full pl-6 pr-12 py-2 bg-stone-50 border border-stone-300 rounded-xl font-black text-blue-700 text-sm"
+                      required
+                    />
+                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 font-bold text-[10px] text-stone-500">
+                      /{newBatchForm.unit === 'dozen' ? 'dozen' : 'kg'}
+                    </span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-stone-700 mb-1">
+                    {newBatchForm.unit === 'dozen'
+                      ? t('Min Order (dozen)', 'সর্বনিম্ন অর্ডার (ডজন)')
+                      : t('Min Order (kg)', 'সর্বনিম্ন অর্ডার (কেজি)')}
+                  </label>
                   <input
                     type="number"
-                    value={newBatchForm.quantityKg}
+                    min="1"
+                    value={newBatchForm.minOrder}
                     onChange={(e) =>
-                      setNewBatchForm((f) => ({ ...f, quantityKg: Number(e.target.value) }))
+                      setNewBatchForm((f) => ({
+                        ...f,
+                        minOrder: e.target.value === '' ? '' : Math.max(1, Number(e.target.value)),
+                      }))
                     }
                     className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl font-bold"
                     required
                   />
                 </div>
-                <div>
-                  <label className="block font-bold text-stone-700 mb-1">
-                    Wholesale Price to Retailers (৳/kg)
-                  </label>
-                  <input
-                    type="number"
-                    value={newBatchForm.pricePerKg}
-                    onChange={(e) =>
-                      setNewBatchForm((f) => ({ ...f, pricePerKg: Number(e.target.value) }))
-                    }
-                    className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl font-black text-blue-700 text-sm"
-                    required
-                  />
-                </div>
               </div>
 
+              {/* Quality & Origin */}
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block font-bold text-stone-700 mb-1">Min Order (kg)</label>
-                  <input
-                    type="number"
-                    value={newBatchForm.minOrderKg}
-                    onChange={(e) =>
-                      setNewBatchForm((f) => ({ ...f, minOrderKg: Number(e.target.value) }))
-                    }
-                    className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-stone-700 mb-1">Quality Grade</label>
+                  <label className="block font-bold text-stone-700 mb-1">
+                    {t('Quality Grade', 'মান বা গ্রেড')}
+                  </label>
                   <select
                     value={newBatchForm.qualityGrade}
                     onChange={(e) =>
                       setNewBatchForm((f) => ({ ...f, qualityGrade: e.target.value as any }))
                     }
-                    className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl font-semibold"
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl font-semibold cursor-pointer"
                   >
                     <option value="A">Grade A (Premium)</option>
                     <option value="B">Grade B (Standard)</option>
                     <option value="C">Grade C (Mixed)</option>
                   </select>
                 </div>
+                <div>
+                  <label className="block font-bold text-stone-700 mb-1">
+                    {t('Farmer Origin', 'কৃষক বা খামারের উৎস')}
+                  </label>
+                  <input
+                    type="text"
+                    value={newBatchForm.farmerOrigin}
+                    onChange={(e) =>
+                      setNewBatchForm((f) => ({ ...f, farmerOrigin: e.target.value }))
+                    }
+                    placeholder="e.g. Shibganj Farms, Bogura"
+                    className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl"
+                  />
+                </div>
               </div>
-
-              <div>
-                <label className="block font-bold text-stone-700 mb-1">Farmer Origin</label>
-                <input
-                  type="text"
-                  value={newBatchForm.farmerOrigin}
-                  onChange={(e) =>
-                    setNewBatchForm((f) => ({ ...f, farmerOrigin: e.target.value }))
-                  }
-                  className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl"
-                  required
-                />
-              </div>
-
               <div className="pt-2 flex justify-end gap-2 border-t border-stone-100">
                 <button
                   type="button"
