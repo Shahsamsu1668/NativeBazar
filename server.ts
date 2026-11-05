@@ -1040,7 +1040,7 @@ app.get('/api/products', async (req, res) => {
              harvest_status, available_date, organic_certified, image_url, description,
              farmer_origin, wholesaler_arat, procurement_date, safety_note, created_at, updated_at
       FROM products
-      WHERE harvest_status != 'Archived' AND available_qty > $1
+      WHERE harvest_status != 'Archived' AND COALESCE(available_qty, available_kg, quantity, 0) > $1
     `;
     const params: any[] = [Number(minAvailable) || 0];
     let idx = 2;
@@ -1074,43 +1074,55 @@ app.get('/api/products', async (req, res) => {
     query += ' ORDER BY created_at DESC';
 
     const result = await pool.query(query, params);
-    const mapped = result.rows.map((r) => ({
-      id: r.id,
-      sellerId: r.seller_id,
-      sellerName: r.seller_name,
-      sellerPhone: r.seller_phone,
-      sellerRole: r.seller_role,
-      targetRole: r.target_role,
-      cropName: r.crop_name,
-      banglaName: r.bangla_name,
-      category: r.category,
-      variety: r.variety,
-      unit: r.unit || 'kg',
-      quantity: parseFloat(r.quantity),
-      availableQty: parseFloat(r.available_qty),
-      quantityKg: r.quantity_kg !== null ? parseFloat(r.quantity_kg) : parseFloat(r.quantity),
-      availableKg: r.available_kg !== null ? parseFloat(r.available_kg) : parseFloat(r.available_qty),
-      minOrderKg: parseFloat(r.min_order_qty || 1),
-      pricePerKg: parseFloat(r.unit_price),
-      unitPrice: parseFloat(r.unit_price),
-      marketPricePerKg: r.market_price ? parseFloat(r.market_price) : parseFloat(r.unit_price) * 1.15,
-      qualityGrade: r.quality_grade,
-      district: r.district,
-      upazila: r.upazila,
-      locationDetails: r.location_details,
-      harvestStatus: r.harvest_status,
-      availableDate: r.available_date,
-      organicCertified: Boolean(r.organic_certified),
-      imageUrl: r.image_url,
-      description: r.description,
-      traceability: {
-        farmerOrigin: r.farmer_origin,
-        wholesalerArat: r.wholesaler_arat,
-        procurementDate: r.procurement_date,
-        safetyNote: r.safety_note,
-      },
-      createdAt: r.created_at,
-    }));
+    const mapped = result.rows.map((r) => {
+      const u = r.unit === 'dozen' ? 'dozen' : 'kg';
+      const qty = parseFloat(r.quantity !== null && r.quantity !== undefined ? r.quantity : (r.quantity_kg || 0));
+      const avail = parseFloat(r.available_qty !== null && r.available_qty !== undefined ? r.available_qty : (r.available_kg || qty));
+      const price = parseFloat(r.unit_price !== null && r.unit_price !== undefined ? r.unit_price : (r.price_per_kg || 0));
+      const minOrder = parseFloat(r.min_order_qty !== null && r.min_order_qty !== undefined ? r.min_order_qty : (r.min_order_kg || 1));
+      const marketP = r.market_price ? parseFloat(r.market_price) : (r.market_price_per_kg ? parseFloat(r.market_price_per_kg) : price * 1.15);
+
+      return {
+        id: r.id,
+        sellerId: r.seller_id,
+        sellerName: r.seller_name,
+        sellerPhone: r.seller_phone,
+        sellerRole: r.seller_role,
+        targetRole: r.target_role,
+        cropName: r.crop_name,
+        banglaName: r.bangla_name,
+        category: r.category,
+        variety: r.variety,
+        unit: u,
+        quantity: qty,
+        availableQty: avail,
+        unitPrice: price,
+        minOrderQty: minOrder,
+        marketPrice: marketP,
+        // Legacy aliases for backward compatibility
+        quantityKg: r.quantity_kg !== null && r.quantity_kg !== undefined ? parseFloat(r.quantity_kg) : (u === 'dozen' ? 0 : qty),
+        availableKg: r.available_kg !== null && r.available_kg !== undefined ? parseFloat(r.available_kg) : (u === 'dozen' ? 0 : avail),
+        pricePerKg: r.price_per_kg !== null && r.price_per_kg !== undefined ? parseFloat(r.price_per_kg) : price,
+        minOrderKg: minOrder,
+        marketPricePerKg: marketP,
+        qualityGrade: r.quality_grade,
+        district: r.district,
+        upazila: r.upazila,
+        locationDetails: r.location_details,
+        harvestStatus: r.harvest_status,
+        availableDate: r.available_date,
+        organicCertified: Boolean(r.organic_certified),
+        imageUrl: r.image_url,
+        description: r.description,
+        traceability: {
+          farmerOrigin: r.farmer_origin,
+          wholesalerArat: r.wholesaler_arat,
+          procurementDate: r.procurement_date,
+          safetyNote: r.safety_note,
+        },
+        createdAt: r.created_at,
+      };
+    });
 
     return res.json({ products: mapped, total: mapped.length });
   } catch (err: any) {
@@ -1125,11 +1137,11 @@ app.post('/api/products', requireAuth, async (req: AuthenticatedRequest, res) =>
     const authUser = req.user!;
     const {
       cropName, banglaName, category = 'Vegetables', variety = '',
-      unit = 'kg', quantityKg, quantity, pricePerKg, unitPrice, marketPricePerKg,
+      unit = 'kg', quantityKg, quantity, pricePerKg, unitPrice, marketPricePerKg, marketPrice,
       qualityGrade = 'A', district = 'Bogura', upazila = '', locationDetails = '',
       harvestStatus = 'Harvested Today', availableDate = 'In Stock', organicCertified = false,
       imageUrl = '', description = '', farmerOrigin = '', wholesalerArat = '',
-      procurementDate = '', safetyNote = '', minOrderKg = 1,
+      procurementDate = '', safetyNote = '', minOrderKg = 1, minOrderQty = 1,
     } = req.body;
 
     const effectiveSellerId = authUser.id;
@@ -1152,58 +1164,119 @@ app.post('/api/products', requireAuth, async (req: AuthenticatedRequest, res) =>
     }
 
     const effectiveUnit = (unit === 'dozen' ? 'dozen' : 'kg');
-    const finalQuantity = Number(quantity || quantityKg);
-    const finalPrice = Number(unitPrice || pricePerKg);
+    const finalQuantity = Number(quantity !== undefined && quantity !== null && quantity !== '' ? quantity : quantityKg) || 0;
+    const finalPrice = Number(unitPrice !== undefined && unitPrice !== null && unitPrice !== '' ? unitPrice : pricePerKg) || 0;
+    const finalMinOrder = Number(minOrderQty !== undefined && minOrderQty !== null && minOrderQty !== '' ? minOrderQty : minOrderKg) || 1;
+    const finalMarketPrice = marketPrice !== undefined && marketPrice !== null && marketPrice !== ''
+      ? Number(marketPrice)
+      : (marketPricePerKg ? Number(marketPricePerKg) : finalPrice * 1.15);
 
-    if (!cropName || !finalPrice || !finalQuantity || finalQuantity <= 0 || finalPrice <= 0) {
+    // 1. API Payload Fix: Explicit fallback values for legacy columns so they are NEVER undefined or null
+    const quantity_kg = effectiveUnit === 'kg' ? finalQuantity : (Number(req.body.quantity_kg || req.body.quantityKg) || 0);
+    const available_kg = effectiveUnit === 'kg' ? finalQuantity : (Number(req.body.available_kg || req.body.availableKg) || 0);
+    const price_per_kg = effectiveUnit === 'kg' ? finalPrice : (Number(req.body.price_per_kg || req.body.pricePerKg) || 0);
+    const min_order_kg = finalMinOrder;
+    const market_price_per_kg = finalMarketPrice;
+
+    if (!cropName || finalPrice <= 0 || finalQuantity <= 0) {
       return res.status(400).json({ error: 'Valid crop name, quantity, and unit price are required.' });
     }
 
     const prodId = `prod-${sRole.slice(0, 3)}-${Date.now()}`;
-    const finalMarketPrice = marketPricePerKg ? Number(marketPricePerKg) : finalPrice * 1.15;
     const finalImg = imageUrl || 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=800&auto=format&fit=crop&q=80';
 
-    await pool.query(`
-      INSERT INTO products (
-        id, seller_id, seller_name, seller_phone, seller_role, target_role,
-        crop_name, bangla_name, category, variety, unit, quantity, available_qty,
-        quantity_kg, available_kg, min_order_qty, unit_price, price_per_kg, market_price, quality_grade, district,
-        upazila, location_details, harvest_status, available_date, organic_certified,
-        image_url, description, farmer_origin, wholesaler_arat, procurement_date,
-        safety_note, created_at, updated_at
-      ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
-        $12, $13, $14, $15, $15, $16, $17, $18, $19, $20, $21, $22, $23,
-        $24, $25, $26, $27, $28, $29, NOW(), NOW()
-      )
-    `, [
-      prodId, effectiveSellerId, effectiveSellerName, effectiveSellerPhone, sRole, targetRole,
-      cropName, banglaName || cropName, category, variety || '', effectiveUnit, finalQuantity, finalQuantity,
-      Number(minOrderKg) || 1, finalPrice, finalMarketPrice, qualityGrade, district,
-      upazila || '', locationDetails || '', harvestStatus, availableDate, Boolean(organicCertified),
-      finalImg,
-      description || '', farmerOrigin || (sRole === 'farmer' ? effectiveSellerName : ''),
-      wholesalerArat || (sRole === 'wholesaler' ? effectiveSellerName : ''),
-      procurementDate || '', safetyNote || ''
-    ]);
+    // 2. SQL Queries: Insert into Neon PostgreSQL explicitly passing quantity_kg
+    try {
+      await pool.query(`
+        INSERT INTO products (
+          id, seller_id, seller_name, seller_phone, seller_role, target_role,
+          crop_name, bangla_name, category, variety, unit, quantity, available_qty,
+          min_order_qty, unit_price, market_price,
+          quantity_kg, available_kg, min_order_kg, price_per_kg, market_price_per_kg,
+          quality_grade, district, upazila, location_details, harvest_status, available_date, organic_certified,
+          image_url, description, farmer_origin, wholesaler_arat, procurement_date,
+          safety_note, created_at, updated_at
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6,
+          $7, $8, $9, $10, $11, $12, $13,
+          $14, $15, $16,
+          $17, $18, $19, $20, $21,
+          $22, $23, $24, $25, $26, $27, $28,
+          $29, $30, $31, $32, $33,
+          $34, NOW(), NOW()
+        )
+      `, [
+        prodId, effectiveSellerId, effectiveSellerName, effectiveSellerPhone, sRole, targetRole,
+        cropName, banglaName || cropName, category, variety || '', effectiveUnit, finalQuantity, finalQuantity,
+        finalMinOrder, finalPrice, finalMarketPrice,
+        quantity_kg, available_kg, min_order_kg, price_per_kg, market_price_per_kg,
+        qualityGrade, district, upazila || '', locationDetails || '', harvestStatus, availableDate, Boolean(organicCertified),
+        finalImg, description || '', farmerOrigin || (sRole === 'farmer' ? effectiveSellerName : ''),
+        wholesalerArat || (sRole === 'wholesaler' ? effectiveSellerName : ''),
+        procurementDate || '', safetyNote || ''
+      ]);
+    } catch (neonErr: any) {
+      // If PostgreSQL complains about a legacy generated column (cannot insert a non-DEFAULT value into column "quantity_kg"),
+      // safely fallback to omitting the generated columns so PostgreSQL computes/defaults them without failing!
+      if (neonErr.message && (neonErr.message.includes('non-DEFAULT') || neonErr.message.includes('generated column'))) {
+        await pool.query(`
+          INSERT INTO products (
+            id, seller_id, seller_name, seller_phone, seller_role, target_role,
+            crop_name, bangla_name, category, variety, unit, quantity, available_qty,
+            min_order_qty, unit_price, market_price,
+            quality_grade, district, upazila, location_details, harvest_status, available_date, organic_certified,
+            image_url, description, farmer_origin, wholesaler_arat, procurement_date,
+            safety_note, created_at, updated_at
+          ) VALUES (
+            $1, $2, $3, $4, $5, $6,
+            $7, $8, $9, $10, $11, $12, $13,
+            $14, $15, $16,
+            $17, $18, $19, $20, $21, $22, $23,
+            $24, $25, $26, $27, $28,
+            $29, NOW(), NOW()
+          )
+        `, [
+          prodId, effectiveSellerId, effectiveSellerName, effectiveSellerPhone, sRole, targetRole,
+          cropName, banglaName || cropName, category, variety || '', effectiveUnit, finalQuantity, finalQuantity,
+          finalMinOrder, finalPrice, finalMarketPrice,
+          qualityGrade, district, upazila || '', locationDetails || '', harvestStatus, availableDate, Boolean(organicCertified),
+          finalImg, description || '', farmerOrigin || (sRole === 'farmer' ? effectiveSellerName : ''),
+          wholesalerArat || (sRole === 'wholesaler' ? effectiveSellerName : ''),
+          procurementDate || '', safetyNote || ''
+        ]);
+      } else {
+        throw neonErr;
+      }
+    }
 
+    // 3. Synchronize to SQLite products table (explicitly passes quantity_kg as 0 or finalQuantity)
     try {
       db.prepare(`
         INSERT INTO products (
           id, seller_id, seller_name, seller_phone, seller_role, target_role,
           crop_name, bangla_name, category, variety, unit, quantity, available_qty,
-          quantity_kg, available_kg, min_order_kg, price_per_kg, market_price_per_kg, quality_grade, district,
-          upazila, location_details, harvest_status, available_date, organic_certified,
-          image_url, description, farmer_origin, wholesaler_arat, procurement_date,
-          safety_note, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          unit_price, min_order_qty, market_price,
+          quantity_kg, available_kg, min_order_kg, price_per_kg, market_price_per_kg,
+          quality_grade, district, upazila, location_details, harvest_status,
+          available_date, organic_certified, image_url, description, farmer_origin,
+          wholesaler_arat, procurement_date, safety_note, created_at
+        ) VALUES (
+          ?, ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?, ?, ?,
+          ?, ?, ?,
+          ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?,
+          ?, ?, ?, ?
+        )
       `).run(
         prodId, effectiveSellerId, effectiveSellerName, effectiveSellerPhone, sRole, targetRole,
         cropName, banglaName || cropName, category, variety || '', effectiveUnit, finalQuantity, finalQuantity,
-        finalQuantity, finalQuantity, Number(minOrderKg) || 1, finalPrice, finalMarketPrice, qualityGrade, district,
-        upazila || '', locationDetails || '', harvestStatus, availableDate, organicCertified ? 1 : 0,
-        finalImg,
-        description || '', farmerOrigin || (sRole === 'farmer' ? effectiveSellerName : ''),
+        finalPrice, finalMinOrder, finalMarketPrice,
+        quantity_kg, available_kg, min_order_kg, price_per_kg, market_price_per_kg,
+        qualityGrade, district, upazila || '', locationDetails || '', harvestStatus,
+        availableDate, organicCertified ? 1 : 0, finalImg, description || '',
+        farmerOrigin || (sRole === 'farmer' ? effectiveSellerName : ''),
         wholesalerArat || (sRole === 'wholesaler' ? effectiveSellerName : ''),
         procurementDate || '', safetyNote || '', new Date().toISOString()
       );
@@ -1227,7 +1300,11 @@ app.post('/api/products', requireAuth, async (req: AuthenticatedRequest, res) =>
 app.put('/api/products/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
     const { id } = req.params;
-    const { unit, pricePerKg, unitPrice, quantityKg, quantity, availableKg, availableQty, qualityGrade, harvestStatus, description, imageUrl } = req.body;
+    const {
+      unit, pricePerKg, unitPrice, quantityKg, quantity, availableKg, availableQty,
+      minOrderKg, minOrderQty, marketPrice, marketPricePerKg,
+      qualityGrade, harvestStatus, description, imageUrl
+    } = req.body;
 
     const existingRes = await pool.query('SELECT * FROM products WHERE id = $1', [id]);
     if (existingRes.rows.length === 0) return res.status(404).json({ error: 'Product not found.' });
@@ -1237,29 +1314,79 @@ app.put('/api/products/:id', requireAuth, async (req: AuthenticatedRequest, res)
       return res.status(403).json({ error: 'Forbidden: You can only edit your own products.' });
     }
 
+    const effectiveUnit = unit !== undefined ? (unit === 'dozen' ? 'dozen' : 'kg') : (existing.unit || 'kg');
     const newPrice = unitPrice !== undefined ? Number(unitPrice) : (pricePerKg !== undefined ? Number(pricePerKg) : null);
     const newQty = quantity !== undefined ? Number(quantity) : (quantityKg !== undefined ? Number(quantityKg) : null);
     const newAvail = availableQty !== undefined ? Number(availableQty) : (availableKg !== undefined ? Number(availableKg) : null);
+    const newMinOrder = minOrderQty !== undefined ? Number(minOrderQty) : (minOrderKg !== undefined ? Number(minOrderKg) : null);
+    const newMarketPrice = marketPrice !== undefined ? Number(marketPrice) : (marketPricePerKg !== undefined ? Number(marketPricePerKg) : null);
 
+    // Fallbacks for legacy unit-specific columns
+    const quantity_kg = effectiveUnit === 'kg' ? (newQty !== null ? newQty : 0) : (Number(req.body.quantity_kg || req.body.quantityKg) || 0);
+    const available_kg = effectiveUnit === 'kg' ? (newAvail !== null ? newAvail : 0) : (Number(req.body.available_kg || req.body.availableKg) || 0);
+    const price_per_kg = effectiveUnit === 'kg' ? (newPrice !== null ? newPrice : 0) : (Number(req.body.price_per_kg || req.body.pricePerKg) || 0);
+
+    // 1. Update unified columns in Neon
     await pool.query(`
       UPDATE products
       SET unit = COALESCE($1, unit),
           unit_price = COALESCE($2, unit_price),
-          price_per_kg = COALESCE($2, price_per_kg),
           quantity = COALESCE($3, quantity),
-          quantity_kg = COALESCE($3, quantity_kg),
           available_qty = COALESCE($4, available_qty),
-          available_kg = COALESCE($4, available_kg),
-          quality_grade = COALESCE($5, quality_grade),
-          harvest_status = COALESCE($6, harvest_status),
-          description = COALESCE($7, description),
-          image_url = COALESCE($8, image_url),
+          min_order_qty = COALESCE($5, min_order_qty),
+          market_price = COALESCE($6, market_price),
+          quality_grade = COALESCE($7, quality_grade),
+          harvest_status = COALESCE($8, harvest_status),
+          description = COALESCE($9, description),
+          image_url = COALESCE($10, image_url),
           updated_at = NOW()
-      WHERE id = $9
+      WHERE id = $11
     `, [
-      unit || null, newPrice, newQty, newAvail, qualityGrade || null, harvestStatus || null,
-      description || null, imageUrl || null, id
+      unit || null, newPrice, newQty, newAvail, newMinOrder, newMarketPrice,
+      qualityGrade || null, harvestStatus || null, description || null, imageUrl || null, id
     ]);
+
+    // 2. Safely sync legacy columns in Neon if non-generated
+    try {
+      await pool.query(`
+        UPDATE products
+        SET price_per_kg = CASE WHEN unit = 'kg' THEN unit_price ELSE 0 END,
+            quantity_kg = CASE WHEN unit = 'kg' THEN quantity ELSE 0 END,
+            available_kg = CASE WHEN unit = 'kg' THEN available_qty ELSE 0 END,
+            min_order_kg = COALESCE(min_order_qty, 1),
+            market_price_per_kg = COALESCE(market_price, unit_price * 1.15)
+        WHERE id = $1
+      `, [id]);
+    } catch {
+      // Ignored if generated columns
+    }
+
+    // 3. Sync to SQLite
+    try {
+      db.prepare(`
+        UPDATE products
+        SET unit = COALESCE(?, unit),
+            unit_price = COALESCE(?, unit_price),
+            quantity = COALESCE(?, quantity),
+            available_qty = COALESCE(?, available_qty),
+            price_per_kg = CASE WHEN COALESCE(?, unit) = 'kg' THEN COALESCE(?, unit_price) ELSE 0 END,
+            quantity_kg = CASE WHEN COALESCE(?, unit) = 'kg' THEN COALESCE(?, quantity) ELSE 0 END,
+            available_kg = CASE WHEN COALESCE(?, unit) = 'kg' THEN COALESCE(?, available_qty) ELSE 0 END,
+            quality_grade = COALESCE(?, quality_grade),
+            harvest_status = COALESCE(?, harvest_status),
+            description = COALESCE(?, description),
+            image_url = COALESCE(?, image_url)
+        WHERE id = ?
+      `).run(
+        unit || null, newPrice, newQty, newAvail,
+        unit || null, newPrice,
+        unit || null, newQty,
+        unit || null, newAvail,
+        qualityGrade || null, harvestStatus || null, description || null, imageUrl || null, id
+      );
+    } catch (e: any) {
+      console.warn('[SQLite] product update sync warning:', e.message);
+    }
 
     return res.json({ success: true, message: 'Product updated successfully.' });
   } catch (err: any) {
@@ -1280,6 +1407,9 @@ app.delete('/api/products/:id', requireAuth, async (req: AuthenticatedRequest, r
     }
 
     await pool.query('DELETE FROM products WHERE id = $1', [id]);
+    try {
+      db.prepare('DELETE FROM products WHERE id = ?').run(id);
+    } catch {}
     return res.json({ success: true, message: 'Product removed.' });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });

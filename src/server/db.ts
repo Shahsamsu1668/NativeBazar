@@ -48,12 +48,15 @@ export function initDatabase() {
       category TEXT NOT NULL,
       variety TEXT,
       unit TEXT DEFAULT 'kg',
-      quantity REAL,
-      available_qty REAL,
-      quantity_kg REAL NOT NULL,
-      available_kg REAL NOT NULL,
+      quantity REAL NOT NULL DEFAULT 0,
+      available_qty REAL NOT NULL DEFAULT 0,
+      unit_price REAL NOT NULL DEFAULT 0,
+      min_order_qty REAL DEFAULT 1,
+      market_price REAL,
+      quantity_kg REAL DEFAULT 0,
+      available_kg REAL DEFAULT 0,
+      price_per_kg REAL DEFAULT 0,
       min_order_kg REAL DEFAULT 1,
-      price_per_kg REAL NOT NULL,
       market_price_per_kg REAL,
       quality_grade TEXT DEFAULT 'A',
       district TEXT NOT NULL,
@@ -178,13 +181,35 @@ export function initDatabase() {
     db.prepare("ALTER TABLE products ADD COLUMN unit TEXT DEFAULT 'kg'").run();
   } catch {}
   try {
-    db.prepare("ALTER TABLE products ADD COLUMN quantity REAL").run();
+    db.prepare("ALTER TABLE products ADD COLUMN quantity REAL DEFAULT 0").run();
   } catch {}
   try {
-    db.prepare("ALTER TABLE products ADD COLUMN available_qty REAL").run();
+    db.prepare("ALTER TABLE products ADD COLUMN available_qty REAL DEFAULT 0").run();
+  } catch {}
+  try {
+    db.prepare("ALTER TABLE products ADD COLUMN unit_price REAL DEFAULT 0").run();
+  } catch {}
+  try {
+    db.prepare("ALTER TABLE products ADD COLUMN min_order_qty REAL DEFAULT 1").run();
+  } catch {}
+  try {
+    db.prepare("ALTER TABLE products ADD COLUMN market_price REAL").run();
   } catch {}
   try {
     db.prepare("ALTER TABLE order_items ADD COLUMN unit TEXT DEFAULT 'kg'").run();
+  } catch {}
+  try {
+    // Backfill unified product columns from legacy columns
+    db.prepare(`
+      UPDATE products SET
+        unit = COALESCE(unit, 'kg'),
+        quantity = COALESCE(quantity, quantity_kg, 0),
+        available_qty = COALESCE(available_qty, available_kg, quantity, quantity_kg, 0),
+        unit_price = COALESCE(unit_price, price_per_kg, 0),
+        min_order_qty = COALESCE(min_order_qty, min_order_kg, 1),
+        market_price = COALESCE(market_price, market_price_per_kg, 0)
+      WHERE quantity IS NULL OR unit_price IS NULL
+    `).run();
   } catch {}
   try {
     db.prepare("ALTER TABLE market_prices ADD COLUMN min_wholesale REAL").run();
@@ -947,7 +972,7 @@ export function executeOrderTransaction(params: CreateOrderParams) {
     const processedItems: any[] = [];
 
     const getProductStmt = db.prepare('SELECT * FROM products WHERE id = ?');
-    const updateProductStockStmt = db.prepare('UPDATE products SET available_kg = available_kg - ? WHERE id = ?');
+    const updateProductStockStmt = db.prepare('UPDATE products SET available_qty = MAX(0, COALESCE(available_qty, available_kg, 0) - ?), available_kg = MAX(0, COALESCE(available_kg, available_qty, 0) - ?) WHERE id = ?');
     const insertOrderItemStmt = db.prepare(`
       INSERT INTO order_items (id, order_id, product_id, crop_name, bangla_name, quantity_kg, unit_price, subtotal)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -1188,7 +1213,7 @@ export function cancelOrderAndRestoreStock(orderId: string, actorName = 'User', 
     const itemsStmt = db.prepare('SELECT * FROM order_items WHERE order_id = ?');
     const items = itemsStmt.all(orderId) as any[];
 
-    const restoreStockStmt = db.prepare('UPDATE products SET available_kg = available_kg + ? WHERE id = ?');
+    const restoreStockStmt = db.prepare('UPDATE products SET available_qty = COALESCE(available_qty, available_kg, 0) + ?, available_kg = COALESCE(available_kg, available_qty, 0) + ? WHERE id = ?');
     for (const it of items) {
       restoreStockStmt.run(it.quantity_kg, it.product_id);
     }

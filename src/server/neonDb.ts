@@ -296,7 +296,7 @@ export async function initNeonDatabase(): Promise<void> {
     }
 
 
-    // 9. Products table in Neon PostgreSQL
+    // 9. Products table in Neon PostgreSQL (Unified unit/quantity schema + legacy relaxation)
     try {
       await client.query(`
         CREATE TABLE IF NOT EXISTS products (
@@ -313,12 +313,14 @@ export async function initNeonDatabase(): Promise<void> {
           unit TEXT DEFAULT 'kg',
           quantity NUMERIC NOT NULL DEFAULT 0,
           available_qty NUMERIC NOT NULL DEFAULT 0,
-          quantity_kg NUMERIC,
-          available_kg NUMERIC,
-          min_order_qty NUMERIC DEFAULT 1,
           unit_price NUMERIC NOT NULL DEFAULT 0,
-          price_per_kg NUMERIC,
+          min_order_qty NUMERIC DEFAULT 1,
           market_price NUMERIC,
+          quantity_kg NUMERIC DEFAULT 0,
+          available_kg NUMERIC DEFAULT 0,
+          price_per_kg NUMERIC DEFAULT 0,
+          min_order_kg NUMERIC DEFAULT 1,
+          market_price_per_kg NUMERIC,
           quality_grade TEXT DEFAULT 'A',
           district TEXT NOT NULL,
           upazila TEXT,
@@ -335,18 +337,118 @@ export async function initNeonDatabase(): Promise<void> {
           created_at TIMESTAMPTZ DEFAULT NOW(),
           updated_at TIMESTAMPTZ DEFAULT NOW()
         );
+        -- Unified columns
         ALTER TABLE products ADD COLUMN IF NOT EXISTS unit TEXT DEFAULT 'kg';
         ALTER TABLE products ADD COLUMN IF NOT EXISTS quantity NUMERIC DEFAULT 0;
         ALTER TABLE products ADD COLUMN IF NOT EXISTS available_qty NUMERIC DEFAULT 0;
-        ALTER TABLE products ADD COLUMN IF NOT EXISTS quantity_kg NUMERIC;
-        ALTER TABLE products ADD COLUMN IF NOT EXISTS available_kg NUMERIC;
         ALTER TABLE products ADD COLUMN IF NOT EXISTS min_order_qty NUMERIC DEFAULT 1;
         ALTER TABLE products ADD COLUMN IF NOT EXISTS unit_price NUMERIC DEFAULT 0;
-        ALTER TABLE products ADD COLUMN IF NOT EXISTS price_per_kg NUMERIC;
+        ALTER TABLE products ADD COLUMN IF NOT EXISTS market_price NUMERIC;
+
+        -- Legacy columns (safe nullable additions)
+        ALTER TABLE products ADD COLUMN IF NOT EXISTS quantity_kg NUMERIC DEFAULT 0;
+        ALTER TABLE products ADD COLUMN IF NOT EXISTS available_kg NUMERIC DEFAULT 0;
+        ALTER TABLE products ADD COLUMN IF NOT EXISTS price_per_kg NUMERIC DEFAULT 0;
+        ALTER TABLE products ADD COLUMN IF NOT EXISTS min_order_kg NUMERIC DEFAULT 1;
+        ALTER TABLE products ADD COLUMN IF NOT EXISTS market_price_per_kg NUMERIC;
+
         CREATE INDEX IF NOT EXISTS idx_products_target_role ON products(target_role);
         CREATE INDEX IF NOT EXISTS idx_products_seller_id ON products(seller_id);
         CREATE INDEX IF NOT EXISTS idx_products_seller_role ON products(seller_role);
         CREATE INDEX IF NOT EXISTS idx_products_district ON products(district);
+
+        -- Safe column relaxation: remove GENERATED ALWAYS and drop NOT NULL constraints
+        DO $MIGRATE$
+        BEGIN
+          -- 1. If quantity_kg is a generated column, drop the generation expression
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'products' AND column_name = 'quantity_kg' AND is_generated = 'ALWAYS'
+          ) THEN
+            BEGIN
+              ALTER TABLE products ALTER COLUMN quantity_kg DROP EXPRESSION IF EXISTS;
+            EXCEPTION WHEN OTHERS THEN
+              ALTER TABLE products DROP COLUMN IF EXISTS quantity_kg;
+              ALTER TABLE products ADD COLUMN quantity_kg NUMERIC DEFAULT 0;
+            END;
+          END IF;
+
+          -- 2. If available_kg is a generated column, drop the generation expression
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'products' AND column_name = 'available_kg' AND is_generated = 'ALWAYS'
+          ) THEN
+            BEGIN
+              ALTER TABLE products ALTER COLUMN available_kg DROP EXPRESSION IF EXISTS;
+            EXCEPTION WHEN OTHERS THEN
+              ALTER TABLE products DROP COLUMN IF EXISTS available_kg;
+              ALTER TABLE products ADD COLUMN available_kg NUMERIC DEFAULT 0;
+            END;
+          END IF;
+
+          -- 3. If price_per_kg is a generated column, drop the generation expression
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'products' AND column_name = 'price_per_kg' AND is_generated = 'ALWAYS'
+          ) THEN
+            BEGIN
+              ALTER TABLE products ALTER COLUMN price_per_kg DROP EXPRESSION IF EXISTS;
+            EXCEPTION WHEN OTHERS THEN
+              ALTER TABLE products DROP COLUMN IF EXISTS price_per_kg;
+              ALTER TABLE products ADD COLUMN price_per_kg NUMERIC DEFAULT 0;
+            END;
+          END IF;
+
+          -- 4. Ensure old columns are nullable with DEFAULT 0 (no NOT NULL violation)
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'products' AND column_name = 'quantity_kg'
+          ) THEN
+            ALTER TABLE products ALTER COLUMN quantity_kg DROP NOT NULL;
+            ALTER TABLE products ALTER COLUMN quantity_kg SET DEFAULT 0;
+          END IF;
+
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'products' AND column_name = 'available_kg'
+          ) THEN
+            ALTER TABLE products ALTER COLUMN available_kg DROP NOT NULL;
+            ALTER TABLE products ALTER COLUMN available_kg SET DEFAULT 0;
+          END IF;
+
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'products' AND column_name = 'price_per_kg'
+          ) THEN
+            ALTER TABLE products ALTER COLUMN price_per_kg DROP NOT NULL;
+            ALTER TABLE products ALTER COLUMN price_per_kg SET DEFAULT 0;
+          END IF;
+
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'products' AND column_name = 'min_order_kg'
+          ) THEN
+            ALTER TABLE products ALTER COLUMN min_order_kg DROP NOT NULL;
+            ALTER TABLE products ALTER COLUMN min_order_kg SET DEFAULT 1;
+          END IF;
+
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'products' AND column_name = 'market_price_per_kg'
+          ) THEN
+            ALTER TABLE products ALTER COLUMN market_price_per_kg DROP NOT NULL;
+          END IF;
+        END $MIGRATE$;
+
+        -- 5. Backfill existing products for 100% backward compatibility
+        UPDATE products SET
+          unit = COALESCE(unit, 'kg'),
+          quantity = COALESCE(quantity, quantity_kg, 0),
+          available_qty = COALESCE(available_qty, available_kg, quantity, quantity_kg, 0),
+          unit_price = COALESCE(unit_price, price_per_kg, 0),
+          min_order_qty = COALESCE(min_order_qty, min_order_kg, 1),
+          market_price = COALESCE(market_price, market_price_per_kg, unit_price, 0)
+        WHERE unit IS NULL OR quantity IS NULL OR quantity = 0 OR unit_price IS NULL OR unit_price = 0;
       `);
     } catch (err: any) {
       console.warn('[Neon] products table init warning:', err.message);
