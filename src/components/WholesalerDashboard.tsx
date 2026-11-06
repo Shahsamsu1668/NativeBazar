@@ -67,18 +67,14 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
   const [showAddBatchModal, setShowAddBatchModal] = useState(false);
   const [newBatchForm, setNewBatchForm] = useState({
     cropName: '',
-    banglaName: '',
     category: 'Vegetables',
-    variety: 'Table Grade A',
+    variety: '',
     unit: 'kg' as 'kg' | 'dozen',
     quantityKg: '' as number | '',
     quantityDozen: '' as number | '',
     minOrder: 50 as number | '',
     pricePerUnit: '' as number | '',
-    qualityGrade: 'A' as 'A' | 'B' | 'C',
-    farmerOrigin: '',
     imageUrl: '',
-    description: '',
   });
   const batchFileInputRef = React.useRef<HTMLInputElement | null>(null);
 
@@ -323,42 +319,25 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
     if (isPublishingBatch) return;
     setIsPublishingBatch(true);
     try {
-      const bnName = newBatchForm.banglaName.trim() || name;
       const finalImg = newBatchForm.imageUrl || 'https://images.unsplash.com/photo-1595974482597-4b8da8879bc5?w=800&auto=format&fit=crop&q=80';
 
       await productApi.createProduct({
-        sellerId: currentUser?.id || 'usr-wholesaler',
-        sellerName: currentUser?.businessName || currentUser?.name || 'Wholesaler Arat',
-        sellerPhone: currentUser?.phone || '01711000000',
-        sellerRole: 'wholesaler',
-        targetRole: 'retailer',
         cropName: name,
-        banglaName: bnName,
+        banglaName: name,
         category: newBatchForm.category,
-        variety: newBatchForm.variety || 'Table Grade A',
+        variety: newBatchForm.variety.trim(),
         unit: newBatchForm.unit,
         quantity: currentQty,
         availableQty: currentQty,
         quantityKg: currentQty,
         availableKg: currentQty,
         minOrderKg: Number(newBatchForm.minOrder) || (newBatchForm.unit === 'dozen' ? 1 : 20),
+        minOrderQty: Number(newBatchForm.minOrder) || (newBatchForm.unit === 'dozen' ? 1 : 20),
         pricePerKg: currentPrice,
         unitPrice: currentPrice,
-        qualityGrade: newBatchForm.qualityGrade,
         district: currentUser?.district || 'Bogura',
         upazila: currentUser?.upazila || 'Shibganj',
-        locationDetails: `${currentUser?.businessName || currentUser?.name || 'Wholesale'} Arat Depot`,
-        harvestStatus: 'Cold-chain stored / Fresh Lot',
-        availableDate: 'Ready for Retailer Dispatch',
-        organicCertified: false,
         imageUrl: finalImg,
-        description: newBatchForm.description || `${bnName} পাইকারি আড়ত থেকে সরাসরি খুচরা বিক্রেতাদের জন্য প্রস্তুত লট।`,
-        traceability: {
-          farmerOrigin: newBatchForm.farmerOrigin || 'বগুড়ার নির্ভরযোগ্য কৃষক সমবায়',
-          wholesalerArat: currentUser?.businessName || currentUser?.name || 'Wholesaler Arat',
-          procurementDate: 'Procured from verified farmer',
-          safetyNote: 'Sorted and crate-packed for retail shops.',
-        },
       });
 
       const unitText = newBatchForm.unit === 'dozen' ? (language === 'bn' ? 'ডজন' : 'dozen') : (language === 'bn' ? 'কেজি' : 'kg');
@@ -377,18 +356,14 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
       setShowAddBatchModal(false);
       setNewBatchForm({
         cropName: '',
-        banglaName: '',
         category: 'Vegetables',
-        variety: 'Table Grade A',
+        variety: '',
         unit: 'kg',
         quantityKg: '',
         quantityDozen: '',
         minOrder: 50,
         pricePerUnit: '',
-        qualityGrade: 'A',
-        farmerOrigin: '',
         imageUrl: '',
-        description: '',
       });
       loadMyListings();
     } catch (err: any) {
@@ -1462,44 +1437,28 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
             </div>
 
             <form onSubmit={handlePublishWholesaleBatch} className="space-y-3.5 mt-4 text-xs">
-              {/* Product Name Inputs */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <div>
-                  <label className="block font-bold text-stone-700 mb-1">
-                    {t('Product Name (English / Common) *', 'পণ্যের নাম লিখুন *')}
-                  </label>
-                  <input
-                    type="text"
-                    value={newBatchForm.cropName}
-                    onChange={(e) =>
-                      setNewBatchForm((f) => ({ ...f, cropName: e.target.value }))
-                    }
-                    placeholder="e.g. Diamond Potato, Eggs..."
-                    className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl font-bold text-stone-900 focus:outline-hidden focus:border-blue-600 focus:bg-white"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-stone-700 mb-1">
-                    {t('Bangla Name', 'পণ্যের বাংলা নাম')}
-                  </label>
-                  <input
-                    type="text"
-                    value={newBatchForm.banglaName}
-                    onChange={(e) =>
-                      setNewBatchForm((f) => ({ ...f, banglaName: e.target.value }))
-                    }
-                    placeholder="যেমন: ডায়মন্ড আলু, দেশি ডিম..."
-                    className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl font-medium focus:outline-hidden focus:border-blue-600 focus:bg-white"
-                  />
-                </div>
+              {/* Product Name (Single Input) */}
+              <div>
+                <label className="block font-bold text-stone-700 mb-1">
+                  {t('Product Name *', 'পণ্যের নাম লিখুন *')}
+                </label>
+                <input
+                  type="text"
+                  value={newBatchForm.cropName}
+                  onChange={(e) =>
+                    setNewBatchForm((f) => ({ ...f, cropName: e.target.value }))
+                  }
+                  placeholder="e.g. Diamond Potato, Country Eggs, Banana..."
+                  className="w-full px-3 py-2.5 bg-stone-50 border border-stone-300 rounded-xl font-bold text-stone-900 focus:outline-hidden focus:border-blue-600 focus:bg-white text-sm"
+                  required
+                />
               </div>
 
               {/* Category & Variety */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-2 gap-2.5">
                 <div>
                   <label className="block font-bold text-stone-700 mb-1">
-                    {t('Category', 'ক্যাটাগরি')}
+                    {t('Category', 'বিভাগ')}
                   </label>
                   <select
                     value={newBatchForm.category}
@@ -1508,18 +1467,18 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
                     }
                     className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl font-bold cursor-pointer"
                   >
-                    <option value="Vegetables">Vegetables (শাকসবজি)</option>
-                    <option value="Tubers">Tubers (আলু ও কন্দ)</option>
-                    <option value="Fruits">Fruits (ফলমূল)</option>
-                    <option value="Grains">Grains (দানাশস্য)</option>
-                    <option value="Spices">Spices (মসলা)</option>
-                    <option value="Poultry">Poultry & Eggs (পোল্ট্রি ও ডিম)</option>
-                    <option value="Other">Other (অন্যান্য)</option>
+                    <option value="Vegetables">{t('Vegetables', 'শাকসবজি')}</option>
+                    <option value="Tubers">{t('Tubers', 'আলু ও কন্দ')}</option>
+                    <option value="Fruits">{t('Fruits', 'ফলমূল')}</option>
+                    <option value="Grains">{t('Grains', 'দানাশস্য')}</option>
+                    <option value="Spices">{t('Spices', 'মসলা')}</option>
+                    <option value="Poultry">{t('Poultry & Eggs', 'পোল্ট্রি ও ডিম')}</option>
+                    <option value="Other">{t('Other', 'অন্যান্য')}</option>
                   </select>
                 </div>
                 <div>
                   <label className="block font-bold text-stone-700 mb-1">
-                    {t('Variety / Specification', 'জাত বা ধরন')}
+                    {t('Brand / Variety', 'জাত / ব্র্যান্ড')}
                   </label>
                   <input
                     type="text"
@@ -1527,7 +1486,7 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
                     onChange={(e) =>
                       setNewBatchForm((f) => ({ ...f, variety: e.target.value }))
                     }
-                    placeholder="e.g. Table Grade A"
+                    placeholder="e.g. Diamond / Grade A"
                     className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl font-medium"
                   />
                 </div>
@@ -1746,39 +1705,6 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
                 </div>
               </div>
 
-              {/* Quality & Origin */}
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block font-bold text-stone-700 mb-1">
-                    {t('Quality Grade', 'মান বা গ্রেড')}
-                  </label>
-                  <select
-                    value={newBatchForm.qualityGrade}
-                    onChange={(e) =>
-                      setNewBatchForm((f) => ({ ...f, qualityGrade: e.target.value as any }))
-                    }
-                    className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl font-semibold cursor-pointer"
-                  >
-                    <option value="A">Grade A (Premium)</option>
-                    <option value="B">Grade B (Standard)</option>
-                    <option value="C">Grade C (Mixed)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block font-bold text-stone-700 mb-1">
-                    {t('Farmer Origin', 'কৃষক বা খামারের উৎস')}
-                  </label>
-                  <input
-                    type="text"
-                    value={newBatchForm.farmerOrigin}
-                    onChange={(e) =>
-                      setNewBatchForm((f) => ({ ...f, farmerOrigin: e.target.value }))
-                    }
-                    placeholder="e.g. Shibganj Farms, Bogura"
-                    className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl"
-                  />
-                </div>
-              </div>
               <div className="pt-2 flex justify-end gap-2 border-t border-stone-100">
                 <button
                   type="button"

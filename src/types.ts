@@ -169,6 +169,8 @@ export interface MarketplaceProduct {
   quantity?: number;
   availableQty?: number;
   unitPrice?: number;
+  minOrderQty?: number;
+  marketPrice?: number;
   quantityKg: number;
   availableKg: number;
   minOrderKg?: number;

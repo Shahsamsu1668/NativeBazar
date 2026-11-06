@@ -451,41 +451,26 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
     setSubmittingProduct(true);
 
     const cropNameEn = name;
-    const cropNameBn = productNameBn.trim() || name;
     const cropImg = productImage || 'https://images.unsplash.com/photo-1595974482597-4b8da8879bc5?w=800&auto=format&fit=crop&q=80';
 
     try {
       await productApi.createProduct({
-        sellerId: currentUser.id,
-        sellerName: currentUser.name,
-        sellerPhone: currentUser.phone,
-        sellerRole: 'farmer',
-        targetRole: 'wholesaler',
         cropName: cropNameEn,
-        banglaName: cropNameBn,
+        banglaName: cropNameEn,
         category: customCategory,
-        variety: variety || 'দেশি উন্নত জাত',
+        variety: variety.trim(),
         unit: selectedUnit,
         quantity: currentQty,
         availableQty: currentQty,
         quantityKg: currentQty,
         availableKg: currentQty,
         minOrderKg: selectedUnit === 'dozen' ? 1 : Math.min(20, currentQty),
+        minOrderQty: selectedUnit === 'dozen' ? 1 : Math.min(20, currentQty),
         pricePerKg: currentPrice,
         unitPrice: currentPrice,
-        qualityGrade,
         district: currentUser.district || selectedDistrict,
         upazila: currentUser.upazila || 'Shibganj',
-        locationDetails: `${currentUser.upazila || 'Shibganj'}, ${currentUser.district || 'Bogura'} জমি`,
-        harvestStatus,
-        organicCertified,
         imageUrl: cropImg,
-        description: description || `${cropNameBn} সরাসরি চাষির জমি থেকে সংগৃহীত।`,
-        traceability: {
-          farmerOrigin: `${currentUser.name}, ${currentUser.upazila || 'Shibganj'}, ${currentUser.district || 'Bogura'}`,
-          procurementDate: 'আজকের তাজা ফসল',
-          safetyNote: '১০০% ফরমালিনমুক্ত এবং বিষমুক্ত চাষাবাদ।',
-        },
       });
 
       const unitTextEn = selectedUnit === 'dozen' ? 'dozen' : 'kg';
@@ -496,7 +481,7 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
         t('Harvest Published!', 'ফসল তালিকাভুক্ত!'),
         t(
           `${cropNameEn} (${currentQty} ${unitTextEn}) published to Wholesalers at ৳${currentPrice}/${unitTextEn}.`,
-          `${cropNameBn} (${currentQty} ${unitTextBn}) পাইকারদের জন্য তালিকাভুক্ত করা হয়েছে। মূল্য ৳${currentPrice}/${unitTextBn}।`
+          `${cropNameEn} (${currentQty} ${unitTextBn}) পাইকারদের জন্য তালিকাভুক্ত করা হয়েছে। মূল্য ৳${currentPrice}/${unitTextBn}।`
         ),
         'success'
       );
@@ -504,7 +489,6 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
       showToast(t('Harvest published successfully!', 'ফসল সফলভাবে তালিকাভুক্ত হয়েছে!'), 'success');
       setShowAddModal(false);
       setProductName('');
-      setProductNameBn('');
       setProductImage('');
       setQuantityKgInput('');
       setQuantityDozenInput('');
@@ -1112,20 +1096,7 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <label className="block text-xs font-bold text-stone-700">
-                      {t('Bangla Name (Optional)', 'বাংলা নাম (ঐচ্ছিক)')}
-                    </label>
-                    <input
-                      type="text"
-                      value={productNameBn}
-                      onChange={(e) => setProductNameBn(e.target.value)}
-                      placeholder={t('Bangla name if typing in English...', 'বাংলা নাম (যেমন: দেশি গোল আলু)...')}
-                      className="w-full px-3 py-2.5 bg-stone-50 border border-stone-300 rounded-xl text-xs sm:text-sm font-medium focus:outline-hidden focus:border-emerald-600 focus:bg-white transition"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="block text-xs font-bold text-stone-700">
-                      {t('Category', 'ক্যাটাগরি')}
+                      {t('Category', 'বিভাগ')}
                     </label>
                     <select
                       value={customCategory}
@@ -1140,6 +1111,19 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
                       <option value="Poultry">{t('Poultry & Eggs', 'পোল্ট্রি ও ডিম')}</option>
                       <option value="Other">{t('Other Agro', 'অন্যান্য কৃষিপণ্য')}</option>
                     </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-xs font-bold text-stone-700">
+                      {t('Brand / Variety', 'জাত / ব্র্যান্ড')}
+                    </label>
+                    <input
+                      type="text"
+                      value={variety}
+                      onChange={(e) => setVariety(e.target.value)}
+                      placeholder={t('e.g. Diamond, Hybrid-3...', 'যেমন: ডায়মন্ড, হাইব্রিড...')}
+                      className="w-full px-3 py-2.5 bg-stone-50 border border-stone-300 rounded-xl text-xs sm:text-sm font-medium focus:outline-hidden focus:border-emerald-600 focus:bg-white transition"
+                    />
                   </div>
                 </div>
 
@@ -1443,76 +1427,6 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
                   </p>
                 </div>
               )}
-
-              {/* ─── Step 4: Quality & Readiness ─── */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-2 border-t border-stone-100">
-                <div>
-                  <label className="block text-xs font-black text-stone-700 mb-1.5">
-                    {t('Quality Grade', 'ফসলের মান / গ্রেড')}
-                  </label>
-                  <div className="grid grid-cols-3 gap-1.5">
-                    {[
-                      { val: 'A', labelEn: 'Grade A', labelBn: 'গ্রেড-এ' },
-                      { val: 'B', labelEn: 'Grade B', labelBn: 'গ্রেড-বি' },
-                      { val: 'C', labelEn: 'Grade C', labelBn: 'গ্রেড-সি' },
-                    ].map((g) => (
-                      <button
-                        key={g.val}
-                        type="button"
-                        onClick={() => setQualityGrade(g.val as any)}
-                        className={`py-2 px-2 rounded-xl text-xs font-bold text-center transition cursor-pointer border ${
-                          qualityGrade === g.val
-                            ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
-                            : 'bg-stone-50 text-stone-700 border-stone-200 hover:bg-stone-100'
-                        }`}
-                      >
-                        {language === 'bn' ? g.labelBn : g.labelEn}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-black text-stone-700 mb-1.5">
-                    {t('Harvest Status', 'ফসল তোলার অবস্থা')}
-                  </label>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {[
-                      { val: 'Ready to Harvest', labelEn: 'Field Ready', labelBn: 'তোলার উপযুক্ত' },
-                      { val: 'Harvested in Sacks', labelEn: 'In Sacks', labelBn: 'বস্তাজাত সম্পন্ন' },
-                    ].map((s) => (
-                      <button
-                        key={s.val}
-                        type="button"
-                        onClick={() => setHarvestStatus(s.val)}
-                        className={`py-2 px-2 rounded-xl text-xs font-bold text-center transition cursor-pointer border ${
-                          harvestStatus === s.val
-                            ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
-                            : 'bg-stone-50 text-stone-700 border-stone-200 hover:bg-stone-100'
-                        }`}
-                      >
-                        {language === 'bn' ? s.labelBn : s.labelEn}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Organic Checkbox */}
-              <label className="flex items-center gap-2.5 p-3 rounded-2xl bg-stone-50 border border-stone-200 text-stone-700 font-semibold cursor-pointer hover:bg-stone-100 transition">
-                <input
-                  type="checkbox"
-                  checked={organicCertified}
-                  onChange={(e) => setOrganicCertified(e.target.checked)}
-                  className="w-4 h-4 text-emerald-600 rounded-md accent-emerald-600 cursor-pointer"
-                />
-                <span className="text-xs">
-                  {t(
-                    'Grown using organic compost & pesticide-free practices',
-                    'জৈব সার ও বালাইনাশক মুক্ত প্রাকৃতিক পদ্ধতিতে চাষকৃত ফসল'
-                  )}
-                </span>
-              </label>
 
               {/* ─── Submit Buttons ─── */}
               <div className="pt-3 flex flex-col sm:flex-row items-center justify-end gap-2.5 border-t border-stone-100">
