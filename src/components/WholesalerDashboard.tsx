@@ -9,7 +9,8 @@ import {
 } from '../types';
 import { productApi, orderApi, intelligenceApi } from '../services/api';
 import { NotificationStore } from '../data/store';
-import { toBanglaNumber } from './Header';
+import { toBanglaNumber, toBanglaDistrict } from './Header';
+import { deduplicateProducts } from '../utils/productUtils';
 import {
   Building2,
   Package,
@@ -104,16 +105,13 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
   const [farmerOrdersLoading, setFarmerOrdersLoading] = useState(false);
 
   const [tenderForm, setTenderForm] = useState({
-    cropName: 'Hybrid Tomatoes',
-    cropBangla: 'হাইব্রিড পাকা টমেটো',
+    cropName: '',
     quantityKgNeeded: 3000,
     offeredPricePerKg: 39,
     district: currentUser?.district || 'Bogura',
-    upazila: currentUser?.upazila || 'Shibganj',
-    location: 'Mahasthangarh Highway Delivery Point',
+    upazila: currentUser?.upazila || '',
+    location: currentUser?.upazila ? `${currentUser.upazila}, ${currentUser.district} Arat Point` : 'Mahasthangarh Highway Delivery Point',
     deadline: 'Within 7 days',
-    urgent: true,
-    notes: 'Grade A firm table tomatoes. Immediate payment upon crate weighing.',
   });
   const [submittingTender, setSubmittingTender] = useState(false);
   const [isPublishingBatch, setIsPublishingBatch] = useState(false);
@@ -139,7 +137,7 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
         district: selectedDistrict !== 'All' ? selectedDistrict : undefined,
         search: cropSearch.trim() || undefined,
       });
-      setFarmerCrops(res.products || []);
+      setFarmerCrops(deduplicateProducts(res.products || []));
     } catch (e) {
       console.error('Failed to load farmer harvests', e);
     } finally {
@@ -159,7 +157,7 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
       const mine = (res.products || []).filter(
         (p) => p.sellerId === currentUser.id || p.sellerName === currentUser.name
       );
-      setMyWholesaleListings(mine);
+      setMyWholesaleListings(deduplicateProducts(mine));
     } catch (e) {
       console.error('Failed to load wholesaler listings', e);
       setMyWholesaleListings([]);
@@ -376,24 +374,29 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
   // Post Procurement Tender for Farmers (Farmer Intelligence)
   const handlePostTender = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!tenderForm.cropName.trim()) {
+      showToast(t('Please enter the required crop name', 'অনুগ্রহ করে প্রয়োজনীয় শস্যের নাম লিখুন'), 'error');
+      return;
+    }
     setSubmittingTender(true);
     try {
+      const cropUnified = tenderForm.cropName.trim();
       await intelligenceApi.createWholesalerOffer({
         wholesalerId: currentUser?.id || 'usr-wholesaler',
         wholesalerName: currentUser?.name || 'Wholesaler',
         wholesalerPhone: currentUser?.phone || '01711000000',
         businessName: currentUser?.businessName || currentUser?.name || 'Wholesaler Arat',
-        cropName: tenderForm.cropName,
-        cropBangla: tenderForm.cropBangla,
+        cropName: cropUnified,
+        cropBangla: cropUnified,
         quantityKgNeeded: tenderForm.quantityKgNeeded,
         fulfilledKg: 0,
         offeredPricePerKg: tenderForm.offeredPricePerKg,
         district: tenderForm.district,
         upazila: tenderForm.upazila,
-        location: tenderForm.location,
-        deadline: tenderForm.deadline,
-        urgent: tenderForm.urgent,
-        notes: tenderForm.notes,
+        location: tenderForm.location.trim(),
+        deadline: tenderForm.deadline.trim(),
+        urgent: false,
+        notes: '',
       });
 
       showToast(
@@ -404,6 +407,7 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
         'success'
       );
 
+      setTenderForm((f) => ({ ...f, cropName: '' }));
       setActiveTab('procure_crops');
     } catch (err: any) {
       showToast(err.message || 'Failed to publish tender', 'error');
@@ -692,15 +696,19 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
                   />
                   <div className="absolute top-2 left-2 flex gap-1">
                     <span className="bg-stone-900/80 backdrop-blur-xs text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
-                      Farmer Gate Harvest
+                      {t('Farmer Gate Harvest', 'খামার থেকে সংগ্রহ')}
                     </span>
                     <span className="bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
-                      Grade {crop.qualityGrade || 'A'}
+                      {t('Grade', 'গ্রেড')} {crop.qualityGrade || 'A'}
                     </span>
                   </div>
                   <div className="absolute bottom-2 right-2 bg-white/95 px-3 py-1 rounded-xl shadow-md border border-stone-200 text-right">
-                    <span className="text-base font-black text-stone-900">৳{crop.pricePerKg}</span>
-                    <span className="text-[10px] text-stone-500">/kg wholesale</span>
+                    <span className="text-base font-black text-stone-900">
+                      ৳{language === 'bn' ? toBanglaNumber(crop.pricePerKg) : crop.pricePerKg}
+                    </span>
+                    <span className="text-[10px] text-stone-500">
+                      /{t('kg wholesale', 'কেজি পাইকারি')}
+                    </span>
                   </div>
                 </div>
 
@@ -710,21 +718,25 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
                       {language === 'bn' ? crop.banglaName || crop.cropName : crop.cropName}
                     </h4>
                     <p className="text-[11px] text-stone-500 mt-0.5">
-                      {crop.variety || 'Deshi Hybrid'} • {crop.locationDetails || crop.district}
+                      {crop.variety || 'Deshi Hybrid'} • {language === 'bn' ? toBanglaDistrict(crop.locationDetails || crop.district) : (crop.locationDetails || crop.district)}
                     </p>
 
                     <div className="mt-2.5 p-2.5 bg-stone-50 rounded-xl border border-stone-200/80 space-y-1 text-[11px]">
                       <div className="flex justify-between">
-                        <span className="text-stone-500">Farmer:</span>
+                        <span className="text-stone-500">{t('Farmer:', 'কৃষক:')}</span>
                         <strong className="text-stone-800">{crop.sellerName}</strong>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-stone-500">Available Bulk:</span>
-                        <strong className="text-emerald-700 font-bold">{crop.availableKg} kg</strong>
+                        <span className="text-stone-500">{t('Available Bulk:', 'মজুদ পরিমাণ:')}</span>
+                        <strong className="text-emerald-700 font-bold">
+                          {language === 'bn' ? toBanglaNumber(crop.availableKg) : crop.availableKg} {t('kg', 'কেজি')}
+                        </strong>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-stone-500">Min Order:</span>
-                        <span className="text-stone-700">{crop.minOrderKg || 50} kg</span>
+                        <span className="text-stone-500">{t('Min Order:', 'নূন্যতম অর্ডার:')}</span>
+                        <span className="text-stone-700">
+                          {language === 'bn' ? toBanglaNumber(crop.minOrderKg || 50) : (crop.minOrderKg || 50)} {t('kg', 'কেজি')}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -1147,43 +1159,28 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
           </div>
 
           <form onSubmit={handlePostTender} className="space-y-4 text-xs">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block font-bold text-stone-700 mb-1">
-                  {t('Crop Needed (English)', 'প্রয়োজনীয় শস্য (ইংরেজি)')}
-                </label>
-                <input
-                  type="text"
-                  value={tenderForm.cropName}
-                  onChange={(e) => setTenderForm((f) => ({ ...f, cropName: e.target.value }))}
-                  placeholder={t('e.g. Hybrid Tomatoes', 'যেমন: Hybrid Tomatoes')}
-                  className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl font-medium focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block font-bold text-stone-700 mb-1">
-                  {t('Crop Needed (Bangla)', 'প্রয়োজনীয় শস্য (বাংলা)')}
-                </label>
-                <input
-                  type="text"
-                  value={tenderForm.cropBangla}
-                  onChange={(e) => setTenderForm((f) => ({ ...f, cropBangla: e.target.value }))}
-                  placeholder={t('e.g. হাইব্রিড টমেটো', 'যেমন: হাইব্রিড টমেটো')}
-                  className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl font-medium focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
-                  required
-                />
-              </div>
+            <div>
+              <label className="block font-bold text-stone-700 mb-1">
+                {t('Required Crop Name', 'প্রয়োজনীয় শস্য')} *
+              </label>
+              <input
+                type="text"
+                value={tenderForm.cropName}
+                onChange={(e) => setTenderForm((f) => ({ ...f, cropName: e.target.value }))}
+                placeholder={t('e.g. Tomatoes or টমেটো', 'যেমন: টমেটো বা Tomatoes')}
+                className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl font-medium focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
+                required
+              />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block font-bold text-stone-700 mb-1">
-                  {t('Target Quantity Needed (kg)', 'প্রয়োজনীয় মোট পরিমাণ (কেজি)')}
+                  {t('Total Required Quantity (kg)', 'প্রয়োজনীয় মোট পরিমাণ (কেজি)')} *
                 </label>
                 <input
                   type="number"
-                  value={tenderForm.quantityKgNeeded}
+                  value={tenderForm.quantityKgNeeded || ''}
                   onChange={(e) =>
                     setTenderForm((f) => ({ ...f, quantityKgNeeded: Number(e.target.value) }))
                   }
@@ -1194,11 +1191,11 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
               </div>
               <div>
                 <label className="block font-bold text-stone-700 mb-1">
-                  {t('Offered Price to Farmer (৳/kg)', 'কৃষকদের জন্য প্রস্তাবিত দর (৳/কেজি)')}
+                  {t('Proposed Price for Farmers (৳/kg)', 'কৃষকদের জন্য প্রস্তাবিত দর (৳/কেজি)')} *
                 </label>
                 <input
                   type="number"
-                  value={tenderForm.offeredPricePerKg}
+                  value={tenderForm.offeredPricePerKg || ''}
                   onChange={(e) =>
                     setTenderForm((f) => ({ ...f, offeredPricePerKg: Number(e.target.value) }))
                   }
@@ -1209,10 +1206,10 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block font-bold text-stone-700 mb-1">
-                  {t('Procurement District', 'সংগ্রহের জেলা')}
+                  {t('Collection District', 'সংগ্রহের জেলা')} *
                 </label>
                 <select
                   value={tenderForm.district}
@@ -1231,7 +1228,7 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
               </div>
               <div>
                 <label className="block font-bold text-stone-700 mb-1">
-                  {t('Procurement Deadline', 'দরপত্রের সময়সীমা')}
+                  {t('Tender Deadline', 'দরপত্রের সময়সীমা')} *
                 </label>
                 <input
                   type="text"
@@ -1246,7 +1243,7 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
 
             <div>
               <label className="block font-bold text-stone-700 mb-1">
-                {t('Pick-up Location / Delivery Point', 'পণ্য সংগ্রহের স্থান / ডেলিভারি পয়েন্ট')}
+                {t('Product Collection Location', 'পণ্য সংগ্রহের স্থান')} *
               </label>
               <input
                 type="text"
@@ -1257,29 +1254,6 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
                 required
               />
             </div>
-
-            <div>
-              <label className="block font-bold text-stone-700 mb-1">
-                {t('Notes / Terms', 'শর্তাবলী বা বিশেষ মন্তব্য')}
-              </label>
-              <textarea
-                rows={2}
-                value={tenderForm.notes}
-                onChange={(e) => setTenderForm((f) => ({ ...f, notes: e.target.value }))}
-                placeholder={t('e.g. Spot cash payment upon weighing and quality verification.', 'যেমন: ওজন ও মান যাচাই শেষে সাথে সাথে নগদ পরিশোধ।')}
-                className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-hidden"
-              />
-            </div>
-
-            <label className="flex items-center gap-2 cursor-pointer pt-1 font-semibold text-stone-700">
-              <input
-                type="checkbox"
-                checked={tenderForm.urgent}
-                onChange={(e) => setTenderForm((f) => ({ ...f, urgent: e.target.checked }))}
-                className="w-4 h-4 text-amber-600 rounded-sm"
-              />
-              <span>{t('Mark as Urgent Tender (Requires Fast Dispatch)', 'জরুরি উন্মুক্ত দরপত্র (দ্রুত সংগ্রহ প্রয়োজন)')}</span>
-            </label>
 
             <div className="pt-2 flex justify-end gap-2 border-t border-stone-100">
               <button
@@ -1319,12 +1293,13 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
               <div className="flex items-center gap-2">
                 <Building2 className="w-5 h-5 text-blue-600" />
                 <h3 className="font-extrabold text-stone-900 text-base">
-                  {t('Procure from Farmer', 'কৃষকের কাছ থেকে ক্রয়')}
+                  {t('Purchase from Farmer', 'কৃষকের কাছ থেকে ক্রয়')}
                 </h3>
               </div>
               <button
                 onClick={() => setSelectedCropToBuy(null)}
-                className="w-8 h-8 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-600 flex items-center justify-center font-bold"
+                title={t('Close', 'বন্ধ করুন')}
+                className="w-8 h-8 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-600 flex items-center justify-center font-bold cursor-pointer"
               >
                 ✕
               </button>
@@ -1333,24 +1308,35 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
             <form onSubmit={handleExecuteFarmerPurchase} className="space-y-4 mt-4 text-xs">
               <div className="p-3 bg-stone-50 rounded-2xl border border-stone-200 space-y-1">
                 <h4 className="font-extrabold text-stone-900 text-sm">
-                  {selectedCropToBuy.cropName} ({selectedCropToBuy.banglaName})
+                  {language === 'bn'
+                    ? selectedCropToBuy.banglaName || selectedCropToBuy.cropName
+                    : selectedCropToBuy.cropName || selectedCropToBuy.banglaName}
                 </h4>
                 <p className="text-stone-500">
-                  Seller: <strong>{selectedCropToBuy.sellerName}</strong> • {selectedCropToBuy.district}
+                  {t('Seller:', 'বিক্রেতা:')} <strong>{selectedCropToBuy.sellerName}</strong> • {language === 'bn' ? toBanglaDistrict(selectedCropToBuy.district) : selectedCropToBuy.district}
                 </p>
                 <div className="flex justify-between font-bold text-stone-800 pt-1">
-                  <span>Farm Gate Price:</span>
-                  <span className="text-emerald-700 text-sm">৳{selectedCropToBuy.pricePerKg}/kg</span>
+                  <span>{t('Farm Gate Price:', 'খামারের দর:')}</span>
+                  <span className="text-emerald-700 text-sm">
+                    ৳{language === 'bn' ? toBanglaNumber(selectedCropToBuy.pricePerKg) : selectedCropToBuy.pricePerKg}/{t('kg', 'কেজি')}
+                  </span>
                 </div>
                 <div className="flex justify-between text-stone-500">
-                  <span>Available Batch:</span>
-                  <span>{selectedCropToBuy.availableKg} kg</span>
+                  <span>{t('Available Batch:', 'মজুত ব্যাচ:')}</span>
+                  <span>
+                    {language === 'bn' ? toBanglaNumber(selectedCropToBuy.availableKg) : selectedCropToBuy.availableKg} {t('kg', 'কেজি')}
+                  </span>
                 </div>
               </div>
 
               <div>
                 <label className="block font-bold text-stone-700 mb-1">
-                  Quantity to Purchase (kg) *
+                  {t('Quantity to Purchase (kg) *', 'ক্রয়ের পরিমাণ (কেজি) *')}
+                  {selectedCropToBuy.minOrderKg ? (
+                    <span className="text-stone-500 font-normal ml-1">
+                      ({t('Min:', 'নূন্যতম:')} {language === 'bn' ? toBanglaNumber(selectedCropToBuy.minOrderKg) : selectedCropToBuy.minOrderKg} {t('kg', 'কেজি')})
+                    </span>
+                  ) : null}
                 </label>
                 <input
                   type="number"
@@ -1358,6 +1344,7 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
                   max={selectedCropToBuy.availableKg}
                   value={purchaseQtyKg}
                   onChange={(e) => setPurchaseQtyKg(Number(e.target.value))}
+                  placeholder={t('Enter quantity in kg', 'কেজিতে পরিমাণ লিখুন')}
                   className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl font-black text-stone-900 text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                   required
                 />
@@ -1365,21 +1352,24 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
 
               <div>
                 <label className="block font-bold text-stone-700 mb-1">
-                  Wholesaler Receiving Hub / Arat Address *
+                  {t('Wholesaler Receiving Hub / Arat Address *', 'পাইকারি আড়ত / প্রাপ্তির ঠিকানা *')}
                 </label>
                 <input
                   type="text"
                   value={deliveryHub}
                   onChange={(e) => setDeliveryHub(e.target.value)}
-                  className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl font-medium"
+                  placeholder={t('Enter receiving hub or warehouse address', 'আড়ত অথবা গুদামের ঠিকানা লিখুন')}
+                  className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                   required
                 />
               </div>
 
               <div className="p-3.5 bg-blue-50 rounded-2xl border border-blue-200 flex justify-between items-center font-bold text-blue-900">
-                <span>Total Wholesale Amount:</span>
+                <span>{t('Total Wholesale Amount:', 'মোট পাইকারি মূল্য:')}</span>
                 <span className="text-lg font-black text-blue-700">
-                  ৳{(purchaseQtyKg * selectedCropToBuy.pricePerKg).toLocaleString()}
+                  ৳{language === 'bn'
+                    ? toBanglaNumber((purchaseQtyKg * selectedCropToBuy.pricePerKg).toLocaleString())
+                    : (purchaseQtyKg * selectedCropToBuy.pricePerKg).toLocaleString()}
                 </span>
               </div>
 
@@ -1387,24 +1377,24 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
                 <button
                   type="button"
                   onClick={() => setSelectedCropToBuy(null)}
-                  className="px-4 py-2 font-bold text-stone-600 hover:bg-stone-100 rounded-xl"
+                  className="px-4 py-2 font-bold text-stone-600 hover:bg-stone-100 rounded-xl cursor-pointer"
                 >
-                  Cancel
+                  {t('Cancel', 'বাতিল')}
                 </button>
                 <button
                   type="submit"
                   disabled={submittingPurchase}
-                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-stone-400 text-white font-extrabold px-6 py-2 rounded-xl shadow-md flex items-center gap-2"
+                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-stone-400 text-white font-extrabold px-6 py-2 rounded-xl shadow-md flex items-center gap-2 cursor-pointer"
                 >
                   {submittingPurchase ? (
                     <>
                       <RefreshCw className="w-4 h-4 animate-spin" />
-                      <span>Reserving Stock...</span>
+                      <span>{t('Reserving Stock...', 'স্টক বুকিং হচ্ছে...')}</span>
                     </>
                   ) : (
                     <>
                       <CheckCircle2 className="w-4 h-4" />
-                      <span>Confirm Wholesale Order</span>
+                      <span>{t('Confirm Wholesale Order', 'পাইকারি ক্রয়াদেশ নিশ্চিত করুন')}</span>
                     </>
                   )}
                 </button>

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { MarketplaceProduct, Language, User } from '../types';
 import { productApi, orderApi } from '../services/api';
 import { toBanglaNumber } from './Header';
+import { deduplicateProducts } from '../utils/productUtils';
 import { getCropName, getCropDescription, translateMetadata } from './RetailerDashboard';
 import {
   ShoppingCart,
@@ -115,7 +116,7 @@ export const CustomerMarketplace: React.FC<CustomerMarketplaceProps> = ({
         search: searchQuery.trim() || undefined,
       });
       const strictlyRetail = (res.products || []).filter((p) => (p.sellerRole || '').toLowerCase() === 'retailer');
-      setProducts(strictlyRetail);
+      setProducts(deduplicateProducts(strictlyRetail));
     } catch (err: any) {
       console.error('Failed to load marketplace products', err);
       setError(

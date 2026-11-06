@@ -12,6 +12,7 @@ import {
 import { intelligenceApi, productApi, orderApi } from '../services/api';
 import { apiService } from '../services/apiService';
 import { ExpenseStore, NotificationStore } from '../data/store';
+import { deduplicateProducts } from '../utils/productUtils';
 import {
   Sprout,
   PlusCircle,
@@ -305,7 +306,7 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
       const filtered = (res.products || []).filter(
         (p) => p.sellerId === currentUser.id || p.sellerName === currentUser.name
       );
-      setMyProducts(filtered);
+      setMyProducts(deduplicateProducts(filtered));
     } catch (err) {
       console.error('Failed to load farmer products', err);
       setMyProducts([]);

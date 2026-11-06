@@ -1124,7 +1124,32 @@ app.get('/api/products', async (req, res) => {
       };
     });
 
-    return res.json({ products: mapped, total: mapped.length });
+    // Eliminate duplicate identical posts for the same lot/product
+    const seenIds = new Set<string>();
+    const seenLotSignatures = new Set<string>();
+    const deduplicatedMapped = [];
+
+    for (const item of mapped) {
+      if (seenIds.has(item.id)) continue;
+      seenIds.add(item.id);
+
+      const normSeller = (item.sellerName || item.sellerId || '').trim().toLowerCase();
+      const normCrop = (item.cropName || item.banglaName || '').trim().toLowerCase();
+      const normDistrict = (item.district || '').trim().toLowerCase();
+      const normTarget = (item.targetRole || '').trim().toLowerCase();
+
+      const lotSig = normSeller && normCrop
+        ? `${normSeller}::${normCrop}::${normDistrict}::${normTarget}`
+        : item.id;
+
+      if (seenLotSignatures.has(lotSig)) {
+        continue;
+      }
+      seenLotSignatures.add(lotSig);
+      deduplicatedMapped.push(item);
+    }
+
+    return res.json({ products: deduplicatedMapped, total: deduplicatedMapped.length });
   } catch (err: any) {
     console.error('Error fetching Neon products:', err);
     return res.status(500).json({ error: err.message || 'Failed to fetch products.' });

@@ -8,6 +8,7 @@ import {
 } from '../types';
 import { productApi, orderApi } from '../services/api';
 import { toBanglaNumber } from './Header';
+import { deduplicateProducts } from '../utils/productUtils';
 import { NotificationStore } from '../data/store';
 import { MASTER_AGRICULTURAL_CATALOG } from '../data/catalogData';
 import {
@@ -306,7 +307,7 @@ export const RetailerDashboard: React.FC<RetailerDashboardProps> = ({
       const strictlyWholesalers = (res.products || []).filter(
         (p) => (p.sellerRole || '').toLowerCase() === 'wholesaler'
       );
-      setWholesaleListings(strictlyWholesalers);
+      setWholesaleListings(deduplicateProducts(strictlyWholesalers));
     } catch (e) {
       console.error('Failed to load wholesale listings', e);
     } finally {
@@ -326,7 +327,7 @@ export const RetailerDashboard: React.FC<RetailerDashboardProps> = ({
       const mine = (res.products || []).filter(
         (p) => p.sellerId === currentUser.id || p.sellerName === currentUser.name
       );
-      setMyRetailProducts(mine);
+      setMyRetailProducts(deduplicateProducts(mine));
     } catch (e) {
       console.error('Failed to load retail products', e);
       setMyRetailProducts([]);
