@@ -259,8 +259,8 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Desktop Actions */}
           <div className="hidden md:flex items-center gap-2 flex-1 justify-end">
-            {/* AI Crop Doctor Button — hidden for consumer, retailer, and admin */}
-            {!isAdmin && role !== 'consumer' && role !== 'retailer' && (
+            {/* AI Crop Doctor Button — hidden for consumer, retailer, wholesaler, and admin (farmer only) */}
+            {!isAdmin && role !== 'consumer' && role !== 'retailer' && role !== 'wholesaler' && (
               <button
                 onClick={onOpenCropDoctor}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
@@ -585,10 +585,10 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           )}
 
-          {/* Crop Doctor & Voice AI — hidden for consumer and admin roles on mobile, Crop Doctor hidden for retailer */}
+          {/* Crop Doctor & Voice AI — hidden for consumer and admin roles on mobile, Crop Doctor hidden for retailer and wholesaler */}
           {role !== 'consumer' && !isAdmin && (
-            <div className={role === 'retailer' ? 'grid grid-cols-1 gap-2' : 'grid grid-cols-2 gap-2'}>
-              {role !== 'retailer' && (
+            <div className={role === 'retailer' || role === 'wholesaler' ? 'grid grid-cols-1 gap-2' : 'grid grid-cols-2 gap-2'}>
+              {role !== 'retailer' && role !== 'wholesaler' && (
                 <button
                   onClick={() => { onOpenCropDoctor(); setMobileMenuOpen(false); }}
                   className="flex items-center gap-2 p-2 bg-emerald-50 border border-emerald-200 rounded-lg text-xs font-semibold text-emerald-800 cursor-pointer"
