@@ -390,6 +390,18 @@ export const RetailerDashboard: React.FC<RetailerDashboardProps> = ({
     onConfirm: () => void;
   } | null>(null);
 
+  // Prevent background scrolling while any modal is open
+  useEffect(() => {
+    if (showAddRetailModal || Boolean(selectedWholesaleLot) || Boolean(confirmDialog)) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [showAddRetailModal, selectedWholesaleLot, confirmDialog]);
+
   const showToast = (text: string, type: 'success' | 'error' = 'success') => {
     setToastMessage({ text, type });
     setTimeout(() => setToastMessage(null), 3500);
@@ -1219,8 +1231,8 @@ export const RetailerDashboard: React.FC<RetailerDashboardProps> = ({
 
       {/* ─── MODAL: PURCHASE WHOLESALE LOT FROM WHOLESALER ────────────────────────── */}
       {selectedWholesaleLot && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-stone-200 animate-scale-up">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto overscroll-contain">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-stone-200 my-auto animate-scale-up max-h-[90vh] overflow-y-auto scrollbar-hide overscroll-contain">
             <div className="flex items-center justify-between pb-3 border-b border-stone-100">
               <h3 className="font-extrabold text-stone-900 text-base">
                 {t('Purchase Wholesale Batch', 'পাইকারি লট ক্রয়')}
@@ -1307,8 +1319,8 @@ export const RetailerDashboard: React.FC<RetailerDashboardProps> = ({
 
       {/* ─── MODAL: PUBLISH RETAIL PRODUCT FOR CONSUMERS ──────────────────────────── */}
       {showAddRetailModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-stone-200 my-8 animate-scale-up">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto overscroll-contain">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-stone-200 my-auto animate-scale-up max-h-[90vh] overflow-y-auto scrollbar-hide overscroll-contain">
             <div className="flex items-center justify-between pb-3.5 border-b border-stone-100">
               <div>
                 <h3 className="font-extrabold text-stone-900 text-base sm:text-lg">

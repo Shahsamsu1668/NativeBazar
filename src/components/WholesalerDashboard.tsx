@@ -223,6 +223,18 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
     };
   }, []);
 
+  // Prevent background scrolling while any modal is open
+  useEffect(() => {
+    if (showAddBatchModal || Boolean(selectedCropToBuy) || Boolean(confirmDialog)) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [showAddBatchModal, selectedCropToBuy, confirmDialog]);
+
   // Execute Wholesale Purchase from Farmer (Farmer -> Wholesaler)
   const handleExecuteFarmerPurchase = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1326,8 +1338,8 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
 
       {/* ─── MODAL: WHOLESALE PURCHASE FROM FARMER ───────────────────────────────── */}
       {selectedCropToBuy && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-stone-200 animate-scale-up">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto overscroll-contain">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-stone-200 my-auto animate-scale-up max-h-[90vh] overflow-y-auto scrollbar-hide overscroll-contain">
             <div className="flex items-center justify-between pb-3 border-b border-stone-100">
               <div className="flex items-center gap-2">
                 <Building2 className="w-5 h-5 text-blue-600" />
@@ -1429,8 +1441,8 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
 
       {/* ─── MODAL: CREATE WHOLESALE BATCH FOR RETAILERS ─────────────────────────── */}
       {showAddBatchModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-stone-200 my-8 animate-scale-up">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto overscroll-contain">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-stone-200 my-auto animate-scale-up max-h-[90vh] overflow-y-auto scrollbar-hide overscroll-contain">
             <div className="flex items-center justify-between pb-3.5 border-b border-stone-100">
               <div>
                 <h3 className="font-black text-stone-900 text-base sm:text-lg">

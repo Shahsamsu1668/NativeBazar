@@ -380,6 +380,18 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
     return () => window.removeEventListener('nb_open_add_crop', handleOpenAddCrop);
   }, []);
 
+  // Prevent background scrolling while any modal is open
+  useEffect(() => {
+    if (showAddModal || showLedgerModal || Boolean(confirmDialog)) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [showAddModal, showLedgerModal, confirmDialog]);
+
   // AI Price Recommendation
   const handlePredictPrice = async () => {
     setIsPredicting(true);
@@ -1048,8 +1060,8 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
 
       {/* ─── MODAL: ADD HARVEST CROP (Farmer -> Wholesaler) ────────────────────────── */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-xl w-full p-5 sm:p-7 shadow-2xl border border-stone-200 my-6 animate-scale-up">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto overscroll-contain">
+          <div className="bg-white rounded-3xl max-w-xl w-full p-5 sm:p-7 shadow-2xl border border-stone-200 my-auto animate-scale-up max-h-[90vh] overflow-y-auto scrollbar-hide overscroll-contain">
             {/* Header */}
             <div className="flex items-center justify-between pb-3.5 border-b border-stone-100">
               <div className="flex items-center gap-3">
@@ -1536,8 +1548,8 @@ export const FarmerDashboard: React.FC<FarmerDashboardProps> = ({
 
       {/* ─── MODAL: ADD LEDGER ENTRY ────────────────────────────────────────────── */}
       {showLedgerModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-stone-200">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto overscroll-contain">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-stone-200 my-auto animate-scale-up max-h-[90vh] overflow-y-auto scrollbar-hide overscroll-contain">
             <h3 className="font-extrabold text-stone-900 text-base mb-3">
               {t('New Financial Ledger Entry', 'নতুন খতিয়ান এন্ট্রি')}
             </h3>
