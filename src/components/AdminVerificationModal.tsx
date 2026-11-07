@@ -85,18 +85,18 @@ export const AdminVerificationModal: React.FC<AdminVerificationModalProps> = ({
       aria-labelledby="admin-verify-title"
       className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in"
     >
-      <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-stone-200 space-y-4">
+      <div className="bg-white dark:bg-[#161b22] rounded-2xl max-w-md w-full p-6 shadow-2xl border border-stone-200 dark:border-stone-800 space-y-4">
         {/* Header */}
-        <div className="flex items-center justify-between pb-3 border-b border-stone-200">
+        <div className="flex items-center justify-between pb-3 border-b border-stone-200 dark:border-stone-700">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-slate-900 text-white flex items-center justify-center font-bold">
+            <div className="w-9 h-9 rounded-xl bg-slate-900 dark:bg-slate-800 text-white flex items-center justify-center font-bold">
               <ShieldCheck className="w-5 h-5 text-emerald-400" />
             </div>
             <div>
-              <h3 id="admin-verify-title" className="font-extrabold text-stone-900 text-sm">
+              <h3 id="admin-verify-title" className="font-extrabold text-stone-900 dark:text-white text-sm">
                 {t('Admin Authentication Required', 'অ্যাডমিন নিরাপত্তা যাচাইকরণ')}
               </h3>
-              <p className="text-[11px] text-stone-500 font-medium">
+              <p className="text-[11px] text-stone-500 dark:text-stone-300 font-medium">
                 {t('Verify credentials to access admin section', 'অ্যাডমিন সেকশনে প্রবেশের জন্য অনুমোদিত তথ্য দিন')}
               </p>
             </div>
@@ -104,14 +104,14 @@ export const AdminVerificationModal: React.FC<AdminVerificationModalProps> = ({
           <button
             onClick={onClose}
             aria-label={t('Close', 'বন্ধ করুন')}
-            className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-stone-100 text-stone-400"
+            className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800 text-stone-400 dark:text-stone-300 cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
         {error && (
-          <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center gap-2 animate-slide-up">
-            <AlertTriangle className="w-4 h-4 shrink-0 text-red-600" />
+          <div className="p-3 bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-800 rounded-xl text-xs text-red-700 dark:text-red-300 flex items-center gap-2 animate-slide-up">
+            <AlertTriangle className="w-4 h-4 shrink-0 text-red-600 dark:text-red-400" />
             <span>{error}</span>
           </div>
         )}
@@ -119,17 +119,17 @@ export const AdminVerificationModal: React.FC<AdminVerificationModalProps> = ({
         {/* Form */}
         <form onSubmit={handleVerify} className="space-y-3.5 text-xs">
           <div>
-            <label className="block font-semibold text-stone-700 mb-1">
+            <label className="block font-semibold text-stone-700 dark:text-stone-200 mb-1">
               {t('Admin ID / Email', 'অ্যাডমিন আইডি / ইমেইল')}
             </label>
             <div className="relative">
-              <Mail className="w-4 h-4 text-stone-400 absolute left-3 top-2.5 pointer-events-none" />
+              <Mail className="w-4 h-4 text-stone-400 dark:text-stone-400 absolute left-3 top-2.5 pointer-events-none" />
               <input
                 type="text"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="admin@nativebazar.gov.bd"
-                className="w-full pl-9 pr-3 py-2 bg-stone-50 border border-stone-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
+                className="w-full pl-9 pr-3 py-2 bg-stone-50 dark:bg-stone-800 border border-stone-300 dark:border-stone-700 text-stone-900 dark:text-white placeholder:text-stone-400 dark:placeholder:text-stone-400 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-hidden font-medium"
                 autoFocus
                 required
               />
@@ -137,23 +137,23 @@ export const AdminVerificationModal: React.FC<AdminVerificationModalProps> = ({
           </div>
 
           <div>
-            <label className="block font-semibold text-stone-700 mb-1">
+            <label className="block font-semibold text-stone-700 dark:text-stone-200 mb-1">
               {t('Admin Password', 'অ্যাডমিন পাসওয়ার্ড')}
             </label>
             <div className="relative">
-              <Lock className="w-4 h-4 text-stone-400 absolute left-3 top-2.5 pointer-events-none" />
+              <Lock className="w-4 h-4 text-stone-400 dark:text-stone-400 absolute left-3 top-2.5 pointer-events-none" />
               <input
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••••••"
-                className="w-full pl-9 pr-9 py-2 bg-stone-50 border border-stone-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
+                className="w-full pl-9 pr-9 py-2 bg-stone-50 dark:bg-stone-800 border border-stone-300 dark:border-stone-700 text-stone-900 dark:text-white placeholder:text-stone-400 dark:placeholder:text-stone-400 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-hidden font-medium"
                 required
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-2.5 top-2.5 text-stone-400 hover:text-stone-600"
+                className="absolute right-2.5 top-2.5 text-stone-400 dark:text-stone-400 hover:text-stone-600 dark:hover:text-stone-200 cursor-pointer"
                 aria-label={showPassword ? 'Hide password' : 'Show password'}
               >
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -162,11 +162,11 @@ export const AdminVerificationModal: React.FC<AdminVerificationModalProps> = ({
           </div>
 
           <div>
-            <label className="block font-semibold text-stone-700 mb-1">
+            <label className="block font-semibold text-stone-700 dark:text-stone-200 mb-1">
               {t('Security PIN', 'নিরাপত্তা পিন')}
             </label>
             <div className="relative">
-              <KeyRound className="w-4 h-4 text-stone-400 absolute left-3 top-2.5 pointer-events-none" />
+              <KeyRound className="w-4 h-4 text-stone-400 dark:text-stone-400 absolute left-3 top-2.5 pointer-events-none" />
               <input
                 type="password"
                 inputMode="numeric"
@@ -174,7 +174,7 @@ export const AdminVerificationModal: React.FC<AdminVerificationModalProps> = ({
                 value={securityPin}
                 onChange={(e) => setSecurityPin(e.target.value)}
                 placeholder="••••••••"
-                className="w-full pl-9 pr-3 py-2 bg-stone-50 border border-stone-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
+                className="w-full pl-9 pr-3 py-2 bg-stone-50 dark:bg-stone-800 border border-stone-300 dark:border-stone-700 text-stone-900 dark:text-white placeholder:text-stone-400 dark:placeholder:text-stone-400 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-hidden font-medium"
                 required
               />
             </div>
@@ -184,14 +184,14 @@ export const AdminVerificationModal: React.FC<AdminVerificationModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="w-1/3 py-2.5 bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold rounded-xl transition-colors"
+              className="w-1/3 py-2.5 bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 text-stone-700 dark:text-stone-200 font-bold rounded-xl transition-colors cursor-pointer"
             >
               {t('Cancel', 'বাতিল')}
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="w-2/3 py-2.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5"
+              className="w-2/3 py-2.5 bg-slate-900 hover:bg-slate-800 dark:bg-emerald-600 dark:hover:bg-emerald-700 disabled:opacity-50 text-white font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer"
             >
               <KeyRound className="w-3.5 h-3.5 text-emerald-400" />
               <span>{loading ? t('Verifying...', 'যাচাই হচ্ছে...') : t('Verify & Enter Admin', 'যাচাই ও প্রবেশ করুন')}</span>

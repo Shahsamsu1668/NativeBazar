@@ -312,13 +312,13 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-stone-100 flex flex-col justify-center py-10 px-4 sm:px-6 lg:px-8 font-sans">
+    <div className="min-h-screen bg-stone-100 dark:bg-stone-950 flex flex-col justify-center py-10 px-4 sm:px-6 lg:px-8 font-sans">
       {/* Top Bar with Back and Language switch */}
       <div className="max-w-xl w-full mx-auto flex items-center justify-between mb-4">
         {onBack ? (
           <button
             onClick={onBack}
-            className="flex items-center gap-1.5 text-xs font-bold text-stone-600 hover:text-emerald-700 bg-white px-3 py-1.5 rounded-xl border border-stone-200 transition-colors shadow-2xs"
+            className="flex items-center gap-1.5 text-xs font-bold text-stone-600 dark:text-stone-200 hover:text-emerald-700 dark:hover:text-emerald-400 bg-white dark:bg-stone-800 px-3 py-1.5 rounded-xl border border-stone-200 dark:border-stone-700 transition-colors shadow-2xs cursor-pointer"
           >
             <ArrowLeft className="w-4 h-4" />
             <span>{t('Back to Marketplace', 'মার্কেটপ্লেসে ফিরুন')}</span>
@@ -327,22 +327,22 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
         <button
           onClick={onLanguageToggle}
-          className="text-xs font-bold text-stone-700 bg-white px-3 py-1.5 rounded-xl border border-stone-200 hover:bg-stone-50 transition-colors shadow-2xs"
+          className="text-xs font-bold text-stone-700 dark:text-stone-200 bg-white dark:bg-stone-800 px-3 py-1.5 rounded-xl border border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-700 transition-colors shadow-2xs cursor-pointer"
         >
           {language === 'bn' ? 'English' : 'বাংলা'}
         </button>
       </div>
 
-      <div className="max-w-xl w-full mx-auto bg-white rounded-3xl shadow-xl border border-stone-200 overflow-hidden">
+      <div className="max-w-xl w-full mx-auto bg-white dark:bg-[#161b22] rounded-3xl shadow-xl border border-stone-200 dark:border-stone-800 overflow-hidden">
         {/* Header Ribbon */}
         <div className="bg-gradient-to-r from-emerald-800 via-emerald-900 to-stone-900 px-6 py-6 text-white text-center relative">
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-white/10 backdrop-blur-sm border border-white/20 mb-3 shadow-inner">
             <Sprout className="w-7 h-7 text-emerald-300" />
           </div>
-          <h1 className="text-xl sm:text-2xl font-black tracking-tight">
+          <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white">
             {language === 'bn' ? 'আমার হাট' : 'Amar Haat'} • {t('Agricultural Platform', 'আমার হাট কৃষি প্ল্যাটফর্ম')}
           </h1>
-          <p className="text-xs text-emerald-100/80 mt-1 max-w-sm mx-auto">
+          <p className="text-xs text-emerald-100/90 mt-1 max-w-sm mx-auto font-medium">
             {t(
               'Secure agricultural supply chain connecting Farmers, Wholesalers, Retailers & Consumers.',
               'কৃষক, পাইকার, খুচরা বিক্রেতা ও ভোক্তাদের সরাসরি নিরাপদ কৃষি বাজার।'
@@ -353,22 +353,22 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         {/* Admin Portal Toggle View */}
         {isAdminMode ? (
           <div className="p-6 sm:p-8 space-y-6">
-            <div className="flex items-center justify-between border-b border-stone-200 pb-3">
+            <div className="flex items-center justify-between border-b border-stone-200 dark:border-stone-700 pb-3">
               <div className="flex items-center gap-2">
-                <ShieldCheck className="w-5 h-5 text-slate-800" />
-                <h2 className="text-base font-bold text-stone-900">
+                <ShieldCheck className="w-5 h-5 text-slate-800 dark:text-emerald-400" />
+                <h2 className="text-base font-bold text-stone-900 dark:text-white">
                   {t('Authorized Administrator Access', 'অনুমোদিত অ্যাডমিন পোর্টাল')}
                 </h2>
               </div>
               <button
                 onClick={() => { setIsAdminMode(false); setError(''); }}
-                className="text-xs font-bold text-emerald-700 hover:underline"
+                className="text-xs font-bold text-emerald-700 dark:text-emerald-400 hover:underline cursor-pointer"
               >
                 {t('Return to Public Login', 'সাধারণ লগইনে ফিরুন')}
               </button>
             </div>
 
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700">
+            <div className="p-3 bg-slate-50 dark:bg-stone-800/70 border border-slate-200 dark:border-stone-700 rounded-xl text-xs text-slate-700 dark:text-stone-200 font-medium">
               {t(
                 'This section is strictly restricted to certified platform administrators. Unauthorized access attempts are monitored and logged.',
                 'এই সেকশনটি শুধুমাত্র প্ল্যাটফর্ম অ্যাডমিনিস্ট্রেটরদের জন্য সংরক্ষিত। অননুমোদিত প্রচেষ্টা নিরীক্ষিত হয়।'
@@ -376,14 +376,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({
             </div>
 
             {error && (
-              <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-bold">
+              <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-xs font-bold">
                 ⚠️ {error}
               </div>
             )}
 
             <form onSubmit={handleAdminLogin} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-stone-700 mb-1">
+                <label className="block text-xs font-bold text-stone-700 dark:text-stone-200 mb-1">
                   {t('Admin ID / Username', 'অ্যাডমিন আইডি')}
                 </label>
                 <input
@@ -392,12 +392,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   value={adminUsername}
                   onChange={(e) => setAdminUsername(e.target.value)}
                   placeholder="NativeBazarAdmin"
-                  className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-stone-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+                  className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-white placeholder:text-stone-400 dark:placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-stone-700 mb-1">
+                <label className="block text-xs font-bold text-stone-700 dark:text-stone-200 mb-1">
                   {t('Secret Password', 'গোপন পাসওয়ার্ড')}
                 </label>
                 <input
@@ -406,12 +406,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   value={adminPassword}
                   onChange={(e) => setAdminPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-stone-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+                  className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-white placeholder:text-stone-400 dark:placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-stone-700 mb-1">
+                <label className="block text-xs font-bold text-stone-700 dark:text-stone-200 mb-1">
                   {t('Clearance 2FA Security PIN', 'সিকিউরিটি পিন')}
                 </label>
                 <input
@@ -419,16 +419,16 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   value={adminPin}
                   onChange={(e) => setAdminPin(e.target.value)}
                   placeholder="883650"
-                  className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-stone-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+                  className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-white placeholder:text-stone-400 dark:placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
                 />
               </div>
 
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3 bg-stone-900 hover:bg-stone-800 text-white font-bold rounded-xl text-sm transition-all shadow-md flex items-center justify-center gap-2"
+                className="w-full py-3 bg-stone-900 hover:bg-stone-800 dark:bg-emerald-600 dark:hover:bg-emerald-700 text-white font-bold rounded-xl text-sm transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
               >
-                <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                <ShieldCheck className="w-4 h-4 text-emerald-400 dark:text-white" />
                 <span>{loading ? t('Authenticating...', 'যাচাই করা হচ্ছে...') : t('Verify Admin Clearance', 'অ্যাডমিন যাচাই ও প্রবেশ')}</span>
               </button>
             </form>
@@ -436,14 +436,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         ) : (
           <div className="p-6 sm:p-8 space-y-6">
             {/* Mode Selector: Login vs Register */}
-            <div className="flex bg-stone-100 p-1 rounded-2xl">
+            <div className="flex bg-stone-100 dark:bg-stone-800/90 p-1 rounded-2xl border border-transparent dark:border-stone-700">
               <button
                 type="button"
                 onClick={() => { setMode('login'); setError(''); }}
-                className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all ${
+                className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
                   mode === 'login'
-                    ? 'bg-white text-stone-900 shadow-xs'
-                    : 'text-stone-500 hover:text-stone-900'
+                    ? 'bg-white dark:bg-stone-900 text-stone-900 dark:text-white shadow-xs'
+                    : 'text-stone-500 dark:text-stone-300 hover:text-stone-900 dark:hover:text-white'
                 }`}
               >
                 {t('Sign In (Existing Account)', 'লগইন করুন')}
@@ -451,10 +451,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({
               <button
                 type="button"
                 onClick={() => { setMode('register'); setError(''); }}
-                className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all ${
+                className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
                   mode === 'register'
-                    ? 'bg-white text-stone-900 shadow-xs'
-                    : 'text-stone-500 hover:text-stone-900'
+                    ? 'bg-white dark:bg-stone-900 text-stone-900 dark:text-white shadow-xs'
+                    : 'text-stone-500 dark:text-stone-300 hover:text-stone-900 dark:hover:text-white'
                 }`}
               >
                 {t('Create New Account', 'নতুন অ্যাকাউন্ট খুলুন')}
@@ -463,7 +463,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
             {/* Exactly 4 Public Roles Selector */}
             <div>
-              <label className="block text-xs font-bold text-stone-600 mb-2">
+              <label className="block text-xs font-bold text-stone-700 dark:text-stone-200 mb-2">
                 {t('Select Your Role in Supply Chain:', 'আপনার ভূমিকা নির্বাচন করুন:')}
               </label>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -479,18 +479,20 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                       key={r.id}
                       type="button"
                       onClick={() => { setSelectedRole(r.id as any); setError(''); }}
-                      className={`flex flex-col items-center justify-center p-3 rounded-2xl border transition-all ${
+                      className={`flex flex-col items-center justify-center p-3 rounded-2xl border transition-all cursor-pointer ${
                         isSelected
-                          ? 'border-emerald-600 bg-emerald-50/80 text-emerald-900 shadow-xs font-black'
-                          : 'border-stone-200 bg-stone-50/50 hover:bg-white text-stone-600 font-semibold'
+                          ? 'border-emerald-600 dark:border-emerald-500 bg-emerald-50/80 dark:bg-emerald-950/60 text-emerald-900 dark:text-emerald-300 shadow-xs font-black'
+                          : 'border-stone-200 dark:border-stone-700 bg-stone-50/50 dark:bg-stone-800/80 hover:bg-white dark:hover:bg-stone-700/80 text-stone-700 dark:text-stone-200 font-semibold'
                       }`}
                     >
                       <div className={`w-8 h-8 rounded-xl flex items-center justify-center mb-1.5 ${
-                        isSelected ? 'bg-emerald-600 text-white' : 'bg-stone-200 text-stone-700'
+                        isSelected ? 'bg-emerald-600 text-white' : 'bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-200'
                       }`}>
                         {r.icon}
                       </div>
-                      <span className="text-xs leading-tight">{language === 'bn' ? r.bn : r.en}</span>
+                      <span className={`text-xs leading-tight ${isSelected ? 'text-emerald-900 dark:text-emerald-200 font-bold' : 'text-stone-700 dark:text-stone-200'}`}>
+                        {language === 'bn' ? r.bn : r.en}
+                      </span>
                     </button>
                   );
                 })}
@@ -498,7 +500,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
             </div>
 
             {error && (
-              <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-bold flex items-center gap-2">
+              <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-xs font-bold flex items-center gap-2">
                 <span>⚠️</span>
                 <span>{error}</span>
               </div>
@@ -508,40 +510,40 @@ export const AuthPage: React.FC<AuthPageProps> = ({
             {mode === 'login' ? (
               <form onSubmit={handleLogin} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-bold text-stone-700 mb-1">
+                  <label className="block text-xs font-bold text-stone-700 dark:text-stone-200 mb-1">
                     {t('Mobile Phone Number', 'মোবাইল নম্বর')}
                   </label>
                   <div className="relative">
-                    <Phone className="w-4 h-4 text-stone-400 absolute left-3.5 top-3" />
+                    <Phone className="w-4 h-4 text-stone-400 dark:text-stone-400 absolute left-3.5 top-3" />
                     <input
                       type="tel"
                       required
                       value={loginIdentifier}
                       onChange={(e) => setLoginIdentifier(e.target.value)}
                       placeholder="017XXXXXXXX"
-                      className="w-full pl-10 pr-3.5 py-2.5 text-sm rounded-xl border border-stone-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+                      className="w-full pl-10 pr-3.5 py-2.5 text-sm rounded-xl border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-white placeholder:text-stone-400 dark:placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-stone-700 mb-1">
+                  <label className="block text-xs font-bold text-stone-700 dark:text-stone-200 mb-1">
                     {t('Password', 'পাসওয়ার্ড')}
                   </label>
                   <div className="relative">
-                    <Lock className="w-4 h-4 text-stone-400 absolute left-3.5 top-3" />
+                    <Lock className="w-4 h-4 text-stone-400 dark:text-stone-400 absolute left-3.5 top-3" />
                     <input
                       type={showPassword ? 'text' : 'password'}
                       required
                       value={loginPassword}
                       onChange={(e) => setLoginPassword(e.target.value)}
                       placeholder={t('Enter your password', 'পাসওয়ার্ড লিখুন')}
-                      className="w-full pl-10 pr-10 py-2.5 text-sm rounded-xl border border-stone-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+                      className="w-full pl-10 pr-10 py-2.5 text-sm rounded-xl border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-white placeholder:text-stone-400 dark:placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword((v) => !v)}
-                      className="absolute right-3.5 top-2.5 text-stone-400 hover:text-stone-600"
+                      className="absolute right-3.5 top-2.5 text-stone-400 dark:text-stone-400 hover:text-stone-600 dark:hover:text-stone-200 cursor-pointer"
                     >
                       {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
@@ -551,7 +553,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                 <button
                   type="submit"
                   disabled={loading || isLocked}
-                  className="w-full py-3 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white font-bold rounded-xl text-sm transition-all shadow-md flex items-center justify-center gap-2"
+                  className="w-full py-3 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white font-bold rounded-xl text-sm transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <span>{loading ? t('Signing in...', 'প্রবেশ করা হচ্ছে...') : t(`Sign In as ${selectedRole}`, 'লগইন করুন')}</span>
                   <ArrowRight className="w-4 h-4" />
@@ -562,8 +564,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({
               <form onSubmit={handleRegister} className="space-y-4">
                 {/* Farmer Friendly notice */}
                 {selectedRole === 'farmer' && (
-                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 font-medium flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <div className="p-3 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800/60 rounded-xl text-xs text-emerald-900 dark:text-emerald-200 font-medium flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                     <span>
                       {t(
                         'Easy registration for farmers! Just pick your crops, phone number, and password.',
@@ -575,7 +577,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
                 {/* Consumer notice */}
                 {selectedRole === 'consumer' && (
-                  <div className="p-3 bg-purple-50 border border-purple-200 rounded-xl text-xs text-purple-900 font-medium">
+                  <div className="p-3 bg-purple-50 dark:bg-purple-950/50 border border-purple-200 dark:border-purple-800/60 rounded-xl text-xs text-purple-900 dark:text-purple-200 font-medium">
                     {t(
                       'Tip: Consumers can immediately browse and place orders as guests without any account!',
                       'পরামর্শ: ভোক্তারা নিবন্ধন ছাড়াই সরাসরি পণ্য ঝুড়িতে নিয়ে অর্ডার করতে পারেন।'
@@ -585,36 +587,36 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
                 {/* Full Name */}
                 <div>
-                  <label className="block text-xs font-bold text-stone-700 mb-1">
+                  <label className="block text-xs font-bold text-stone-700 dark:text-stone-200 mb-1">
                     {t('Full Name', 'পূর্ণ নাম')} *
                   </label>
                   <div className="relative">
-                    <UserIcon className="w-4 h-4 text-stone-400 absolute left-3.5 top-3" />
+                    <UserIcon className="w-4 h-4 text-stone-400 dark:text-stone-400 absolute left-3.5 top-3" />
                     <input
                       type="text"
                       required
                       value={regName}
                       onChange={(e) => setRegName(e.target.value)}
                       placeholder={selectedRole === 'farmer' ? 'Md. Rafiqul Islam' : 'Your Name'}
-                      className="w-full pl-10 pr-3.5 py-2.5 text-sm rounded-xl border border-stone-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+                      className="w-full pl-10 pr-3.5 py-2.5 text-sm rounded-xl border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-white placeholder:text-stone-400 dark:placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
                     />
                   </div>
                 </div>
 
                 {/* Mobile Phone Number */}
                 <div>
-                  <label className="block text-xs font-bold text-stone-700 mb-1">
+                  <label className="block text-xs font-bold text-stone-700 dark:text-stone-200 mb-1">
                     {t('Mobile Phone Number', 'মোবাইল নম্বর')} *
                   </label>
                   <div className="relative">
-                    <Phone className="w-4 h-4 text-stone-400 absolute left-3.5 top-3" />
+                    <Phone className="w-4 h-4 text-stone-400 dark:text-stone-400 absolute left-3.5 top-3" />
                     <input
                       type="tel"
                       required
                       value={regPhone}
                       onChange={(e) => setRegPhone(e.target.value)}
                       placeholder="017XXXXXXXX"
-                      className="w-full pl-10 pr-3.5 py-2.5 text-sm rounded-xl border border-stone-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+                      className="w-full pl-10 pr-3.5 py-2.5 text-sm rounded-xl border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-white placeholder:text-stone-400 dark:placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
                     />
                   </div>
                 </div>
@@ -622,7 +624,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                 {/* District and Upazila */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-bold text-stone-700 mb-1">
+                    <label className="block text-xs font-bold text-stone-700 dark:text-stone-200 mb-1">
                       {t('District', 'জেলা')} *
                     </label>
                     <select
@@ -632,10 +634,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                         const loc = BANGLADESH_LOCATIONS.find((l) => l.district === e.target.value);
                         if (loc && loc.upazilas.length > 0) setRegUpazila(loc.upazilas[0]);
                       }}
-                      className="w-full px-3 py-2.5 text-xs font-bold rounded-xl border border-stone-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                      className="w-full px-3 py-2.5 text-xs font-bold rounded-xl border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-800 dark:text-stone-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
                     >
                       {BANGLADESH_LOCATIONS.map((loc) => (
-                        <option key={loc.district} value={loc.district}>
+                        <option key={loc.district} value={loc.district} className="bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100">
                           {language === 'bn' ? loc.districtBn : loc.district}
                         </option>
                       ))}
@@ -643,16 +645,16 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-stone-700 mb-1">
+                    <label className="block text-xs font-bold text-stone-700 dark:text-stone-200 mb-1">
                       {t('Upazila / Area', 'উপজেলা')} *
                     </label>
                     <select
                       value={regUpazila}
                       onChange={(e) => setRegUpazila(e.target.value)}
-                      className="w-full px-3 py-2.5 text-xs font-bold rounded-xl border border-stone-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                      className="w-full px-3 py-2.5 text-xs font-bold rounded-xl border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-800 dark:text-stone-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
                     >
                       {upazilaList.map((u) => (
-                        <option key={u} value={u}>
+                        <option key={u} value={u} className="bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100">
                           {u}
                         </option>
                       ))}
@@ -664,9 +666,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
                 {/* 1. FARMER: Clickable Crop Selector & Farm Size */}
                 {selectedRole === 'farmer' && (
-                  <div className="space-y-3 p-3.5 bg-stone-50 rounded-2xl border border-stone-200">
+                  <div className="space-y-3 p-3.5 bg-stone-50 dark:bg-stone-800/60 rounded-2xl border border-stone-200 dark:border-stone-700">
                     <div>
-                      <label className="block text-xs font-bold text-stone-800 mb-1.5">
+                      <label className="block text-xs font-bold text-stone-800 dark:text-stone-100 mb-1.5">
                         {t('Select Your Primary Crops (Click to choose):', 'আপনার চাষাবাদকৃত ফসল নির্বাচন করুন:')}
                       </label>
                       <div className="flex flex-wrap gap-1.5">
@@ -677,10 +679,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                               key={crop.id}
                               type="button"
                               onClick={() => toggleCrop(crop.id)}
-                              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                                 isPicked
-                                  ? 'bg-emerald-700 text-white shadow-2xs scale-102'
-                                  : 'bg-white text-stone-700 border border-stone-300 hover:border-emerald-500'
+                                  ? 'bg-emerald-700 dark:bg-emerald-600 text-white shadow-2xs scale-102'
+                                  : 'bg-white dark:bg-stone-800 text-stone-700 dark:text-stone-200 border border-stone-300 dark:border-stone-600 hover:border-emerald-500 dark:hover:border-emerald-400'
                               }`}
                             >
                               <span>{crop.icon}</span>
@@ -693,7 +695,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-stone-700 mb-1">
+                      <label className="block text-xs font-bold text-stone-700 dark:text-stone-200 mb-1">
                         {t('Farm Size (Bigha / Acres)', 'জমির পরিমাণ (বিঘা / একর)')}
                       </label>
                       <input
@@ -702,7 +704,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                         value={farmSize}
                         onChange={(e) => setFarmSize(e.target.value)}
                         placeholder="3"
-                        className="w-full px-3.5 py-2 text-xs rounded-xl border border-stone-300 bg-white font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        className="w-full px-3.5 py-2 text-xs rounded-xl border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-white placeholder:text-stone-400 dark:placeholder:text-stone-400 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
                       />
                     </div>
                   </div>
@@ -710,9 +712,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
                 {/* 2. WHOLESALER: Arat Name & Business Type */}
                 {selectedRole === 'wholesaler' && (
-                  <div className="space-y-3 p-3.5 bg-blue-50/50 rounded-2xl border border-blue-100">
+                  <div className="space-y-3 p-3.5 bg-blue-50/50 dark:bg-blue-950/40 rounded-2xl border border-blue-100 dark:border-blue-900/50">
                     <div>
-                      <label className="block text-xs font-bold text-stone-700 mb-1">
+                      <label className="block text-xs font-bold text-stone-700 dark:text-stone-200 mb-1">
                         {t('Wholesale Business / Arat Name', 'পাইকারি প্রতিষ্ঠান / আড়তের নাম')} *
                       </label>
                       <input
@@ -721,21 +723,21 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                         value={businessName}
                         onChange={(e) => setBusinessName(e.target.value)}
                         placeholder="Karwan Bazar Agro Arat"
-                        className="w-full px-3.5 py-2 text-xs rounded-xl border border-stone-300 bg-white font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-3.5 py-2 text-xs rounded-xl border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-white placeholder:text-stone-400 dark:placeholder:text-stone-400 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-stone-700 mb-1">
+                      <label className="block text-xs font-bold text-stone-700 dark:text-stone-200 mb-1">
                         {t('Procurement Scale', 'ব্যবসার ধরণ')}
                       </label>
                       <select
                         value={businessType}
                         onChange={(e) => setBusinessType(e.target.value)}
-                        className="w-full px-3 py-2 text-xs rounded-xl border border-stone-300 bg-white font-semibold"
+                        className="w-full px-3 py-2 text-xs rounded-xl border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-white font-semibold cursor-pointer"
                       >
-                        <option value="Wholesaler">Bulk Wholesaler (মোকাম পাইকার)</option>
-                        <option value="Aratdar">Aratdar Syndicate (আড়তদার সিন্ডিকেট)</option>
-                        <option value="Processor">Agro Food Processor (খাদ্য প্রক্রিয়াজাতকারী)</option>
+                        <option value="Wholesaler" className="bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100">Bulk Wholesaler (মোকাম পাইকার)</option>
+                        <option value="Aratdar" className="bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100">Aratdar Syndicate (আড়তদার সিন্ডিকেট)</option>
+                        <option value="Processor" className="bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100">Agro Food Processor (খাদ্য প্রক্রিয়াজাতকারী)</option>
                       </select>
                     </div>
                   </div>
@@ -743,9 +745,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
                 {/* 3. RETAILER: Shop Name */}
                 {selectedRole === 'retailer' && (
-                  <div className="space-y-3 p-3.5 bg-amber-50/50 rounded-2xl border border-amber-100">
+                  <div className="space-y-3 p-3.5 bg-amber-50/50 dark:bg-amber-950/40 rounded-2xl border border-amber-100 dark:border-amber-900/50">
                     <div>
-                      <label className="block text-xs font-bold text-stone-700 mb-1">
+                      <label className="block text-xs font-bold text-stone-700 dark:text-stone-200 mb-1">
                         {t('Retail Shop / Outlet Name', 'খুচরা দোকান / আউটলেটের নাম')} *
                       </label>
                       <input
@@ -754,11 +756,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                         value={shopName}
                         onChange={(e) => setShopName(e.target.value)}
                         placeholder="Bismillah Krishi Corner"
-                        className="w-full px-3.5 py-2 text-xs rounded-xl border border-stone-300 bg-white font-medium focus:outline-none focus:ring-2 focus:ring-amber-500"
+                        className="w-full px-3.5 py-2 text-xs rounded-xl border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-white placeholder:text-stone-400 dark:placeholder:text-stone-400 font-medium focus:outline-none focus:ring-2 focus:ring-amber-500"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-stone-700 mb-1">
+                      <label className="block text-xs font-bold text-stone-700 dark:text-stone-200 mb-1">
                         {t('Shop Address / Location', 'দোকানের ঠিকানা')}
                       </label>
                       <input
@@ -766,7 +768,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                         value={tradeAddress}
                         onChange={(e) => setTradeAddress(e.target.value)}
                         placeholder="Station Road Market #12"
-                        className="w-full px-3.5 py-2 text-xs rounded-xl border border-stone-300 bg-white font-medium focus:outline-none focus:ring-2 focus:ring-amber-500"
+                        className="w-full px-3.5 py-2 text-xs rounded-xl border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-white placeholder:text-stone-400 dark:placeholder:text-stone-400 font-medium focus:outline-none focus:ring-2 focus:ring-amber-500"
                       />
                     </div>
                   </div>
@@ -775,7 +777,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                 {/* 4. CONSUMER: Delivery Address */}
                 {selectedRole === 'consumer' && (
                   <div>
-                    <label className="block text-xs font-bold text-stone-700 mb-1">
+                    <label className="block text-xs font-bold text-stone-700 dark:text-stone-200 mb-1">
                       {t('Home / Office Delivery Address', 'ডেলিভারির ঠিকানা')}
                     </label>
                     <input
@@ -783,7 +785,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                       value={deliveryAddress}
                       onChange={(e) => setDeliveryAddress(e.target.value)}
                       placeholder="House #12, Road #4, Jaleswaritola"
-                      className="w-full px-3.5 py-2 text-xs rounded-xl border border-stone-300 bg-white font-medium focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      className="w-full px-3.5 py-2 text-xs rounded-xl border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-white placeholder:text-stone-400 dark:placeholder:text-stone-400 font-medium focus:outline-none focus:ring-2 focus:ring-purple-500"
                     />
                   </div>
                 )}
@@ -791,7 +793,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                 {/* Passwords */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-bold text-stone-700 mb-1">
+                    <label className="block text-xs font-bold text-stone-700 dark:text-stone-200 mb-1">
                       {t('Password', 'পাসওয়ার্ড')} *
                     </label>
                     <input
@@ -800,12 +802,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                       value={regPassword}
                       onChange={(e) => setRegPassword(e.target.value)}
                       placeholder="Min 6 chars"
-                      className="w-full px-3.5 py-2.5 text-xs rounded-xl border border-stone-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+                      className="w-full px-3.5 py-2.5 text-xs rounded-xl border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-white placeholder:text-stone-400 dark:placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-stone-700 mb-1">
+                    <label className="block text-xs font-bold text-stone-700 dark:text-stone-200 mb-1">
                       {t('Confirm Password', 'পুনরায় পাসওয়ার্ড')} *
                     </label>
                     <input
@@ -814,7 +816,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                       value={regConfirmPassword}
                       onChange={(e) => setRegConfirmPassword(e.target.value)}
                       placeholder="Confirm"
-                      className="w-full px-3.5 py-2.5 text-xs rounded-xl border border-stone-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+                      className="w-full px-3.5 py-2.5 text-xs rounded-xl border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-white placeholder:text-stone-400 dark:placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
                     />
                   </div>
                 </div>
@@ -822,7 +824,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full py-3 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white font-bold rounded-xl text-sm transition-all shadow-md flex items-center justify-center gap-2"
+                  className="w-full py-3 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white font-bold rounded-xl text-sm transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <span>{loading ? t('Creating Account...', 'অ্যাকাউন্ট তৈরি হচ্ছে...') : t('Complete Registration', 'নিবন্ধন সম্পন্ন করুন')}</span>
                   <ArrowRight className="w-4 h-4" />
@@ -831,14 +833,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({
             )}
 
             {/* Restricted Administrator Portal Link */}
-            <div className="pt-4 border-t border-stone-100 flex items-center justify-between text-[11px] text-stone-400">
+            <div className="pt-4 border-t border-stone-100 dark:border-stone-800 flex items-center justify-between text-[11px] text-stone-500 dark:text-stone-400">
               <span>{language === 'bn' ? 'আমার হাট পাইলট • বাংলাদেশ' : 'Amar Haat Pilot • Bangladesh'}</span>
               <button
                 type="button"
                 onClick={() => { setIsAdminMode(true); setError(''); }}
-                className="flex items-center gap-1 text-stone-500 hover:text-stone-800 font-semibold transition-colors"
+                className="flex items-center gap-1 text-stone-500 dark:text-stone-300 hover:text-stone-800 dark:hover:text-white font-semibold transition-colors cursor-pointer"
               >
-                <KeyRound className="w-3 h-3 text-slate-500" />
+                <KeyRound className="w-3 h-3 text-slate-500 dark:text-slate-400" />
                 <span>{t('Authorized Admin Portal', 'অনুমোদিত অ্যাডমিন প্রবেশ')}</span>
               </button>
             </div>

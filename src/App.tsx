@@ -444,7 +444,7 @@ export default function App() {
   // If Auth modal is triggered by user clicking "Sign In / Register"
   if (isAuthOpen) {
     return (
-      <div className="min-h-screen bg-stone-100 flex flex-col">
+      <div className="min-h-screen bg-stone-100 dark:bg-stone-950 flex flex-col">
         <AuthPage
           language={language}
           initialMode={authMode}
