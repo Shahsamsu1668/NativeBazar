@@ -32,20 +32,6 @@ interface AuthPageProps {
   initialRole?: 'farmer' | 'wholesaler' | 'retailer' | 'consumer';
 }
 
-// Popular crops in Bangladesh for interactive one-click farmer selection
-const POPULAR_CROPS = [
-  { id: 'Potato', en: 'Potato', bn: 'আলু', icon: '🥔' },
-  { id: 'Tomato', en: 'Tomato', bn: 'টমেটো', icon: '🍅' },
-  { id: 'Chili', en: 'Green Chili', bn: 'কাঁচা মরিচ', icon: '🌶️' },
-  { id: 'Rice', en: 'Paddy / Rice', bn: 'ধান / চাল', icon: '🌾' },
-  { id: 'Eggplant', en: 'Brinjal', bn: 'বেগুন', icon: '🍆' },
-  { id: 'Cauliflower', en: 'Cauliflower', bn: 'ফুলকপি', icon: '🥦' },
-  { id: 'Onion', en: 'Onion', bn: 'পেঁয়াজ', icon: '🧅' },
-  { id: 'Cabbage', en: 'Cabbage', bn: 'বাঁধাকপি', icon: '🥬' },
-  { id: 'Mustard', en: 'Mustard', bn: 'সরিষা', icon: '🌼' },
-  { id: 'Maize', en: 'Maize', bn: 'ভুট্টা', icon: '🌽' },
-];
-
 export const AuthPage: React.FC<AuthPageProps> = ({
   language,
   onLanguageToggle,
@@ -88,10 +74,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   const [regPassword, setRegPassword] = useState('');
   const [regConfirmPassword, setRegConfirmPassword] = useState('');
 
-  // Farmer specific: one-click crop selection
-  const [selectedCrops, setSelectedCrops] = useState<string[]>(['Potato', 'Tomato']);
-  const [farmSize, setFarmSize] = useState('3');
-
   // Wholesaler specific
   const [businessName, setBusinessName] = useState('');
   const [businessType, setBusinessType] = useState('Wholesaler');
@@ -129,14 +111,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     (l) => l.district.toLowerCase() === regDistrict.toLowerCase()
   );
   const upazilaList = selectedLocation ? selectedLocation.upazilas : ['Sadar', 'Shibganj', 'Sherpur'];
-
-  const toggleCrop = (cropId: string) => {
-    if (selectedCrops.includes(cropId)) {
-      setSelectedCrops(selectedCrops.filter((c) => c !== cropId));
-    } else {
-      setSelectedCrops([...selectedCrops, cropId]);
-    }
-  };
 
   // Handle Standard Login
   const handleLogin = async (e: React.FormEvent) => {
@@ -259,11 +233,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       return;
     }
 
-    if (selectedRole === 'farmer' && selectedCrops.length === 0) {
-      setError(language === 'bn' ? 'কমপক্ষে একটি প্রধান ফসল নির্বাচন করুন।' : 'Please select at least one primary crop.');
-      return;
-    }
-
     setLoading(true);
 
     const payload = {
@@ -274,8 +243,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       district: regDistrict,
       upazila: regUpazila,
       password: regPassword,
-      farmSizeAcres: selectedRole === 'farmer' ? Number(farmSize) : undefined,
-      primaryCrops: selectedRole === 'farmer' ? selectedCrops : undefined,
       businessName: selectedRole === 'wholesaler' ? (businessName.trim() || `${regName}'s Wholesale Arat`) : undefined,
       businessType: selectedRole === 'wholesaler' ? businessType : undefined,
       shopName: selectedRole === 'retailer' ? (shopName.trim() || `${regName}'s Agro Shop`) : undefined,
@@ -568,8 +535,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                     <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                     <span>
                       {t(
-                        'Easy registration for farmers! Just pick your crops, phone number, and password.',
-                        'কৃষকদের জন্য সহজ নিবন্ধন! আপনার ফসল এবং মোবাইল নম্বর দিয়ে অ্যাকাউন্ট খুলুন।'
+                        'Easy registration for farmers! Just enter your name, mobile number, and password.',
+                        'কৃষকদের জন্য সহজ নিবন্ধন! আপনার নাম, মোবাইল নম্বর এবং পাসওয়ার্ড দিয়ে অ্যাকাউন্ট খুলুন।'
                       )}
                     </span>
                   </div>
@@ -664,53 +631,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
                 {/* ROLE SPECIFIC INPUTS */}
 
-                {/* 1. FARMER: Clickable Crop Selector & Farm Size */}
-                {selectedRole === 'farmer' && (
-                  <div className="space-y-3 p-3.5 bg-stone-50 dark:bg-stone-800/60 rounded-2xl border border-stone-200 dark:border-stone-700">
-                    <div>
-                      <label className="block text-xs font-bold text-stone-800 dark:text-stone-100 mb-1.5">
-                        {t('Select Your Primary Crops (Click to choose):', 'আপনার চাষাবাদকৃত ফসল নির্বাচন করুন:')}
-                      </label>
-                      <div className="flex flex-wrap gap-1.5">
-                        {POPULAR_CROPS.map((crop) => {
-                          const isPicked = selectedCrops.includes(crop.id);
-                          return (
-                            <button
-                              key={crop.id}
-                              type="button"
-                              onClick={() => toggleCrop(crop.id)}
-                              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                                isPicked
-                                  ? 'bg-emerald-700 dark:bg-emerald-600 text-white shadow-2xs scale-102'
-                                  : 'bg-white dark:bg-stone-800 text-stone-700 dark:text-stone-200 border border-stone-300 dark:border-stone-600 hover:border-emerald-500 dark:hover:border-emerald-400'
-                              }`}
-                            >
-                              <span>{crop.icon}</span>
-                              <span>{language === 'bn' ? crop.bn : crop.en}</span>
-                              {isPicked && <CheckCircle2 className="w-3 h-3 text-emerald-200" />}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-stone-700 dark:text-stone-200 mb-1">
-                        {t('Farm Size (Bigha / Acres)', 'জমির পরিমাণ (বিঘা / একর)')}
-                      </label>
-                      <input
-                        type="number"
-                        step="0.5"
-                        value={farmSize}
-                        onChange={(e) => setFarmSize(e.target.value)}
-                        placeholder="3"
-                        className="w-full px-3.5 py-2 text-xs rounded-xl border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-white placeholder:text-stone-400 dark:placeholder:text-stone-400 font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* 2. WHOLESALER: Arat Name & Business Type */}
+                {/* 1. WHOLESALER: Arat Name & Business Type */}
                 {selectedRole === 'wholesaler' && (
                   <div className="space-y-3 p-3.5 bg-blue-50/50 dark:bg-blue-950/40 rounded-2xl border border-blue-100 dark:border-blue-900/50">
                     <div>
