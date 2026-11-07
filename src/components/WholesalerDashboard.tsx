@@ -668,16 +668,21 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
           {cropsLoading && (
             <div className="text-center py-12 bg-white rounded-2xl border border-stone-200">
               <RefreshCw className="w-6 h-6 mx-auto text-blue-600 animate-spin" />
-              <p className="text-xs text-stone-500 mt-2">Loading farmer crops...</p>
+              <p className="text-xs text-stone-500 mt-2">{t('Loading farmer crops...', 'কৃষকের ফসলের তালিকা লোড হচ্ছে...')}</p>
             </div>
           )}
 
           {!cropsLoading && farmerCrops.length === 0 && (
             <div className="text-center py-16 bg-white rounded-3xl border border-stone-200 p-8 space-y-2">
               <Package className="w-10 h-10 text-stone-300 mx-auto" />
-              <h4 className="font-bold text-stone-800 text-sm">No farmer crops currently listed</h4>
+              <h4 className="font-bold text-stone-800 text-sm">
+                {t('No farmer crops currently listed', 'বর্তমানে কোনো কৃষকের ফসলের লট তালিকাভুক্ত নেই')}
+              </h4>
               <p className="text-xs text-stone-500">
-                You can post a Procurement Tender to attract farmers with the exact crops you need.
+                {t(
+                  'You can post a Procurement Tender to attract farmers with the exact crops you need.',
+                  'আপনার প্রয়োজনীয় শস্যের জন্য কৃষকদের উদ্দেশে ক্রয়ের দরপত্র আহ্বান করতে পারেন।'
+                )}
               </p>
             </div>
           )}
@@ -1034,9 +1039,14 @@ export const WholesalerDashboard: React.FC<WholesalerDashboardProps> = ({
           {!ordersLoading && retailerOrders.length === 0 && (
             <div className="text-center py-12 text-stone-400 space-y-2">
               <Truck className="w-10 h-10 mx-auto text-stone-300" />
-              <p className="text-xs font-semibold text-stone-600">No retailer orders received yet</p>
+              <p className="text-xs font-semibold text-stone-600">
+                {t('No retailer orders received yet', 'এখনও কোনো খুচরা অর্ডারের অনুরোধ পাওয়া যায়নি')}
+              </p>
               <p className="text-[11px] text-stone-400">
-                When retail grocery stores order wholesale stock, they appear here.
+                {t(
+                  'When retail grocery stores order wholesale stock, they appear here.',
+                  'খুচরা দোকানদাররা পাইকারি পণ্য অর্ডার করলে তা এখানে প্রদর্শিত হবে।'
+                )}
               </p>
             </div>
           )}

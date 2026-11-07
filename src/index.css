@@ -949,3 +949,42 @@ input:checked + .toggle-track::before { transform: translateX(18px); }
   background-color: #0d1117 !important;
 }
 
+/* ── Role Selection Cards in Auth Page ───────────────────────────────── */
+.dark .role-card-unselected {
+  background-color: #21262d !important;
+  border-color: #3d444d !important;
+  color: #ffffff !important;
+}
+.dark .role-card-unselected div {
+  background-color: #30363d !important;
+  color: #ffffff !important;
+}
+.dark .role-card-unselected svg {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+}
+.dark .role-card-unselected span {
+  color: #ffffff !important;
+}
+.dark .role-card-unselected:hover {
+  background-color: #2d333b !important;
+  border-color: #6e7681 !important;
+}
+
+.dark .role-card-selected {
+  background-color: rgba(6, 78, 59, 0.55) !important;
+  border-color: #10b981 !important;
+}
+.dark .role-card-selected div {
+  background-color: #059669 !important;
+  color: #ffffff !important;
+}
+.dark .role-card-selected svg {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+}
+.dark .role-card-selected span {
+  color: #6ee7b7 !important;
+}
+
+

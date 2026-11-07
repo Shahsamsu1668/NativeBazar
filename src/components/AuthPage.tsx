@@ -435,10 +435,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({
               </label>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {[
-                  { id: 'farmer', en: 'Farmer', bn: 'কৃষক', icon: <Sprout className="w-4 h-4" />, color: 'emerald' },
-                  { id: 'wholesaler', en: 'Wholesaler', bn: 'পাইকার', icon: <Briefcase className="w-4 h-4" />, color: 'blue' },
-                  { id: 'retailer', en: 'Retailer', bn: 'খুচরা বিক্রেতা', icon: <Store className="w-4 h-4" />, color: 'amber' },
-                  { id: 'consumer', en: 'Consumer', bn: 'ভোক্তা', icon: <ShoppingCart className="w-4 h-4" />, color: 'purple' },
+                  { id: 'farmer', en: 'Farmer', bn: 'কৃষক', icon: <Sprout className="w-4 h-4" /> },
+                  { id: 'wholesaler', en: 'Wholesaler', bn: 'পাইকার', icon: <Briefcase className="w-4 h-4" /> },
+                  { id: 'retailer', en: 'Retailer', bn: 'খুচরা বিক্রেতা', icon: <Store className="w-4 h-4" /> },
+                  { id: 'consumer', en: 'Consumer', bn: 'ভোক্তা', icon: <ShoppingCart className="w-4 h-4" /> },
                 ].map((r) => {
                   const isSelected = selectedRole === r.id;
                   return (
@@ -448,16 +448,16 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                       onClick={() => { setSelectedRole(r.id as any); setError(''); }}
                       className={`flex flex-col items-center justify-center p-3 rounded-2xl border transition-all cursor-pointer ${
                         isSelected
-                          ? 'border-emerald-600 dark:border-emerald-500 bg-emerald-50/80 dark:bg-emerald-950/60 text-emerald-900 dark:text-emerald-300 shadow-xs font-black'
-                          : 'border-stone-200 dark:border-stone-700 bg-stone-50/50 dark:bg-stone-800/80 hover:bg-white dark:hover:bg-stone-700/80 text-stone-700 dark:text-stone-200 font-semibold'
+                          ? 'role-card-selected border-emerald-600 dark:border-emerald-500 bg-emerald-50/80 dark:bg-emerald-950/70 text-emerald-900 dark:text-emerald-300 shadow-xs font-black'
+                          : 'role-card-unselected border-stone-200 dark:border-stone-700 bg-stone-50/50 dark:bg-stone-800/90 hover:bg-white dark:hover:bg-stone-700 text-stone-700 dark:text-white font-semibold'
                       }`}
                     >
-                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center mb-1.5 ${
-                        isSelected ? 'bg-emerald-600 text-white' : 'bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-stone-200'
+                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center mb-1.5 transition-colors ${
+                        isSelected ? 'bg-emerald-600 text-white shadow-xs' : 'bg-stone-200 dark:bg-stone-700 text-stone-700 dark:text-white'
                       }`}>
                         {r.icon}
                       </div>
-                      <span className={`text-xs leading-tight ${isSelected ? 'text-emerald-900 dark:text-emerald-200 font-bold' : 'text-stone-700 dark:text-stone-200'}`}>
+                      <span className={`text-xs leading-tight font-bold transition-colors ${isSelected ? 'text-emerald-900 dark:text-emerald-300 font-black' : 'text-stone-700 dark:text-white'}`}>
                         {language === 'bn' ? r.bn : r.en}
                       </span>
                     </button>
